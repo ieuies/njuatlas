@@ -173,8 +173,6 @@
             const seconds = String(now.getSeconds()).padStart(2, '0');
             const dateStr = `${year}-${month}-${day}`;
             const timeStr = `${hours}:${minutes}:${seconds}`;
-            document.getElementById('liveClock').innerHTML = `${dateStr}<br style="display: none;" class="mobile-break"> <span style="font-size:0.9em;">${timeStr}</span>`;
-            // 让日期和时间在手机上也好看
             if (window.innerWidth <= 480) {
                 document.getElementById('liveClock').innerHTML = `${dateStr}<br>${timeStr}`;
             } else {
@@ -184,17 +182,26 @@
         updateClock();
         setInterval(updateClock, 1000);
 
-        // 深色模式切换 (偏好本地存储)
+        // 深色模式切换 + 按钮文字跟随
         const toggleBtn = document.getElementById('themeToggle');
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const storedTheme = localStorage.getItem('theme');
+
+        function updateButtonText() {
+            const isDark = document.body.classList.contains('dark');
+            toggleBtn.innerHTML = isDark ? '☀️ 切换浅色模式' : '🌙 切换深色模式';
+        }
+
         if (storedTheme === 'dark' || (!storedTheme && prefersDark)) {
             document.body.classList.add('dark');
         }
+        updateButtonText();
+
         toggleBtn.addEventListener('click', () => {
             document.body.classList.toggle('dark');
             const isDark = document.body.classList.contains('dark');
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateButtonText();
         });
     </script>
 </body>
