@@ -1,9 +1,75 @@
 # app/services/amap.py
+from copy import deepcopy
+from threading import Lock
+import time
+
 import requests
 from flask import current_app
+from app.logging_utils import log_event
 
 # 高德地图 Web API 的基础地址（就像外卖平台的主页）
 BASE_URL = "https://restapi.amap.com/v3"
+_CACHE = {}
+_CACHE_LOCK = Lock()
+
+
+def _normalize_cache_value(value):
+    """把缓存键中的值统一成稳定字符串。"""
+    if value is None:
+        return ""
+    return str(value).strip().lower()
+
+
+def _make_cache_key(endpoint, params):
+    """根据接口路径和参数生成缓存键。
+
+    key 本身不进入缓存键，避免密钥出现在调试输出或内存转储里。
+    """
+    return (
+        endpoint,
+        tuple(
+            sorted(
+                (name, _normalize_cache_value(value))
+                for name, value in params.items()
+                if name != "key"
+            )
+        ),
+    )
+
+
+def _get_cached(cache_key):
+    """读取未过期的缓存结果。"""
+    ttl = current_app.config["AMAP_CACHE_TTL_SECONDS"]
+    if ttl <= 0:
+        return None
+
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _CACHE.get(cache_key)
+        if not cached:
+            return None
+
+        expires_at, data = cached
+        if expires_at <= now:
+            _CACHE.pop(cache_key, None)
+            return None
+
+        return deepcopy(data)
+
+
+def _set_cached(cache_key, data):
+    """写入缓存，并限制缓存条目数量。"""
+    ttl = current_app.config["AMAP_CACHE_TTL_SECONDS"]
+    max_items = current_app.config["AMAP_CACHE_MAX_ITEMS"]
+    if ttl <= 0 or max_items <= 0:
+        return
+
+    expires_at = time.time() + ttl
+    with _CACHE_LOCK:
+        if len(_CACHE) >= max_items:
+            oldest_key = min(_CACHE, key=lambda key: _CACHE[key][0])
+            _CACHE.pop(oldest_key, None)
+        _CACHE[cache_key] = (expires_at, deepcopy(data))
 
 def _get_key():
     """从 Flask 应用配置里取出 API Key"""
@@ -17,6 +83,14 @@ def amap_request(endpoint, params):
     :param params:  查询参数字典，比如 {'keywords': '川菜', 'city': '南京'}
     :return:        高德返回的 JSON 数据（字典格式）
     """
+    params = dict(params)
+    cache_key = _make_cache_key(endpoint, params)
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        cached["_cache"] = {"hit": True}
+        log_event(current_app.logger, "amap_cache_hit", endpoint=endpoint)
+        return cached
+
     # 所有请求都要带上 key（通行证）
     params['key'] = _get_key()
     
@@ -24,16 +98,34 @@ def amap_request(endpoint, params):
     url = f"{BASE_URL}{endpoint}"
     
     # 发送 GET 请求（就像在浏览器地址栏输入网址并回车）
-    response = requests.get(url, params=params)
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            timeout=current_app.config["AMAP_REQUEST_TIMEOUT_SECONDS"],
+        )
+    except requests.RequestException as exc:
+        log_event(current_app.logger, "amap_request_failed", level="warning", endpoint=endpoint, error=str(exc))
+        raise
     
     # 把高德返回的 JSON 字符串转换成 Python 字典（方便后续处理）
     # raise_for_status() 会在请求失败时（比如网络断掉）抛出异常
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    _set_cached(cache_key, data)
+    data["_cache"] = {"hit": False}
+    log_event(
+        current_app.logger,
+        "amap_request_succeeded",
+        endpoint=endpoint,
+        status=data.get("status"),
+        count=data.get("count"),
+    )
+    return data
 
 # 下面封装三个最常用的功能：
 
-def search_places(keywords, city=None, location=None, page=1):
+def search_places(keywords, city=None, location=None, page=1, page_size=20):
     """
     POI 搜索（搜索兴趣点，如餐厅、景点）
     :param keywords: 搜索关键词，如 "川菜"、"火锅"
@@ -44,7 +136,7 @@ def search_places(keywords, city=None, location=None, page=1):
     """
     params = {
         'keywords': keywords,
-        'offset': 20,   # 每页条数
+        'offset': page_size,   # 每页条数
         'page': page,
         'extensions': 'all'  # 返回详细信息
     }

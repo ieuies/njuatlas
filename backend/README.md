@@ -1,442 +1,649 @@
+# NjuAtlas Backend
 
+NjuAtlas 后端为校园周边美食地图与智能推荐功能提供 API 支持。当前后端基于 Flask 构建，集成了邮箱账号体系、JWT 鉴权、高德地图 POI 搜索、餐厅互动、AI 推荐、多轮对话持久化、个人中心、数据库迁移、限流、统一错误处理和 Render 部署配置。
 
-# 🍜 附近美食地图标注与智能推荐 — 后端 API
+本文档面向共同开发者，重点说明当前代码结构、运行方式、环境变量、数据库迁移、接口能力和开发约定。
 
-> 本项目为"附近美食地图标注与智能推荐"网页应用提供后端支持，基于 **Flask**（一个轻量级的 Python Web 框架，就像餐厅的前台服务员，负责接收请求并分发给后厨处理）构建，整合**高德地图 POI 搜索**（帮你找到真实存在的餐厅）与**大模型（LLM）** 智能推荐（让 AI 扮演美食评论家给你推荐好吃的），实现地图浏览、用户交互与智能对话的完整后端功能。
+## 技术栈
 
----
+| 模块 | 技术 |
+| --- | --- |
+| Web 框架 | Flask |
+| ORM | Flask-SQLAlchemy / SQLAlchemy |
+| 数据库迁移 | Flask-Migrate / Alembic |
+| 鉴权 | 自实现 HS256 JWT |
+| 密码安全 | Werkzeug password hash |
+| 限流 | Flask-Limiter |
+| 跨域 | Flask-CORS |
+| 外部 API | 高德地图 Web API、智谱 AI、阿里云百炼 |
+| 部署 | Render + Gunicorn |
+| 生产数据库 | PostgreSQL |
+| 本地数据库 | SQLite |
 
-## 📁 目录结构
+## 目录结构
 
+```text
+backend/
+├─ app/
+│  ├─ __init__.py              # Flask app factory；注册扩展、蓝图、错误处理、CORS
+│  ├─ auth_utils.py            # JWT 签发/解析、Bearer token 提取、token 黑名单校验
+│  ├─ config.py                # 环境变量读取、默认值、启动时配置校验
+│  ├─ db_utils.py              # 本地开发自动建表和旧 SQLite 兼容补列
+│  ├─ errors.py                # 全局异常处理与统一 JSON 错误响应
+│  ├─ logging_utils.py         # JSON 行日志工具
+│  ├─ mail_utils.py            # 邮箱验证/密码重置邮件发送；未配 SMTP 时写日志
+│  ├─ models.py                # SQLAlchemy 数据模型
+│  ├─ rate_limit.py            # Flask-Limiter 实例和初始化
+│  ├─ validators.py            # 请求体验证、字符串/ID/评分/坐标/session_id 校验
+│  ├─ routes/
+│  │  ├─ auth.py               # 注册、登录、邮箱验证、密码重置/修改、退出登录
+│  │  ├─ interactions.py       # 餐厅创建、评论、点赞、收藏、餐厅统计
+│  │  ├─ llm_routes.py         # AI 推荐语、多轮对话推荐
+│  │  ├─ places.py             # 热门区域、高德 POI 搜索
+│  │  └─ profile.py            # 个人中心：收藏、点赞、评论、会话列表
+│  └─ services/
+│     ├─ amap.py               # 高德地图搜索封装、缓存、超时和日志
+│     └─ llm.py                # 智谱/百炼大模型调用封装
+├─ migrations/
+│  ├─ env.py                   # Alembic 迁移运行环境
+│  ├─ versions/
+│  │  ├─ 0001_initial_schema.py
+│  │  └─ 0002_user_security_tokens.py
+│  └─ README
+├─ .env.example                # 本地环境变量示例
+├─ requirements.txt            # Python 依赖
+└─ run.py                      # 本地开发启动入口
 ```
-food-map-api/
-├── app/                        # 应用主包（所有后端代码都在这里）
-│   ├── __init__.py             # 应用工厂（创建并配置 Flask 应用）
-│   ├── models.py               # 数据库模型（定义用户、餐厅、评论等"表格结构"）
-│   ├── routes/                 # 路由（接口）目录——就像食堂的不同窗口
-│   │   ├── __init__.py
-│   │   ├── places.py           # 高德地图搜索相关接口
-│   │   ├── auth.py             # 用户注册/登录接口
-│   │   ├── interactions.py     # 添加餐厅、短评、点赞、收藏接口
-│   │   └── llm_routes.py       # 大模型智能推荐接口
-│   └── services/               # 外部服务调用封装（调用高德、大模型等）
-│       ├── __init__.py
-│       ├── amap.py             # 高德地图 API 封装
-│       └── llm.py              # 大模型 API 封装（智谱/阿里百炼）
-├── .env                        # 环境变量文件（存放 API 密钥等，⚠️ 绝对不能上传到 Git！）
-├── .gitignore                  # Git 忽略规则
-├── requirements.txt            # 项目依赖清单（一键安装所有需要的包）
-├── run.py                      # 项目启动入口
-└── foodmap.db                  # SQLite 数据库文件（本地自动生成，不上传 Git）
+
+仓库根目录还有：
+
+```text
+render.yaml                    # Render Web Service 部署配置
+scripts/use-utf8.ps1           # Windows 终端 UTF-8 辅助脚本
+scripts/run-backend-utf8.cmd   # Windows 后端 UTF-8 启动脚本
 ```
 
-> 🔍 **如何理解这个结构？** 把整个项目想象成一家餐厅：`routes/` 里的每个文件是不同窗口（一个管地图搜索，一个管用户注册……），`services/` 是后厨里专门负责打电话给外卖平台（高德、AI）的岗位，`models.py` 是记录所有订单和顾客信息的账本（数据库）。
+## 运行方式
 
----
-
-## 🧰 环境要求
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| **Python** | ≥ 3.9 | 项目运行基础（建议 3.10~3.14） |
-| **Flask** | 3.1.3 | Web 框架核心 |
-| **Flask-SQLAlchemy** | 3.1.1 | 数据库操作工具（让你用 Python 代码代替手写 SQL） |
-| **Flask-CORS** | 6.0.2 | 解决前后端分离时的跨域问题 |
-| **python-dotenv** | 1.2.2 | 从 `.env` 文件读取密钥等敏感信息 |
-| **requests** | ≥ 2.32 | 发送 HTTP 请求（调用高德和大模型 API） |
-| **openai** | 最新版 | 调用智谱/阿里百炼等大模型 API |
-| **httpx** | 最新版 | HTTP 请求库（openai 的底层依赖） |
-
-操作系统：**Windows / macOS / Linux** 均可。
-
----
-
-## 🚀 本地安装与运行
-
-### 1. 克隆仓库
+### 1. 创建虚拟环境并安装依赖
 
 ```bash
-# 从 GitHub 下载项目到本地（把 YOUR_USERNAME 换成实际的 GitHub 用户名）
-git clone https://github.com/YOUR_USERNAME/food-map-api.git
-cd food-map-api
-```
-
-### 2. 创建并激活虚拟环境（一个独立的项目"厨房"）
-
-**Windows（命令提示符 / Anaconda Prompt）：**
-```cmd
-# 方式一：使用 Python 自带 venv
+cd backend
 python -m venv venv
+
+# Windows
 venv\Scripts\activate
 
-# 方式二（如果你在用 Conda）：
-conda create -n foodmap python=3.12
-conda activate foodmap
-```
-
-**macOS / Linux（终端）：**
-```bash
-python3 -m venv venv
+# macOS / Linux
 source venv/bin/activate
-```
 
-> 💡 激活成功后，终端提示符前面会出现 `(venv)` 或 `(foodmap)` 字样。
-
-### 3. 安装依赖
-
-```bash
-# 升级 pip（包管理器，就像手机上的"应用商店"）
 python -m pip install --upgrade pip
-
-# 一键安装所有依赖（-r 表示按清单批量安装）
 pip install -r requirements.txt
 ```
 
-### 4. 配置环境变量（密钥等）
+### 2. 配置环境变量
 
-在项目根目录下找到 `.env` 文件（没有就新建），填入以下内容：
+复制示例文件：
+
+```bash
+copy .env.example .env
+```
+
+macOS / Linux:
+
+```bash
+cp .env.example .env
+```
+
+本地开发至少需要配置：
 
 ```env
-# 高德地图 API Key（必填）
-# 获取方式：https://lbs.amap.com/ → 注册 → 创建应用 → 选择"Web服务"
-GAODE_API_KEY=你的高德Key
-
-# 大模型 API Key（至少配置一个）
-# 智谱 AI（推荐首选，免费额度最足）：https://open.bigmodel.cn/
-ZHIPU_API_KEY=你的智谱Key
-
-# 阿里云百炼（备选）：https://bailian.console.aliyun.com/
-BAILIAN_API_KEY=你的百炼Key
+GAODE_API_KEY=your-gaode-api-key
+ZHIPU_API_KEY=your-zhipu-api-key
+BAILIAN_API_KEY=
+SECRET_KEY=replace-with-a-random-secret-at-least-32-chars
+FLASK_APP=app:create_app
 ```
 
-> 🔒 `.env` 文件已在 `.gitignore` 中排除，**绝对不会上传到 GitHub**。每位开发者需要自己申请各自的 Key。
-
-### 5. 初始化数据库
-
-首次运行时，数据库文件 `foodmap.db` 会自动创建。你也可以手动验证：
+`SECRET_KEY` 可这样生成：
 
 ```bash
-# 启动应用（首次启动会自动建表）
-python run.py
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-看到 `✅ 数据库表已就绪` 即表示初始化成功。
+### 3. 初始化或迁移数据库
 
-### 6. 启动服务
+本地开发可直接运行：
 
 ```bash
 python run.py
 ```
 
-启动后访问 **`http://127.0.0.1:5000`**，如果看到 Flask 的默认提示页面（或 404），说明启动成功。按 `Ctrl+C` 可以停止服务器。
+`run.py` 会调用 `initialize_database()`，自动创建缺失表并兼容早期 SQLite 表结构。生产环境不要依赖这个自动建表流程，生产使用迁移：
 
----
+```bash
+flask db upgrade
+```
 
-## 📡 API 接口文档
+如果旧数据库已经被 `create_all()` 建过表，但没有 `alembic_version` 表，第一次切换迁移体系时先备份数据，再执行：
 
-### 🌐 基础地址
+```bash
+flask db stamp head
+```
 
-- 本地开发：`http://127.0.0.1:5000`
-- 公网部署：见 [部署指南](#-部署指南本地预览公网占位)
+全新数据库直接执行 `flask db upgrade`。
 
-### 🔑 鉴权说明
+### 4. 启动服务
 
-> ⚠️ **当前版本未实现真正的登录保护**。本项目采用极简用户标识方式：注册/登录后，前端保存返回的 `user_id`，后续请求中将其作为请求体字段传递。**这种方式仅适用于本地开发和演示，绝对不要用于公网生产环境！** 后续版本计划引入 JWT（JSON Web Token，就是一个加密的身份令牌，证明你已经登录了）。
+本地开发：
 
-### 📮 通用说明
+```bash
+python run.py
+```
 
-- **请求格式**：除搜索类 GET 请求外，所有 POST 请求均使用 **JSON** 格式（`Content-Type: application/json`）。
-- **响应格式**：所有响应均为 **JSON**。
-- **状态码**：`200` 成功、`201` 创建成功、`400` 请求参数错误、`401` 未登录/密码错误、`404` 资源不存在、`409` 冲突（如用户名已存在）、`500` 服务器内部错误。
+默认地址：
 
-> 💡 **什么是 API 调用？** 就像你在食堂窗口点餐——你递过去一张纸条（请求），窗口给你端出来一份饭菜（响应）。纸条上写的就是"参数"，饭菜就是"返回数据"。
+```text
+http://127.0.0.1:5000
+```
 
----
+模拟生产启动：
 
-### 🗺️ 一、地图与地点搜索
+```bash
+gunicorn "app:create_app()" --bind 0.0.0.0:8000
+```
+
+Render 启动命令：
+
+```bash
+flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
+```
+
+## 环境变量
+
+| 变量 | 必需 | 默认值 | 用途 |
+| --- | --- | --- | --- |
+| `SECRET_KEY` | 是 | 无 | JWT HS256 签名密钥，必须足够长且随机 |
+| `JWT_EXPIRATION_SECONDS` | 否 | `86400` | access token 有效期 |
+| `DATABASE_URL` | 生产必需 | 空 | PostgreSQL 连接串；为空时本地使用 SQLite |
+| `FLASK_APP` | 迁移必需 | `app:create_app` | Flask CLI 入口 |
+| `GAODE_API_KEY` | 是 | 无 | 高德地图 Web API Key |
+| `ZHIPU_API_KEY` | 二选一 | 空 | 智谱 AI Key |
+| `BAILIAN_API_KEY` | 二选一 | 空 | 阿里云百炼 Key |
+| `AMAP_CACHE_TTL_SECONDS` | 否 | `300` | 高德搜索缓存 TTL；设为 `0` 可关闭 |
+| `AMAP_CACHE_MAX_ITEMS` | 否 | `256` | 高德搜索缓存最大条目数 |
+| `AMAP_REQUEST_TIMEOUT_SECONDS` | 否 | `8` | 高德请求超时 |
+| `CONVERSATION_HISTORY_LIMIT` | 否 | `20` | AI 对话加载的历史消息数量 |
+| `LOG_LEVEL` | 否 | `INFO` | 日志等级 |
+| `RATELIMIT_DEFAULT` | 否 | `200 per hour` | 全局默认限流 |
+| `RATELIMIT_STORAGE_URI` | 否 | `memory://` | 限流存储；生产可切 Redis |
+| `FRONTEND_URL` | 否 | `http://localhost:5173` | 邮箱验证/重置密码链接的前端域名 |
+| `EMAIL_VERIFICATION_TOKEN_SECONDS` | 否 | `86400` | 邮箱验证 token 有效期 |
+| `PASSWORD_RESET_TOKEN_SECONDS` | 否 | `1800` | 重置密码 token 有效期 |
+| `SMTP_HOST` | 否 | 空 | 邮件服务器；为空时邮件内容写入日志 |
+| `SMTP_PORT` | 否 | `587` | SMTP 端口 |
+| `SMTP_USERNAME` | 否 | 空 | SMTP 用户名 |
+| `SMTP_PASSWORD` | 否 | 空 | SMTP 密码 |
+| `SMTP_USE_TLS` | 否 | `true` | 是否启用 STARTTLS |
+| `MAIL_FROM` | 否 | `no-reply@njuatlas.local` | 发件人 |
+
+## 数据模型
+
+当前主要表：
+
+| 表 | 模型 | 用途 |
+| --- | --- | --- |
+| `users` | `User` | 邮箱账号、昵称、密码哈希、邮箱验证状态 |
+| `restaurants` | `Restaurant` | 用户添加的餐厅，本地业务侧餐厅实体 |
+| `reviews` | `Review` | 用户评论和评分 |
+| `likes` | `Like` | 用户点赞餐厅，`user_id + restaurant_id` 唯一 |
+| `favorites` | `Favorite` | 用户收藏餐厅，`user_id + restaurant_id` 唯一 |
+| `conversation_messages` | `ConversationMessage` | AI 多轮对话消息，按 `session_id` 聚合 |
+| `email_verification_tokens` | `EmailVerificationToken` | 邮箱验证一次性 token 的哈希 |
+| `password_reset_tokens` | `PasswordResetToken` | 忘记密码一次性 token 的哈希 |
+| `revoked_tokens` | `RevokedToken` | 已退出登录或已失效 JWT 的 `jti` 黑名单 |
+
+安全相关约定：
+
+- 数据库只保存密码哈希，不保存新用户明文密码。
+- 邮箱验证 token 和重置密码 token 只保存 SHA-256 哈希。
+- JWT payload 包含 `sub`、`email`、`jti`、`iat`、`exp`。
+- 退出登录和修改密码会把当前 JWT 的 `jti` 写入 `revoked_tokens`，后续请求会被拒绝。
+
+## 通用 API 约定
+
+### 请求格式
+
+POST 请求一般使用 JSON：
+
+```http
+Content-Type: application/json
+```
+
+需要登录的接口必须带：
+
+```http
+Authorization: Bearer <access_token>
+```
+
+### 错误响应
+
+全局错误处理和手写业务错误统一返回：
+
+```json
+{
+  "error": "invalid_token",
+  "message": "token has expired",
+  "status_code": 401
+}
+```
+
+常见状态码：
+
+| 状态码 | 含义 |
+| --- | --- |
+| `200` | 成功 |
+| `201` | 创建成功 |
+| `400` | 请求参数错误 |
+| `401` | 未登录、token 无效、密码错误 |
+| `404` | 资源不存在 |
+| `409` | 唯一性冲突 |
+| `429` | 触发限流 |
+| `500` | 未预期服务端错误 |
+| `502` | 上游服务调用失败 |
+
+## API 列表
+
+### 用户体系
+
+#### `POST /api/user/register`
+
+邮箱注册。注册成功后返回 JWT，同时生成邮箱验证 token 并发送邮件；未配置 SMTP 时邮件内容写入日志。
+
+请求：
+
+```json
+{
+  "email": "student@example.com",
+  "password": "12345678",
+  "username": "student"
+}
+```
+
+响应：
+
+```json
+{
+  "id": 1,
+  "email": "student@example.com",
+  "username": "student",
+  "email_verified": false,
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 86400
+}
+```
+
+#### `POST /api/user/login`
+
+邮箱密码登录。
+
+请求：
+
+```json
+{
+  "email": "student@example.com",
+  "password": "12345678"
+}
+```
+
+响应同注册。
+
+#### `POST /api/user/logout`
+
+退出登录。需要 JWT。当前 token 的 `jti` 会写入黑名单。
+
+响应：
+
+```json
+{
+  "message": "Logged out"
+}
+```
+
+#### `POST /api/user/email/verification`
+
+登录后重新发送邮箱验证邮件。
+
+响应：
+
+```json
+{
+  "message": "Verification email sent"
+}
+```
+
+如果已经验证：
+
+```json
+{
+  "message": "Email is already verified"
+}
+```
+
+#### `POST /api/user/email/verify`
+
+提交邮箱验证 token。
+
+请求：
+
+```json
+{
+  "token": "raw-token-from-email"
+}
+```
+
+响应：
+
+```json
+{
+  "message": "Email verified"
+}
+```
+
+#### `POST /api/user/password/forgot`
+
+请求重置密码。为了避免枚举邮箱，无论邮箱是否存在，都返回相同提示。
+
+请求：
+
+```json
+{
+  "email": "student@example.com"
+}
+```
+
+响应：
+
+```json
+{
+  "message": "If the email exists, a reset link has been sent"
+}
+```
+
+#### `POST /api/user/password/reset`
+
+使用重置 token 设置新密码。
+
+请求：
+
+```json
+{
+  "token": "raw-token-from-email",
+  "new_password": "new-password"
+}
+```
+
+响应：
+
+```json
+{
+  "message": "Password reset completed"
+}
+```
+
+#### `POST /api/user/password/change`
+
+登录后修改密码。成功后当前 token 会失效，前端应清理本地 token 并跳转登录。
+
+请求：
+
+```json
+{
+  "current_password": "old-password",
+  "new_password": "new-password"
+}
+```
+
+响应：
+
+```json
+{
+  "message": "Password changed. Please log in again."
+}
+```
+
+### 个人中心
+
+以下接口均需要 JWT。
+
+#### `GET /api/me/favorites`
+
+返回我的收藏餐厅。
+
+响应：
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "created_at": "2026-05-25T12:00:00",
+      "restaurant": {
+        "id": 10,
+        "name": "餐厅名",
+        "address": "地址",
+        "location": "118.78,32.03",
+        "poi_id": "B0..."
+      }
+    }
+  ]
+}
+```
+
+#### `GET /api/me/likes`
+
+返回我的点赞餐厅。响应结构与收藏类似。
+
+#### `GET /api/me/reviews`
+
+返回我的评论。
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "content": "很好吃",
+      "rating": 5,
+      "created_at": "2026-05-25T12:00:00",
+      "restaurant": {
+        "id": 10,
+        "name": "餐厅名",
+        "address": "地址",
+        "location": "118.78,32.03",
+        "poi_id": "B0..."
+      }
+    }
+  ]
+}
+```
+
+#### `GET /api/me/conversations`
+
+返回我的 AI 对话会话列表。
+
+```json
+{
+  "items": [
+    {
+      "session_id": "8f5d0e6d-0ecb-4a9d-8809-cf54de1ec9e1",
+      "last_message": "最近一条消息",
+      "last_role": "assistant",
+      "last_at": "2026-05-25T12:00:00",
+      "message_count": 8
+    }
+  ]
+}
+```
+
+### 地图与搜索
 
 #### `GET /api/places/hot_areas`
 
-**描述**：返回预设的南京热门商圈列表（新街口、夫子庙、仙林大学城、江宁大学城），供前端快速定位。
+返回预设热门区域：
 
-**请求参数**：无
-
-**成功响应示例**：
 ```json
 {
   "xinjiekou": {"name": "新街口", "location": "118.78472,32.03517"},
-  "fuzimiao":  {"name": "夫子庙", "location": "118.78811,32.02056"},
-  "xianlin":   {"name": "仙林大学城", "location": "118.93021,32.10247"},
+  "fuzimiao": {"name": "夫子庙", "location": "118.78811,32.02056"},
+  "xianlin": {"name": "仙林大学城", "location": "118.93021,32.10247"},
   "jiangning": {"name": "江宁大学城", "location": "118.88359,31.93439"}
 }
 ```
 
----
-
 #### `GET /api/places/search`
 
-**描述**：调用高德地图 POI 搜索接口，按关键词搜索餐厅或地点。
+调用高德 POI 搜索。
 
-**请求参数**：
+查询参数：
 
-| 参数 | 类型 | 必填 | 说明 | 示例 |
-|------|------|:---:|------|------|
-| `keyword` | string | ✅ | 搜索关键词 | `火锅` |
-| `city` | string | ❌ | 城市名（默认"南京"） | `南京` |
-| `location` | string | ❌ | 中心点经纬度 | `118.78472,32.03517` |
-| `page` | int | ❌ | 页码（默认 1） | `2` |
+| 参数 | 必需 | 说明 |
+| --- | --- | --- |
+| `keyword` | 是 | 搜索关键词 |
+| `city` | 否 | 城市，默认南京 |
+| `location` | 否 | 中心坐标，格式 `lng,lat` |
+| `page` | 否 | 页码，1-50 |
+| `page_size` | 否 | 每页数量，1-25 |
 
-**成功响应示例**（精简）：
-```json
-{
-  "status": "1",
-  "count": "15",
-  "pois": [
-    {
-      "name": "海底捞火锅(新街口店)",
-      "address": "中山南路1号",
-      "location": "118.78472,32.03517",
-      "biz_ext": {"rating": "4.5", "cost": "120"}
-    }
-  ]
-}
+示例：
+
+```text
+GET /api/places/search?keyword=火锅&city=南京&page=1&page_size=20
 ```
 
-**错误响应示例**：
-```json
-{"error": "keyword 参数是必填的"}
-```
+后端会按关键词、城市、坐标、页码和页大小做短期缓存，减少重复请求高德 API。
 
----
-
-### 👤 二、用户相关
-
-#### `POST /api/user/register`
-
-**描述**：注册新用户。
-
-**请求体（JSON）**：
-```json
-{
-  "username": "xiaoming",
-  "password": "123456"
-}
-```
-
-**成功响应（201）**：
-```json
-{"id": 1, "username": "xiaoming"}
-```
-
-**错误响应（409）**：
-```json
-{"error": "用户名已被注册"}
-```
-
----
-
-#### `POST /api/user/login`
-
-**描述**：用户登录。
-
-**请求体（JSON）**：
-```json
-{
-  "username": "xiaoming",
-  "password": "123456"
-}
-```
-
-**成功响应**：
-```json
-{"id": 1, "username": "xiaoming"}
-```
-
-**错误响应（401）**：
-```json
-{"error": "用户名或密码错误"}
-```
-
----
-
-### 🍽️ 三、餐厅与互动
+### 餐厅与互动
 
 #### `POST /api/restaurant`
 
-**描述**：添加一个新餐厅到数据库。
+登录后添加餐厅。若传入 `poi_id` 且已存在，会返回已有餐厅。
 
-**请求体（JSON）**：
 ```json
 {
-  "name": "测试拉面馆",
-  "address": "汉口路22号",
-  "location": "118.78,32.03",
-  "poi_id": "B0FFFXXXX",
-  "user_id": 1
+  "name": "测试餐厅",
+  "address": "仙林大道",
+  "location": "118.93,32.10",
+  "poi_id": "B0..."
 }
 ```
 
-| 字段 | 必填 | 说明 |
-|------|:---:|------|
-| `name` | ✅ | 餐厅名称 |
-| `address` | ❌ | 地址 |
-| `location` | ❌ | 经纬度（`lng,lat`） |
-| `poi_id` | ❌ | 高德 POI 唯一 ID（用于去重） |
-| `user_id` | ✅ | 添加者用户 ID |
-
-**成功响应（201）**：
-```json
-{"id": 1, "name": "测试拉面馆"}
-```
-
----
-
 #### `POST /api/review`
 
-**描述**：为指定餐厅写短评。
+登录后新增评论。
 
-**请求体（JSON）**：
 ```json
 {
-  "user_id": 1,
   "restaurant_id": 1,
-  "content": "很好吃！",
+  "content": "很好吃",
   "rating": 5
 }
 ```
 
-**成功响应（201）**：
-```json
-{"id": 1, "content": "很好吃！"}
-```
-
----
-
 #### `POST /api/like`
 
-**描述**：点赞/取消点赞（同一个接口，第一次点赞，第二次取消——即"切换"逻辑）。
+登录后切换点赞状态。
 
-**请求体（JSON）**：
 ```json
 {
-  "user_id": 1,
   "restaurant_id": 1
 }
 ```
 
-**成功响应（点赞）**：
-```json
-{"liked": true, "message": "点赞成功"}
-```
+响应：
 
-**成功响应（取消）**：
 ```json
-{"liked": false, "message": "已取消点赞"}
+{
+  "liked": true,
+  "message": "点赞成功"
+}
 ```
-
----
 
 #### `POST /api/favorite`
 
-**描述**：收藏/取消收藏（逻辑同点赞）。
+登录后切换收藏状态。
 
-**请求体（JSON）**：
 ```json
 {
-  "user_id": 1,
   "restaurant_id": 1
 }
 ```
 
-**成功响应**：
-```json
-{"favorited": true, "message": "收藏成功"}
-```
+响应：
 
----
+```json
+{
+  "favorited": true,
+  "message": "收藏成功"
+}
+```
 
 #### `GET /api/restaurant/<restaurant_id>/stats`
 
-**描述**：获取指定餐厅的统计数据（点赞数、收藏数、评论列表）。
+返回餐厅点赞数、收藏数和评论列表。
 
-**路径参数**：`restaurant_id`（餐厅 ID，整数）
-
-**成功响应示例**：
-```json
-{
-  "restaurant_id": 1,
-  "likes": 5,
-  "favorites": 3,
-  "reviews": [
-    {
-      "id": 1,
-      "content": "很好吃！",
-      "rating": 5,
-      "user_id": 1,
-      "created_at": "2026-05-24T12:00:00"
-    }
-  ]
-}
-```
-
-**错误响应（404）**：
-```json
-{"error": "餐厅不存在"}
-```
-
----
-
-### 🤖 四、大模型（LLM）智能推荐
+### AI 推荐
 
 #### `GET /api/llm/recommend_slogan`
 
-**描述**：为指定餐厅生成一句俏皮的推荐语（点击餐厅时调用）。
+为指定餐厅生成一句推荐语。
 
-**请求参数**：
+```text
+GET /api/llm/recommend_slogan?restaurant_id=1
+```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|:---:|------|
-| `restaurant_id` | int | ✅ | 餐厅 ID |
+响应：
 
-**成功响应示例**：
 ```json
 {
   "restaurant_id": 1,
-  "slogan": "汉口路上的拉面之光，汤底香到让你翘课去吃！"
+  "slogan": "一句推荐语"
 }
 ```
 
----
-
 #### `POST /api/llm/chat_recommend`
 
-**描述**：多轮对话推荐——用户用自然语言描述需求（如"想吃辣的川菜，在仙林那边"），AI 结合高德地图搜索结果和用户历史偏好，用对话形式推荐餐厅。
+登录后进行多轮美食推荐对话。后端会：
 
-**请求体（JSON）**：
+- 按 JWT 识别当前用户；
+- 读取该用户的点赞/收藏偏好；
+- 调用高德搜索真实餐厅候选；
+- 读取当前 `session_id` 的历史对话；
+- 保存本轮用户消息和 AI 回复。
+
+请求：
+
 ```json
 {
-  "user_id": 1,
-  "message": "我想吃辣的川菜，在仙林那边",
-  "history": [],
+  "message": "我想吃辣的，仙林附近",
+  "session_id": "8f5d0e6d-0ecb-4a9d-8809-cf54de1ec9e1",
   "city": "南京"
 }
 ```
 
-| 字段 | 必填 | 说明 |
-|------|:---:|------|
-| `user_id` | ✅ | 当前用户 ID（用于分析偏好） |
-| `message` | ✅ | 用户说的话 |
-| `history` | ❌ | 之前的对话历史（前端负责保存和回传） |
-| `city` | ❌ | 城市（默认"南京"） |
+`session_id` 可不传，不传时后端生成新会话并在响应中返回。
 
-**成功响应示例**：
+响应：
+
 ```json
 {
-  "reply": "嘿，爱吃辣的小伙伴！仙林这边有几家川菜馆子很不错哦……",
+  "session_id": "8f5d0e6d-0ecb-4a9d-8809-cf54de1ec9e1",
+  "reply": "AI 回复内容",
   "candidates": [
     {
-      "name": "川味观(仙林店)",
-      "address": "仙林大道168号",
+      "name": "餐厅名",
+      "address": "地址",
       "location": "118.93,32.10",
       "rating": "4.3",
       "cost": "65"
@@ -445,120 +652,99 @@ python run.py
 }
 ```
 
----
+## 限流策略
 
-## ⚠️ 已知问题与安全隐患
+全局默认限流由 `RATELIMIT_DEFAULT` 控制。当前关键接口还设置了局部限流：
 
-> 以下问题均为 MVP（最小可行产品）阶段的已知限制，不影响功能演示，但**不修复之前不可用于正式生产环境**。
+| 接口 | 限流 |
+| --- | --- |
+| 注册、登录 | `5 per minute` |
+| 请求邮箱验证 | `3 per minute` |
+| 邮箱验证、忘记密码、重置密码、修改密码 | 见路由装饰器 |
+| 地图搜索 | `30 per minute` |
+| AI 对话推荐 | `10 per minute` |
+| 餐厅互动 | `30-60 per minute` |
+| 个人中心查询 | `60 per minute` |
 
-| # | 问题 | 风险 | 修复建议 |
-|---|------|------|---------|
-| 1 | **密码明文存储** | 数据库中用户密码以明文保存，一旦数据库文件泄露，所有用户密码直接暴露 | 使用 `werkzeug.security.generate_password_hash()` 和 `check_password_hash()` 对密码进行哈希处理（就像把密码锁进保险箱，只能验证对不对，看不出原文） |
-| 2 | **无 JWT 登录验证** | 当前仅靠 `user_id` 识别身份，任何人拿到别人的 ID 就能冒充其操作 | 引入 Flask-JWT-Extended 或 PyJWT，登录后颁发令牌，后续请求在 Header 中携带令牌验证身份 |
-| 3 | **API 密钥存于 `.env` 但代码中直接读取** | `.env` 文件虽被 Git 忽略，但部署平台的环境变量配置可能被忽略或误操作导致泄露 | 部署时在平台控制台设置环境变量，不要将 `.env` 文件上传到服务器 |
-| 4 | **缺少输入验证** | 评论内容、用户名等字段无长度和格式限制，攻击者可提交超长文本或恶意内容导致崩溃 | 使用 `wtforms` 或 `marshmallow` 库对所有输入做长度限制和格式校验 |
-| 5 | **无全局错误处理** | 数据库操作失败、外部 API 超时等异常会直接返回 Flask 默认的 HTML 错误页面，前端无法解析 | 在 `app/__init__.py` 中注册全局错误处理器（`@app.errorhandler`），将异常统一转换为 JSON 格式返回 |
-| 6 | **数据库无密码保护** | SQLite 文件无任何访问控制，任何能访问服务器文件系统的人都可以直接读取整个数据库 | 生产环境迁移至 PostgreSQL 或 MySQL，并设置数据库用户密码 |
-| 7 | **搜索结果无分页优化** | 高德搜索接口虽有分页参数，但后端未做缓存，频繁调用可能触发 API 配额限制 | 引入 Flask-Caching 对热门搜索结果做短期缓存 |
-| 8 | **无操作日志记录** | 无法追踪谁在什么时间做了什么操作，出现问题时难以排查 | 使用 Python `logging` 模块记录关键操作（注册、登录、添加餐厅、API 调用失败等）到文件 |
-| 9 | **多轮对话历史无服务端存储** | 对话历史完全依赖前端回传，刷新页面即丢失，无法实现真正的多轮记忆 | 在数据库新增对话记录表，按 `user_id` + `session_id` 持久化存储对话历史 |
+生产环境如果有多实例，`RATELIMIT_STORAGE_URI` 建议切到 Redis；当前默认 `memory://` 只适合单实例或开发环境。
 
----
+## 日志
 
-## 🧩 扩展指南（如何新增功能）
+后端通过 `logging_utils.log_event()` 输出 JSON 行日志到 stdout。Render 会自动采集 stdout。当前日志覆盖：
 
-### 🚫 绝对不要修改的文件
+- 注册、登录、登录失败；
+- token 黑名单、密码重置、邮箱验证；
+- 餐厅创建、评论、点赞、收藏；
+- AI 对话保存和失败；
+- 高德/LLM 外部 API 调用；
+- 配置错误、数据库错误、未捕获异常。
 
-| 文件 | 原因 |
-|------|------|
-| `app/__init__.py` | 应用工厂核心，改动可能影响全局初始化流程。如需注册新蓝图，在 `create_app()` 函数内已有注册代码的旁边**新增一行**即可，不要修改已有逻辑 |
-| `run.py` | 项目入口，改动可能导致部署失败 |
+## 数据库迁移开发流程
 
-### ✅ 推荐的新增方式
-
-#### 新增接口（路由）
-
-1. 在 `app/routes/` 下新建一个 `.py` 文件（例如 `social.py`），写入你的新接口：
-
-```python
-# app/routes/social.py
-from flask import Blueprint, request, jsonify
-
-# 创建一个蓝图（Blueprint，就是把一组相关接口打包成一个模块）
-social_bp = Blueprint('social', __name__, url_prefix='/api/social')
-
-@social_bp.route('/share', methods=['POST'])
-def share_restaurant():
-    """分享餐厅给好友（示例）"""
-    data = request.get_json()
-    # 你的业务逻辑...
-    return jsonify({'message': '分享成功'})
-```
-
-2. 在 `app/__init__.py` 中注册这个蓝图（在已有注册代码旁边加一行）：
-```python
-from app.routes.social import social_bp
-app.register_blueprint(social_bp)
-```
-
-#### 新增外部服务调用
-
-在 `app/services/` 下新建文件（如 `weather_service.py`），封装调用逻辑，然后在需要的路由中导入使用。
-
-#### 新增数据库表
-
-在 `app/models.py` 中添加新的模型类（参考已有的 `User`、`Restaurant` 等），然后删除 `foodmap.db` 文件并重新运行 `python run.py` 即可自动建表（⚠️ 这会清空已有数据）。更好的做法是引入 Flask-Migrate 做数据库迁移（就是当你的表格结构变了，能自动更新数据库，不用手动删库重建）。
-
----
-
-## 🌐 部署指南（本地预览/公网占位）
-
-### 本地生产模式运行
-
-开发时用 `python run.py` 即可。若要模拟生产环境，可使用 **Gunicorn**（一个专业的 Python 应用服务器，就像把 Flask 这辆"玩具车"换成能上高速的"真车"）：
+修改 `models.py` 后：
 
 ```bash
-# 安装 Gunicorn
-pip install gunicorn
-
-# 启动（--bind 指定监听地址和端口，app:create_app() 告诉 Gunicorn 应用入口在哪里）
-gunicorn --bind 0.0.0.0:8000 "app:create_app()"
+flask db migrate -m "describe change"
+flask db upgrade
 ```
 
-### 公网部署
+提交时应包含：
 
-> 🔗 **公网访问地址**：`[部署后请在此填写，例如 https://foodmap-api.onrender.com]`
->
-> 🖥 **部署平台**：`[Render / PythonAnywhere / Railway，待填写]`
->
-> 🛠 **部署注意事项**：
-> 1. **环境变量**：在部署平台的控制台（Settings → Environment Variables）中设置 `GAODE_API_KEY`、`ZHIPU_API_KEY` 等，不要上传 `.env` 文件。
-> 2. **数据库路径**：确保 `foodmap.db` 的路径对应用户有写入权限。
-> 3. **启动命令**：
->    - **Render**：`gunicorn "app:create_app()" --bind 0.0.0.0:$PORT`
->    - **PythonAnywhere**：需要配置 WSGI 文件指向 `app.create_app()`。
-> 4. **免费额度**：Render 免费计划提供 750 小时/月运行时长，15 分钟无访问会自动休眠（下次请求需约 30~50 秒冷启动）。PythonAnywhere 免费账户的 Web 应用有效期为 1 个月，需定期登录续期。具体政策变动请以各平台官方公告为准。
+- `app/models.py` 的模型变更；
+- `migrations/versions/*.py` 的迁移脚本；
+- 相关接口和文档更新。
 
----
+注意事项：
 
-## 📝 待办与改进计划
+- 不要在生产环境手动删库重建。
+- 对已有生产数据的字段变更要考虑 nullable、默认值和回填策略。
+- 新增唯一约束前要确认旧数据没有冲突。
 
-- [ ] 引入 JWT 实现安全的用户认证
-- [ ] 密码哈希存储
-- [ ] 输入验证与全局错误处理
-- [ ] 对话历史服务端持久化
-- [ ] 引入 Flask-Migrate 管理数据库迁移
-- [ ] 添加操作日志
-- [ ] 编写自动化测试用例
+## Render 部署
 
----
+当前 `render.yaml` 已配置：
 
-## 📞 联系与协作
+```yaml
+rootDir: backend
+buildCommand: pip install -r requirements.txt
+startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
+```
 
-- **后端负责人**：[你的名字]
-- **前端协作**：请将 API 调用的 `base URL` 替换为上方公网地址
-- **反馈问题**：请在 GitHub 仓库的 Issues 页面提交 Bug 或功能建议
-- **API 调试工具推荐**：[Postman](https://www.postman.com/) 或直接在终端使用 `curl` 命令测试
+部署前需要在 Render 配置环境变量，尤其是：
 
----
+- `SECRET_KEY`
+- `DATABASE_URL`
+- `GAODE_API_KEY`
+- `ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`
+- `FRONTEND_URL`
+- SMTP 相关变量，如果需要真实邮件发送
 
+## Windows 中文乱码处理
+
+仓库提供了：
+
+```text
+scripts/use-utf8.ps1
+scripts/run-backend-utf8.cmd
+```
+
+Windows 本地开发时如果终端中文乱码，可以使用这些脚本或手动切换终端到 UTF-8。代码文件按 UTF-8 保存。
+
+## 当前已知限制
+
+- 邮箱验证目前只记录验证状态，登录接口尚未强制要求 `email_verified=true`。
+- 邮件发送依赖外部 SMTP；未配置时只写日志，适合开发但不适合正式生产。
+- JWT 只有 access token，没有 refresh token 体系。
+- token 黑名单会持续写入 `revoked_tokens`，后续需要定期清理过期记录。
+- 个人中心列表当前未分页，数据量上来后需要加 `page/page_size`。
+- AI 推荐仍依赖外部模型稳定性，失败时返回 `502`。
+- 自动化测试尚未建立。
+
+## 开发约定
+
+- 所有新接口优先使用 `validators.py` 做输入校验。
+- 需要登录的接口使用 `@jwt_required`。
+- 业务错误使用 `error_response()`，保持统一错误结构。
+- 重要行为用 `log_event()` 记录结构化日志。
+- 涉及数据库结构变更必须写迁移。
+- 不要把真实 `.env`、API Key、数据库连接串提交到仓库。

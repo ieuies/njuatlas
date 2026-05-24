@@ -1,0 +1,9 @@
+Database migrations for NjuAtlas backend.
+
+Common commands:
+
+    flask db migrate -m "describe change"
+    flask db upgrade
+    flask db downgrade
+
+Set FLASK_APP=app:create_app before running Flask CLI commands.

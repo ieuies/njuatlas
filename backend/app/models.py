@@ -1,67 +1,120 @@
-# app/models.py
-from app import db
 from datetime import datetime
+import uuid
+
+from app import db
+
 
 class User(db.Model):
-    """用户表"""
-    __tablename__ = 'users'          # 表名（如果不写，默认用类名小写）
-    
-    id = db.Column(db.Integer, primary_key=True)                     # 主键：唯一编号，自动递增
-    username = db.Column(db.String(50), unique=True, nullable=False) # 用户名，唯一且不能为空
-    password = db.Column(db.String(100), nullable=False)             # 密码（⚠️ 明文存储，仅开发阶段！）
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)     # 注册时间
-    
-    # 与评论、点赞、收藏的关系（ORM 可以自动通过关联查询到对应的数据）
-    reviews = db.relationship('Review', backref='user', lazy=True)
-    likes = db.relationship('Like', backref='user', lazy=True)
-    favorites = db.relationship('Favorite', backref='user', lazy=True)
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, index=True)
+    username = db.Column(db.String(50), unique=True)
+    password_hash = db.Column(db.String(255))
+    password = db.Column(db.String(100))
+    email_verified = db.Column(db.Boolean, default=False, nullable=False)
+    email_verified_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    reviews = db.relationship("Review", backref="user", lazy=True)
+    likes = db.relationship("Like", backref="user", lazy=True)
+    favorites = db.relationship("Favorite", backref="user", lazy=True)
+    conversation_messages = db.relationship("ConversationMessage", backref="user", lazy=True)
+    email_verification_tokens = db.relationship("EmailVerificationToken", backref="user", lazy=True)
+    password_reset_tokens = db.relationship("PasswordResetToken", backref="user", lazy=True)
+
 
 class Restaurant(db.Model):
-    """餐厅表"""
-    __tablename__ = 'restaurants'
-    
+    __tablename__ = "restaurants"
+
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)           # 餐厅名称
-    address = db.Column(db.String(200))                        # 地址
-    location = db.Column(db.String(50))                        # 经纬度 "lng,lat"
-    poi_id = db.Column(db.String(100))                         # 高德POI的唯一ID（方便去重）
-    added_by = db.Column(db.Integer, db.ForeignKey('users.id'))# 谁添加的
+    name = db.Column(db.String(100), nullable=False)
+    address = db.Column(db.String(200))
+    location = db.Column(db.String(50))
+    poi_id = db.Column(db.String(100))
+    added_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    reviews = db.relationship('Review', backref='restaurant', lazy=True)
-    likes = db.relationship('Like', backref='restaurant', lazy=True)
-    favorites = db.relationship('Favorite', backref='restaurant', lazy=True)
+
+    reviews = db.relationship("Review", backref="restaurant", lazy=True)
+    likes = db.relationship("Like", backref="restaurant", lazy=True)
+    favorites = db.relationship("Favorite", backref="restaurant", lazy=True)
+
 
 class Review(db.Model):
-    """短评表"""
-    __tablename__ = 'reviews'
-    
+    __tablename__ = "reviews"
+
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(500), nullable=False)         # 评论内容
-    rating = db.Column(db.Integer)                              # 评分（1~5星）
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'))
+    content = db.Column(db.String(500), nullable=False)
+    rating = db.Column(db.Integer)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    restaurant_id = db.Column(db.Integer, db.ForeignKey("restaurants.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class Like(db.Model):
-    """点赞表（记录哪个用户点了哪个餐厅的赞）"""
-    __tablename__ = 'likes'
-    
+    __tablename__ = "likes"
+
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    restaurant_id = db.Column(db.Integer, db.ForeignKey("restaurants.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # 保证同一个用户对同一个餐厅只能有一条点赞记录
-    __table_args__ = (db.UniqueConstraint('user_id', 'restaurant_id', name='_user_restaurant_like_uc'),)
+
+    __table_args__ = (db.UniqueConstraint("user_id", "restaurant_id", name="_user_restaurant_like_uc"),)
+
 
 class Favorite(db.Model):
-    """收藏表（功能同点赞，但概念不同，所以单建表）"""
-    __tablename__ = 'favorites'
-    
+    __tablename__ = "favorites"
+
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    restaurant_id = db.Column(db.Integer, db.ForeignKey("restaurants.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (db.UniqueConstraint('user_id', 'restaurant_id', name='_user_restaurant_fav_uc'),)
+
+    __table_args__ = (db.UniqueConstraint("user_id", "restaurant_id", name="_user_restaurant_fav_uc"),)
+
+
+class ConversationMessage(db.Model):
+    __tablename__ = "conversation_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(36), index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True, nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.String(1000), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    @staticmethod
+    def new_session_id():
+        return str(uuid.uuid4())
+
+
+class EmailVerificationToken(db.Model):
+    __tablename__ = "email_verification_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True, nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, index=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PasswordResetToken(db.Model):
+    __tablename__ = "password_reset_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True, nullable=False)
+    token_hash = db.Column(db.String(64), unique=True, index=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class RevokedToken(db.Model):
+    __tablename__ = "revoked_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), unique=True, index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

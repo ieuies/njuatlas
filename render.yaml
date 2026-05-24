@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: njuatlas-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
+    envVars:
+      - key: FLASK_APP
+        value: app:create_app
+      - key: SECRET_KEY
+        sync: false
+      - key: GAODE_API_KEY
+        sync: false
+      - key: ZHIPU_API_KEY
+        sync: false
+      - key: BAILIAN_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_EXPIRATION_SECONDS
+        value: "86400"
+      - key: AMAP_CACHE_TTL_SECONDS
+        value: "300"
+      - key: AMAP_CACHE_MAX_ITEMS
+        value: "256"
+      - key: AMAP_REQUEST_TIMEOUT_SECONDS
+        value: "8"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: CONVERSATION_HISTORY_LIMIT
+        value: "20"
+      - key: RATELIMIT_DEFAULT
+        value: "200 per hour"
+      - key: RATELIMIT_STORAGE_URI
+        value: "memory://"
+      - key: FRONTEND_URL
+        sync: false
+      - key: EMAIL_VERIFICATION_TOKEN_SECONDS
+        value: "86400"
+      - key: PASSWORD_RESET_TOKEN_SECONDS
+        value: "1800"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: MAIL_FROM
+        sync: false
