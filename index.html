@@ -4,420 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>南大图谱 · 校园美食地图</title>
-    <!-- 高德地图 JS API (请替换为自己的 Key) -->
-    <script src="https://webapi.amap.com/maps?v=2.0&key=YOUR_AMAP_KEY"></script>
-    <!-- 图标库 Font Awesome -->
+    <!-- 高德地图 JS API (请替换为你的 Key) -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=、your key"></script>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html, body {
-            height: 100%;
-            width: 100%;
-        }
-
-        body {
-            font-family: 'Segoe UI', '思源黑体', Roboto, sans-serif;
-            background: #f5f7fb;
-            color: #1e2a3e;
-            overflow-x: hidden;
-            transition: background 0.3s ease;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* 未登录时 body 应用渐变背景 */
-        body.body-hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        /* 导航栏（半透明模糊，透出 body 背景） */
-        .navbar {
-            background: rgba(255,255,255,0.12);
-            backdrop-filter: blur(12px);
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-            /* 不用 sticky，让 flex 自动排列 */
-        }
-
-        /* 登录状态下导航栏背景加深 */
-        body:not(.body-hero) .navbar {
-            background: rgba(75, 0, 130, 0.9);
-            backdrop-filter: blur(8px);
-        }
-
-        .logo {
-            font-size: 1.6rem;
-            font-weight: bold;
-            letter-spacing: 1px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .logo span {
-            font-size: 0.8rem;
-            background: #ffb347;
-            padding: 0.2rem 0.6rem;
-            border-radius: 30px;
-            color: #4B0082;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 1.5rem;
-            align-items: center;
-        }
-
-        .nav-links a, .nav-links button {
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            transition: 0.2s;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-
-        .nav-links a:hover, .nav-links button:hover {
-            color: #ffb347;
-        }
-
-        /* 统一的登录/注册按钮样式 */
-        .login-btn {
-            background: rgba(255,255,255,0.2);
-            padding: 0.4rem 1.2rem;
-            border-radius: 40px;
-            backdrop-filter: blur(4px);
-            width: auto;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        #logoutBtn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            padding: 0.3rem 0.8rem;
-            border-radius: 20px;
-            color: white;
-            cursor: pointer;
-        }
-
-        /* 主页容器：自动撑满剩余高度，无空白 */
-        .hero-page {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            position: relative;
-            width: 100%;
-        }
-
-        /* 动态点阵动画 */
-        .hero-page::before {
-            content: "";
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 1%, transparent 1%);
-            background-size: 50px 50px;
-            animation: moveDots 80s linear infinite;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        @keyframes moveDots {
-            from { transform: translate(0,0); }
-            to { transform: translate(100px,100px); }
-        }
-
-        .hero-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 2rem 2rem 4rem;
-            color: white;
-            position: relative;
-            z-index: 2;
-        }
-
-        .hero-title {
-            font-size: 3.5rem;
-            font-weight: 800;
-            margin-bottom: 1rem;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-
-        .hero-subtitle {
-            font-size: 1.3rem;
-            opacity: 0.9;
-            max-width: 700px;
-            margin-bottom: 2rem;
-        }
-
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 2rem;
-            max-width: 1000px;
-            margin: 3rem auto 0;
-        }
-
-        .feature-card {
-            background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(10px);
-            border-radius: 28px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: 0.3s;
-        }
-
-        .feature-card i {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .feature-card h3 {
-            margin-bottom: 0.5rem;
-        }
-
-        .feature-card p {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        /* 模态框（登录/注册） */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(8px);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .modal-card {
-            background: white;
-            border-radius: 32px;
-            width: 90%;
-            max-width: 440px;
-            padding: 2rem;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .modal-card h2 {
-            margin-bottom: 1.5rem;
-            text-align: center;
-            color: #4B0082;
-        }
-
-        .form-group {
-            margin-bottom: 1.2rem;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
-        }
-
-        input, textarea, select {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid #ddd;
-            border-radius: 16px;
-            font-size: 1rem;
-        }
-
-        button:not(.login-btn):not(#logoutBtn) {
-            background: #4B0082;
-            color: white;
-            border: none;
-            padding: 0.7rem 1.5rem;
-            border-radius: 40px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-            width: 100%;
-        }
-
-        button:not(.login-btn):not(#logoutBtn):hover {
-            background: #6a1b9a;
-        }
-
-        .switch-mode {
-            text-align: center;
-            margin-top: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .switch-mode a {
-            color: #4B0082;
-            cursor: pointer;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #323232;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 40px;
-            z-index: 999;
-            font-size: 0.9rem;
-            white-space: nowrap;
-        }
-
-        /* 应用内部样式（餐厅卡片等） */
-        .container {
-            max-width: 1300px;
-            margin: 2rem auto;
-            padding: 0 1.5rem;
-            width: 100%;
-            flex: 1; /* 让登录后的内容也能撑满高度，但不需要全屏渐变，所以不用管 */
-        }
-
-        .page {
-            display: none;
-            animation: fadeIn 0.4s ease;
-        }
-
-        .active-page {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(15px);}
-            to { opacity: 1; transform: translateY(0);}
-        }
-
-        .resto-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.8rem;
-            margin-top: 1.5rem;
-        }
-
-        .resto-card {
-            background: white;
-            border-radius: 24px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-            cursor: pointer;
-        }
-
-        .resto-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
-        }
-
-        .resto-img {
-            height: 160px;
-            background-size: cover;
-            background-position: center;
-        }
-
-        .resto-info {
-            padding: 1rem;
-        }
-
-        #mapContainer {
-            width: 100%;
-            height: 500px;
-            border-radius: 20px;
-            margin: 1rem 0;
-        }
-
-        .chat-area {
-            background: white;
-            border-radius: 24px;
-            padding: 1rem;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .chat-message {
-            margin: 0.8rem 0;
-            padding: 0.6rem;
-            border-radius: 20px;
-        }
-
-        .chat-user {
-            background: #e9ecef;
-            text-align: right;
-        }
-
-        .chat-bot {
-            background: #f1e6ff;
-        }
-
-        .flex-between {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        @media (max-width: 768px) {
-            .hero-title {
-                font-size: 2.2rem;
-            }
-            .hero-subtitle {
-                font-size: 1rem;
-            }
-            .navbar {
-                padding: 0.8rem 1rem;
-            }
-            .container {
-                padding: 0 1rem;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="body-hero">
 
-<!-- 导航栏（共用） -->
+<!-- 导航栏 -->
 <div class="navbar">
-    <div class="logo">
-        🍜 南大图谱 <span>AI美食地图</span>
-    </div>
-    <div class="nav-links" id="navGuest" style="display: flex;">
-        <button id="showLoginModalBtn" class="login-btn">登录</button>
-        <button id="showRegisterModalBtn" class="login-btn">注册</button>
+    <div class="logo">🍜 南大图谱 <span>AI美食地图</span></div>
+    <div class="nav-links" id="navGuest">
+        <button id="showLoginBtn" class="login-btn">登录</button>
+        <button id="showRegisterBtn" class="login-btn">注册</button>
     </div>
     <div class="nav-links" id="navUser" style="display: none;">
         <a href="#" data-page="restaurants">🍽️ 餐厅</a>
@@ -431,74 +31,63 @@
     </div>
 </div>
 
-<!-- 主页（未登录时显示） -->
-<div id="homePage" class="page hero-page active-page">
+<!-- 未登录主页 -->
+<div id="homePage" class="page active-page">
     <div class="hero-content">
         <div class="hero-title">探索南大周边美味</div>
         <div class="hero-subtitle">AI 推荐 · 地图找店 · 同学评价</div>
         <div class="feature-grid">
-            <div class="feature-card">
-                <i class="fas fa-robot"></i>
-                <h3>智能推荐</h3>
-                <p>基于大模型的餐厅推荐，发现你的口味</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-map-marker-alt"></i>
-                <h3>美食地图</h3>
-                <p>高德地图集成，周边餐厅一目了然</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-comments"></i>
-                <h3>真实评价</h3>
-                <p>点赞、收藏、评论，与同学分享体验</p>
-            </div>
+            <div class="feature-card"><i class="fas fa-robot"></i><h3>智能推荐</h3><p>基于大模型的餐厅推荐</p></div>
+            <div class="feature-card"><i class="fas fa-map-marker-alt"></i><h3>美食地图</h3><p>高德地图集成</p></div>
+            <div class="feature-card"><i class="fas fa-comments"></i><h3>真实评价</h3><p>点赞、收藏、评论</p></div>
         </div>
-        <button id="getStartedBtn" style="width: auto; margin-top: 2rem; background: #ffb347; color: #4B0082; border: none; padding: 0.7rem 1.5rem; border-radius: 40px; font-weight: bold; cursor: pointer;">✨ 开始探索 →</button>
+        <button id="getStartedBtn" class="primary-btn">✨ 开始探索 →</button>
     </div>
 </div>
 
-<!-- 其他应用页面（登录后显示） -->
-<div class="container">
+<!-- 登录后的主要容器 -->
+<div class="container" id="appContainer" style="display: none;">
     <div id="restaurantsPage" class="page">
-        <div class="flex-between">
-            <h2>📌 周边美食</h2>
-            <button id="refreshRestosBtn" style="width: auto;">刷新</button>
-        </div>
+        <div class="flex-between"><h2>📌 附近美食</h2><button id="refreshRestosBtn" class="secondary-btn">刷新</button></div>
         <div id="restoList" class="resto-grid">加载中...</div>
     </div>
-
     <div id="mapPage" class="page">
         <h2>🗺️ 附近餐厅地图</h2>
         <div id="mapContainer"></div>
     </div>
-
     <div id="aiPage" class="page">
         <h2>🤖 南大美食AI</h2>
         <p>向我提问，例如：“推荐一家川菜馆”、“哪里有安静的自习咖啡厅”</p>
         <div class="chat-area" id="chatMessages">
-            <div class="chat-message chat-bot">👋 你好！我是你的校园美食助手，可以帮你推荐餐厅、分析口味～</div>
+            <div class="chat-message chat-bot">👋 你好！我是你的校园美食助手，可以帮你推荐餐厅～</div>
         </div>
-        <div class="flex-between" style="margin-top: 1rem; gap: 0.5rem;">
-            <input type="text" id="chatInput" placeholder="输入消息..." style="flex:1;">
-            <button id="sendChatBtn" style="width: auto;">发送</button>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="输入消息...">
+            <button id="sendChatBtn" class="primary-btn">发送</button>
         </div>
     </div>
-
     <div id="profilePage" class="page">
         <h2>👤 个人中心</h2>
-        <div style="background:white; border-radius: 24px; padding: 1.5rem;">
-            <div class="form-group">
-                <label>用户名</label>
-                <input type="text" id="profileName">
-            </div>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="profileEmail" disabled>
-            </div>
-            <button id="updateProfileBtn">更新资料</button>
-            <hr style="margin: 1.5rem 0;">
+        <div class="profile-card">
+            <p><strong>用户名：</strong> <span id="profileUsername"></span></p>
+            <p><strong>邮箱：</strong> <span id="profileEmail"></span></p>
+            <p><strong>邮箱验证：</strong> <span id="profileEmailVerified"></span> 
+                <button id="sendVerifyEmailBtn" class="small-btn">重新发送验证邮件</button>
+            </p>
+            <hr>
             <h3>❤️ 我的收藏</h3>
             <div id="favoritesList"></div>
+            <h3>👍 我的点赞</h3>
+            <div id="likesList"></div>
+            <h3>📝 我的评论</h3>
+            <div id="reviewsList"></div>
+            <h3>💬 我的对话</h3>
+            <div id="conversationsList"></div>
+            <hr>
+            <h3>修改密码</h3>
+            <input type="password" id="oldPassword" placeholder="当前密码">
+            <input type="password" id="newPassword" placeholder="新密码">
+            <button id="changePasswordBtn" class="primary-btn">修改密码</button>
         </div>
     </div>
 </div>
@@ -508,308 +97,57 @@
     <div class="modal-card">
         <div id="loginForm">
             <h2>登录</h2>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="modalLoginEmail" placeholder="nju@example.com">
-            </div>
-            <div class="form-group">
-                <label>密码</label>
-                <input type="password" id="modalLoginPassword">
-            </div>
-            <button id="modalDoLoginBtn">登录</button>
-            <div class="switch-mode">
-                还没有账号？ <a id="switchToRegister">立即注册</a>
-            </div>
+            <input type="email" id="loginEmail" placeholder="邮箱">
+            <input type="password" id="loginPassword" placeholder="密码">
+            <button id="doLoginBtn" class="primary-btn">登录</button>
+            <div class="switch-mode">还没有账号？ <a id="switchToRegister">立即注册</a></div>
+            <div class="switch-mode"><a id="forgotPasswordLink">忘记密码？</a></div>
         </div>
-        <div id="registerForm" style="display: none;">
+        <div id="registerForm" style="display:none;">
             <h2>注册</h2>
-            <div class="form-group">
-                <label>用户名</label>
-                <input type="text" id="modalRegName">
-            </div>
-            <div class="form-group">
-                <label>邮箱</label>
-                <input type="email" id="modalRegEmail">
-            </div>
-            <div class="form-group">
-                <label>密码</label>
-                <input type="password" id="modalRegPassword">
-            </div>
-            <button id="modalDoRegisterBtn">注册</button>
-            <div class="switch-mode">
-                已有账号？ <a id="switchToLogin">去登录</a>
-            </div>
+            <input type="text" id="regUsername" placeholder="用户名">
+            <input type="email" id="regEmail" placeholder="邮箱">
+            <input type="password" id="regPassword" placeholder="密码 (至少8位)">
+            <button id="doRegisterBtn" class="primary-btn">注册</button>
+            <div class="switch-mode">已有账号？ <a id="switchToLogin">去登录</a></div>
+        </div>
+        <div id="forgotForm" style="display:none;">
+            <h2>找回密码</h2>
+            <input type="email" id="forgotEmail" placeholder="注册邮箱">
+            <button id="doForgotBtn" class="primary-btn">发送重置链接</button>
+            <div class="switch-mode"><a id="backToLogin">返回登录</a></div>
         </div>
     </div>
 </div>
 
 <!-- 餐厅详情模态框 -->
-<div id="restoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
-    <div style="background:white; width:90%; max-width:550px; max-height:80%; overflow:auto; border-radius:32px; padding:1.5rem;">
-        <div class="flex-between"><h3 id="modalTitle"></h3><button id="closeModalBtn" style="background:#ccc; width:auto;">✖</button></div>
+<div id="restoModal" class="modal">
+    <div class="modal-card" style="max-width:600px;">
+        <div class="flex-between"><h3 id="modalTitle"></h3><button id="closeModalBtn" class="close-btn">✖</button></div>
         <p id="modalDesc"></p>
-        <div id="modalActions" style="margin: 1rem 0; display: flex; gap:1rem;">
-            <button id="likeRestoBtn" style="width:auto;">❤️ 点赞</button>
-            <button id="favRestoBtn" style="width:auto;">⭐ 收藏</button>
+        <div class="modal-actions">
+            <button id="likeRestoBtn" class="secondary-btn">❤️ 点赞</button>
+            <button id="favRestoBtn" class="secondary-btn">⭐ 收藏</button>
         </div>
         <h4>评论</h4>
         <div id="modalReviews"></div>
         <textarea id="newReview" rows="2" placeholder="写点评价..."></textarea>
-        <button id="postReviewBtn" style="margin-top: 0.5rem;">发表评论</button>
+        <button id="postReviewBtn" class="primary-btn">发表评论</button>
     </div>
 </div>
 
-<script>
-    // ==================== 配置 ====================
-    const API_BASE = "http://localhost:5000/api";   // 后端地址，请根据实际情况修改
-    let authToken = localStorage.getItem("access_token") || null;
-    let currentUserId = null;
+<!-- 邮箱验证结果页面（独立） -->
+<div id="verifyMessage" class="toast" style="display:none;"></div>
 
-    const AMAP_KEY = "YOUR_AMAP_KEY";
-    let map = null;
-    let markers = [];
-
-    function showToast(msg) {
-        let toast = document.createElement("div");
-        toast.className = "toast";
-        toast.innerText = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2500);
-    }
-
-    async function apiCall(endpoint, method = "GET", body = null, needAuth = true) {
-        const headers = { "Content-Type": "application/json" };
-        if (needAuth && authToken) headers["Authorization"] = `Bearer ${authToken}`;
-        const config = { method, headers };
-        if (body) config.body = JSON.stringify(body);
-        try {
-            const resp = await fetch(`${API_BASE}${endpoint}`, config);
-            if (resp.status === 401) {
-                logout();
-                showToast("登录已过期，请重新登录");
-                return null;
-            }
-            const data = await resp.json();
-            if (!resp.ok) {
-                showToast(data.message || "请求失败");
-                return null;
-            }
-            return data;
-        } catch (err) {
-            showToast("网络错误，请检查后端是否运行");
-            return null;
-        }
-    }
-
-    function logout() {
-        localStorage.removeItem("access_token");
-        authToken = null;
-        currentUserId = null;
-        document.getElementById("navGuest").style.display = "flex";
-        document.getElementById("navUser").style.display = "none";
-        showHomePage();
-    }
-
-    function showHomePage() {
-        document.querySelectorAll(".page").forEach(p => p.classList.remove("active-page"));
-        document.getElementById("homePage").classList.add("active-page");
-        document.body.classList.add("body-hero");
-    }
-
-    function showAppPage(pageId) {
-        document.querySelectorAll(".page").forEach(p => p.classList.remove("active-page"));
-        document.getElementById(`${pageId}Page`).classList.add("active-page");
-        document.body.classList.remove("body-hero");
-        if (pageId === "restaurants") loadRestaurants();
-        if (pageId === "map") initMapAndMarkers();
-        if (pageId === "profile") loadProfile();
-    }
-
-    function afterLogin(token, username) {
-        authToken = token;
-        localStorage.setItem("access_token", token);
-        document.getElementById("navGuest").style.display = "none";
-        document.getElementById("navUser").style.display = "flex";
-        document.getElementById("usernameSpan").innerText = username || "用户";
-        document.getElementById("authModal").style.display = "none";
-        showAppPage("restaurants");
-    }
-
-    async function handleModalLogin() {
-        const email = document.getElementById("modalLoginEmail").value;
-        const pwd = document.getElementById("modalLoginPassword").value;
-        if (!email || !pwd) { showToast("请填写邮箱和密码"); return; }
-        const data = await apiCall("/auth/login", "POST", { email, password: pwd }, false);
-        if (data && data.access_token) {
-            showToast("登录成功");
-            afterLogin(data.access_token, email.split('@')[0]);
-        }
-    }
-
-    async function handleModalRegister() {
-        const name = document.getElementById("modalRegName").value;
-        const email = document.getElementById("modalRegEmail").value;
-        const pwd = document.getElementById("modalRegPassword").value;
-        if (!name || !email || !pwd) { showToast("请填写完整信息"); return; }
-        const data = await apiCall("/auth/register", "POST", { username: name, email, password: pwd }, false);
-        if (data) {
-            showToast("注册成功，请登录");
-            showLoginForm();
-        }
-    }
-
-    function showLoginForm() {
-        document.getElementById("loginForm").style.display = "block";
-        document.getElementById("registerForm").style.display = "none";
-        document.getElementById("modalLoginEmail").value = "";
-        document.getElementById("modalLoginPassword").value = "";
-    }
-    function showRegisterForm() {
-        document.getElementById("loginForm").style.display = "none";
-        document.getElementById("registerForm").style.display = "block";
-        document.getElementById("modalRegName").value = "";
-        document.getElementById("modalRegEmail").value = "";
-        document.getElementById("modalRegPassword").value = "";
-    }
-
-    async function loadRestaurants() {
-        const data = await apiCall("/restaurants", "GET");
-        if (data && data.restaurants) renderRestoGrid(data.restaurants);
-        else document.getElementById("restoList").innerHTML = "<p>暂无餐厅数据</p>";
-    }
-
-    function renderRestoGrid(restos) {
-        const container = document.getElementById("restoList");
-        if (!restos.length) { container.innerHTML = "<p>暂无餐厅</p>"; return; }
-        container.innerHTML = restos.map(r => `
-            <div class="resto-card" data-id="${r.id}">
-                <div class="resto-img" style="background-image: url('${r.image_url || 'https://picsum.photos/300/160?random='+r.id}');"></div>
-                <div class="resto-info">
-                    <div class="resto-name">${escapeHtml(r.name)}</div>
-                    <div class="resto-cuisine">${r.cuisine_type || '美食'}</div>
-                    <div>⭐ ${r.avg_rating ? r.avg_rating.toFixed(1) : '新店'}</div>
-                </div>
-            </div>
-        `).join("");
-        document.querySelectorAll(".resto-card").forEach(card => {
-            card.addEventListener("click", () => showRestoDetail(card.dataset.id));
-        });
-    }
-
-    async function showRestoDetail(restoId) {
-        const data = await apiCall(`/restaurants/${restoId}`, "GET");
-        if (!data) return;
-        const r = data.restaurant;
-        document.getElementById("modalTitle").innerText = r.name;
-        document.getElementById("modalDesc").innerHTML = `${r.address || ''}<br>💰 人均: ${r.price_range || '?'} | 👍 ${r.likes_count || 0}`;
-        const revData = await apiCall(`/restaurants/${restoId}/reviews`, "GET");
-        const revHtml = revData?.reviews?.map(rev => `<div class="review-item"><b>${escapeHtml(rev.user_name)}</b>: ${escapeHtml(rev.content)} <small>${new Date(rev.created_at).toLocaleString()}</small></div>`).join("") || "暂无评论";
-        document.getElementById("modalReviews").innerHTML = revHtml;
-        document.getElementById("likeRestoBtn").onclick = async () => { const res = await apiCall(`/restaurants/${restoId}/like`, "POST"); if (res) showToast(res.message); };
-        document.getElementById("favRestoBtn").onclick = async () => { const res = await apiCall(`/restaurants/${restoId}/favorite`, "POST"); if (res) showToast(res.message); };
-        document.getElementById("postReviewBtn").onclick = async () => {
-            const content = document.getElementById("newReview").value;
-            if (!content) return;
-            const res = await apiCall(`/restaurants/${restoId}/reviews`, "POST", { content });
-            if (res) { showToast("评论成功"); document.getElementById("newReview").value = ""; showRestoDetail(restoId); }
-        };
-        document.getElementById("restoModal").style.display = "flex";
-        document.getElementById("closeModalBtn").onclick = () => document.getElementById("restoModal").style.display = "none";
-    }
-
-    async function initMapAndMarkers() {
-        if (!window.AMap || !window.AMap.Map) { showToast("地图加载中，请稍后重试"); return; }
-        if (!map) map = new AMap.Map("mapContainer", { zoom: 15, center: [118.788, 32.042] });
-        const data = await apiCall("/restaurants", "GET");
-        if (data && data.restaurants && map) {
-            if (markers.length) { map.remove(markers); markers = []; }
-            data.restaurants.forEach(r => {
-                if (r.latitude && r.longitude) {
-                    let marker = new AMap.Marker({ position: [r.longitude, r.latitude], title: r.name });
-                    marker.on("click", () => showRestoDetail(r.id));
-                    map.add(marker);
-                    markers.push(marker);
-                }
-            });
-            if (markers.length) map.setFitView(markers);
-        }
-    }
-
-    async function sendChatMessage() {
-        const input = document.getElementById("chatInput");
-        const msg = input.value.trim();
-        if (!msg) return;
-        const chatDiv = document.getElementById("chatMessages");
-        chatDiv.innerHTML += `<div class="chat-message chat-user">${escapeHtml(msg)}</div>`;
-        input.value = "";
-        const res = await apiCall("/ai/chat", "POST", { message: msg });
-        const reply = res?.reply || "抱歉，AI暂时无法回答。";
-        chatDiv.innerHTML += `<div class="chat-message chat-bot">🤖 ${escapeHtml(reply)}</div>`;
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-
-    async function loadProfile() {
-        const userData = await apiCall("/user/profile", "GET");
-        if (userData) {
-            document.getElementById("profileName").value = userData.username;
-            document.getElementById("profileEmail").value = userData.email;
-            currentUserId = userData.id;
-        }
-        const favData = await apiCall("/user/favorites", "GET");
-        if (favData && favData.favorites) {
-            const favContainer = document.getElementById("favoritesList");
-            favContainer.innerHTML = favData.favorites.map(f => `<div>🍽️ ${escapeHtml(f.restaurant_name)}</div>`).join("");
-        }
-    }
-
-    async function updateProfile() {
-        const newName = document.getElementById("profileName").value;
-        if (!newName) return;
-        const res = await apiCall("/user/profile", "PUT", { username: newName });
-        if (res) showToast("资料更新成功");
-    }
-
-    // 事件绑定
-    document.addEventListener("DOMContentLoaded", () => {
-        const modal = document.getElementById("authModal");
-        document.getElementById("showLoginModalBtn").onclick = () => { showLoginForm(); modal.style.display = "flex"; };
-        document.getElementById("showRegisterModalBtn").onclick = () => { showRegisterForm(); modal.style.display = "flex"; };
-        document.getElementById("getStartedBtn").onclick = () => { showLoginForm(); modal.style.display = "flex"; };
-        modal.onclick = (e) => { if (e.target === modal) modal.style.display = "none"; };
-        document.getElementById("switchToRegister").onclick = (e) => { e.preventDefault(); showRegisterForm(); };
-        document.getElementById("switchToLogin").onclick = (e) => { e.preventDefault(); showLoginForm(); };
-        document.getElementById("modalDoLoginBtn").onclick = handleModalLogin;
-        document.getElementById("modalDoRegisterBtn").onclick = handleModalRegister;
-        document.getElementById("logoutBtn").onclick = logout;
-        document.getElementById("refreshRestosBtn").onclick = loadRestaurants;
-        document.getElementById("sendChatBtn").onclick = sendChatMessage;
-        document.getElementById("updateProfileBtn").onclick = updateProfile;
-        document.getElementById("chatInput")?.addEventListener("keypress", (e) => { if (e.key === "Enter") sendChatMessage(); });
-
-        document.querySelectorAll("[data-page]").forEach(el => {
-            el.addEventListener("click", (e) => {
-                e.preventDefault();
-                const page = el.getAttribute("data-page");
-                showAppPage(page);
-            });
-        });
-
-        if (authToken) {
-            afterLogin(authToken, "用户");
-        } else {
-            showHomePage();
-        }
-    });
-</script>
+<!-- 关键修复：所有 script 标签加上 type="module" -->
+<script type="module" src="js/config.js"></script>
+<script type="module" src="js/utils.js"></script>
+<script type="module" src="js/api.js"></script>
+<script type="module" src="js/auth.js"></script>
+<script type="module" src="js/pages/home.js"></script>
+<script type="module" src="js/pages/restaurants.js"></script>
+<script type="module" src="js/pages/ai.js"></script>
+<script type="module" src="js/pages/profile.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
