@@ -1,6 +1,5 @@
 import { showToast } from '../utils.js';
 
-let authModal = null;
 let currentModalTab = 'login';
 
 function showModal(tab) {
@@ -70,7 +69,7 @@ export function showHomePage() {
     // 绑定主页按钮事件
     document.getElementById('getStartedBtn').onclick = () => showModal('login');
     document.getElementById('showLoginBtn').onclick = () => showModal('login');
-    document.getElementById('showRegisterBtn').onclick = () => showModal('register');
+    // 注册按钮在新布局的模态框内，不需要额外绑定
     document.getElementById('switchToRegister').onclick = (e) => { e.preventDefault(); showModal('register'); };
     document.getElementById('switchToLogin').onclick = (e) => { e.preventDefault(); showModal('login'); };
     document.getElementById('forgotPasswordLink').onclick = (e) => { e.preventDefault(); showModal('forgot'); };
@@ -78,9 +77,6 @@ export function showHomePage() {
     document.getElementById('doLoginBtn').onclick = handleLogin;
     document.getElementById('doRegisterBtn').onclick = handleRegister;
     document.getElementById('doForgotBtn').onclick = handleForgot;
-    // 点击模态框背景关闭
-    const modal = document.getElementById('authModal');
-    modal.onclick = (e) => { if (e.target === modal) hideModal(); };
 }
 
 export function hideHomePage() {}

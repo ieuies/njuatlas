@@ -31,19 +31,20 @@ def recommend_slogan():
         {
             "role": "system",
             "content": (
-                "你是一个资深美食评论家，说话风格俏皮、接地气、吸引年轻人。"
-                "请根据餐厅信息和已有评价，生成一句不超过 40 字的推荐语。"
-                "不要使用'这家店'、'它'等代词，要直接、有感染力。"
+                "用一句不超过30字的口语评价描述这家餐厅。"
+                "语气自然，像朋友随口说的一样。"
+                "禁止使用 Markdown 语法，只输出纯文本。"
+                "不要用'这家店'、'它'等代词。"
             ),
         },
         {
             "role": "user",
-            "content": f"餐厅名称：{restaurant.name}\n地址：{restaurant.address or '未知'}\n{reviews_text}\n\n请为这家餐厅写一句推荐语。",
+            "content": f"餐厅名称：{restaurant.name}\n地址：{restaurant.address or '未知'}\n{reviews_text}\n\n用一句话评价这家餐厅。",
         },
     ]
 
     try:
-        slogan = chat_with_llm(messages, temperature=0.9, max_tokens=100)
+        slogan = chat_with_llm(messages, temperature=0.7, max_tokens=60)
         return jsonify({"restaurant_id": restaurant_id, "slogan": slogan})
     except Exception as exc:
         log_event(current_app.logger, "slogan_generation_failed", level="error", restaurant_id=restaurant_id, error=str(exc))
@@ -99,44 +100,60 @@ def chat_recommend():
     if restaurant_names:
         preference_text = "这位用户喜欢的餐厅有：" + "、".join(list(restaurant_names)[:5]) + "。"
 
-    search_result = search_places(user_message, city=city, page=1, page_size=10)
-    candidates = []
-    if search_result.get("status") == "1":
-        for poi in search_result.get("pois", [])[:5]:
-            candidates.append({
-                "name": poi.get("name", "未知"),
-                "address": poi.get("address", "未知"),
-                "location": poi.get("location", ""),
-                "rating": poi.get("biz_ext", {}).get("rating", "暂无评分"),
-                "cost": poi.get("biz_ext", {}).get("cost", "暂无价格"),
-            })
+    # 意图判断：只有用户明确在找餐厅时才去高德搜索
+    food_keywords = [
+        "吃", "饭", "餐厅", "美食", "推荐", "好吃", "饿了", "夜宵", "早餐",
+        "午餐", "晚餐", "川菜", "湘菜", "火锅", "烧烤", "咖啡", "奶茶",
+        "外卖", "堂食", "食堂", "哪家", "哪里", "什么店", "有啥", "有没有",
+        "菜单", "点菜", "请客", "聚餐", "约会", "小吃", "甜点", "面包",
+        "饺子", "面", "饭馆", "菜馆", "食堂", "好喝"
+    ]
+    is_food_request = any(kw in user_message.lower() for kw in food_keywords)
 
-    if not candidates:
-        candidates_text = "（未找到匹配的餐厅，请推荐几家南京的知名餐厅）"
-    else:
-        candidates_text = "以下是搜索到的真实餐厅：\n"
-        for index, candidate in enumerate(candidates, 1):
-            candidates_text += (
-                f"{index}. {candidate['name']} - {candidate['address']} - "
-                f"评分{candidate['rating']} - 人均{candidate['cost']}\n"
-            )
+    candidates = []
+    candidates_text = ""
+    if is_food_request:
+        search_result = search_places(user_message, city=city, page=1, page_size=10)
+        if search_result.get("status") == "1":
+            for poi in search_result.get("pois", [])[:5]:
+                candidates.append({
+                    "name": poi.get("name", "未知"),
+                    "address": poi.get("address", "未知"),
+                    "location": poi.get("location", ""),
+                    "rating": poi.get("biz_ext", {}).get("rating", "暂无评分"),
+                    "cost": poi.get("biz_ext", {}).get("cost", "暂无价格"),
+                })
+        if candidates:
+            candidates_text = "以下是高德地图搜索到的南京真实餐厅信息（供参考）：\n"
+            for index, candidate in enumerate(candidates, 1):
+                candidates_text += (
+                    f"{index}. {candidate['name']} - {candidate['address']} - "
+                    f"评分{candidate['rating']} - 人均{candidate['cost']}\n"
+                )
+        else:
+            candidates_text = "（高德地图未搜到相关餐厅，请根据自己的知识推荐）"
 
     system_prompt = (
-        "你是一个友好的美食推荐助手，专门帮南京的大学生推荐附近好吃的餐厅。\n"
-        "规则：\n"
-        "1. 推荐时必须基于真实存在的餐厅信息，不要编造。\n"
-        "2. 回答要生动、热情，有'种草'的感觉。\n"
-        "3. 每次推荐 2~3 家，说明推荐理由。\n"
-        "4. 要考虑到用户的口味偏好。\n"
+        "你是一个群聊机器人，在\"南大图谱\"校园群里和同学们聊天。\n"
+        "要求：\n"
+        "1. 用口语化、自然的中文回复，像朋友聊天一样简短亲切。\n"
+        "2. 不要使用营销/推荐语气，不要用\"种草\"\"安利\"\"必吃\"等词。\n"
+        "3. 只输出纯文本，禁止使用任何 Markdown 语法（如 **加粗**、# 标题、- 列表、> 引用等）。\n"
+        "4. 如果用户问餐厅推荐，基于真实信息回答，推荐1-2家即可，简单说理由。\n"
+        "5. 如果用户只是打招呼、闲聊、说无关的话，就直接正常聊天，不要扯到餐厅推荐上。\n"
+        "6. 注意：用户说的'你好''上下文''清空''谢谢'等不是找餐厅，不要强行推荐。\n"
         f"{preference_text}"
     )
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
-    messages.append({"role": "user", "content": f"{user_message}\n\n{candidates_text}"})
+    user_content = user_message
+    if candidates_text:
+        user_content = f"{user_message}\n\n{candidates_text}"
+    messages.append({"role": "user", "content": user_content})
 
     try:
-        reply = chat_with_llm(messages, temperature=0.8, max_tokens=600)
+        reply = chat_with_llm(messages, temperature=0.7, max_tokens=400)
         _save_conversation_message(user_id, session_id, "user", user_message)
         _save_conversation_message(user_id, session_id, "assistant", reply)
         db.session.commit()

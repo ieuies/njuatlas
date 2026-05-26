@@ -21,10 +21,16 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true) {
     if (body) options.body = JSON.stringify(body);
     try {
         const res = await fetch(url, options);
-        const data = await res.json();
+        let data;
+        try {
+            data = await res.json();
+        } catch (jsonErr) {
+            const text = await res.text();
+            console.error('API非JSON响应:', res.status, text);
+            throw new Error(`服务器返回异常 (${res.status})`);
+        }
         if (!res.ok) {
             if (res.status === 401 && needAuth) {
-                // token 失效，触发全局登出（由调用方处理）
                 throw new Error('UNAUTHORIZED');
             }
             throw new Error(data.message || `请求失败: ${res.status}`);
@@ -32,7 +38,8 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true) {
         return data;
     } catch (err) {
         if (err.message === 'UNAUTHORIZED') throw err;
-        showToast(err.message);
+        console.error('API请求错误:', err);
+        showToast(err.message || '网络错误，请检查后端是否启动');
         throw err;
     }
 }
