@@ -4,6 +4,7 @@ import { showHomePage, hideHomePage } from './pages/home.js';
 import { initRestaurantsPage, refreshRestaurants, initMapPage } from './pages/restaurants.js';
 import { initAIPage } from './pages/ai.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
+import { loadAmapScript } from './config.js';
 
 let currentPage = null;
 
@@ -156,6 +157,9 @@ document.getElementById('authModal')?.addEventListener('click', (e) => {
 function init() {
     handleEmailVerification();
     updateNavBar();
+    loadAmapScript().catch((error) => {
+        console.warn('Failed to load AMap script:', error);
+    });
     // 预先加载各个模块的初始化（不重复绑定）
     initRestaurantsPage();
     initMapPage();

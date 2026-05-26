@@ -1,5 +1,15 @@
 services:
   - type: web
+    name: njuatlas-frontend
+    runtime: static
+    buildCommand: echo "No build step for static frontend"
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
     name: njuatlas-backend
     runtime: python
     rootDir: backend
