@@ -1,5 +1,5 @@
 const LOCAL_API_BASE = 'http://localhost:5000/api';
-const RENDER_API_BASE = 'https://njuatlas-backend.onrender.com/api';
+const RENDER_API_BASE = 'https://njuatlas.onrender.com/api';
 
 const runtimeConfig = window.NJUATLAS_CONFIG || {};
 const hostname = window.location.hostname;
