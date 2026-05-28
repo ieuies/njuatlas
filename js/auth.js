@@ -23,9 +23,17 @@ export async function doLogin(email, password) {
     return currentUser;
 }
 
-export async function doRegister(username, email, password) {
-    const data = await register(username, email, password);
-    // 注册成功后自动登录
+export async function doRegister(username, email, password, code) {
+    const data = await register(username, email, password, code);
+    if (!data.access_token) {
+        currentUser = data.user || {
+            email,
+            username,
+            email_verified: false
+        };
+        return currentUser;
+    }
+
     setAuthToken(data.access_token);
     currentUser = {
         id: data.id,

@@ -45,8 +45,8 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true) {
 }
 
 // 用户认证
-export async function register(username, email, password) {
-    return request('/user/register', 'POST', { username, email, password }, false);
+export async function register(username, email, password, code) {
+    return request('/user/register', 'POST', { username, email, password, code }, false);
 }
 export async function login(email, password) {
     return request('/user/login', 'POST', { email, password }, false);
@@ -61,10 +61,16 @@ export async function verifyEmail(token) {
     return request('/user/email/verify', 'POST', { token }, false);
 }
 export async function forgotPassword(email) {
-    return request('/user/password/forgot', 'POST', { email }, false);
+    return request('/user/email/code', 'POST', { email, purpose: 'reset_password' }, false);
 }
-export async function resetPassword(token, newPassword) {
-    return request('/user/password/reset', 'POST', { token, new_password: newPassword }, false);
+export async function requestRegisterCode(email) {
+    return request('/user/email/code', 'POST', { email, purpose: 'register' }, false);
+}
+export async function requestPasswordResetCode(email) {
+    return request('/user/email/code', 'POST', { email, purpose: 'reset_password' }, false);
+}
+export async function resetPassword(email, code, newPassword) {
+    return request('/user/password/reset', 'POST', { email, code, new_password: newPassword }, false);
 }
 export async function changePassword(currentPassword, newPassword) {
     return request('/user/password/change', 'POST', { current_password: currentPassword, new_password: newPassword });

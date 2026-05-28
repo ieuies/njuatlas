@@ -222,6 +222,10 @@
             <h2><i class="fas fa-user-plus"></i> 注册</h2>
             <input type="text" id="regUsername" placeholder="用户名">
             <input type="email" id="regEmail" placeholder="邮箱">
+            <div class="code-row">
+                <input type="text" id="regCode" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendRegCodeBtn" class="secondary-btn" type="button">获取验证码</button>
+            </div>
             <input type="password" id="regPassword" placeholder="密码 (至少8位)">
             <button id="doRegisterBtn" class="primary-btn" style="width:100%;">注册</button>
             <div class="switch-mode">已有账号？ <a id="switchToLogin">去登录</a></div>
@@ -229,7 +233,12 @@
         <div id="forgotForm" style="display:none;">
             <h2><i class="fas fa-key"></i> 找回密码</h2>
             <input type="email" id="forgotEmail" placeholder="注册邮箱">
-            <button id="doForgotBtn" class="primary-btn" style="width:100%;">发送重置链接</button>
+            <div class="code-row">
+                <input type="text" id="forgotCode" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendForgotCodeBtn" class="secondary-btn" type="button">获取验证码</button>
+            </div>
+            <input type="password" id="forgotNewPassword" placeholder="新密码 (至少8位)">
+            <button id="doForgotBtn" class="primary-btn" style="width:100%;">重置密码</button>
             <div class="switch-mode"><a id="backToLogin">返回登录</a></div>
         </div>
     </div>
