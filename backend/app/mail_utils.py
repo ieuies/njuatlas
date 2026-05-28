@@ -30,14 +30,25 @@ def _send_mail(to_email, subject, body):
     message["Subject"] = subject
     message.set_content(body)
 
-    with smtplib.SMTP(smtp_host, current_app.config["SMTP_PORT"], timeout=10) as smtp:
-        if current_app.config.get("SMTP_USE_TLS"):
-            smtp.starttls()
-        username = current_app.config.get("SMTP_USERNAME")
-        password = current_app.config.get("SMTP_PASSWORD")
-        if username and password:
-            smtp.login(username, password)
-        smtp.send_message(message)
+    try:
+        with smtplib.SMTP(smtp_host, current_app.config["SMTP_PORT"], timeout=10) as smtp:
+            if current_app.config.get("SMTP_USE_TLS"):
+                smtp.starttls()
+            username = current_app.config.get("SMTP_USERNAME")
+            password = current_app.config.get("SMTP_PASSWORD")
+            if username and password:
+                smtp.login(username, password)
+            smtp.send_message(message)
+    except Exception as exc:
+        log_event(
+            current_app.logger,
+            "mail_delivery_failed",
+            level="error",
+            to=to_email,
+            subject=subject,
+            error=str(exc),
+        )
+        return False
 
     return True
 
@@ -52,3 +63,22 @@ def send_password_reset_email(user, token):
     link = f"{current_app.config['FRONTEND_URL'].rstrip('/')}/reset-password?token={token}"
     body = f"Reset your NjuAtlas password:\n\n{link}\n\nIgnore this email if you did not request a reset."
     return _send_mail(user.email, "Reset your NjuAtlas password", body)
+
+
+def send_email_code(to_email, code, purpose):
+    if purpose == "register":
+        subject = "Your NjuAtlas registration code"
+        action = "complete your NjuAtlas registration"
+    elif purpose == "reset_password":
+        subject = "Your NjuAtlas password reset code"
+        action = "reset your NjuAtlas password"
+    else:
+        subject = "Your NjuAtlas verification code"
+        action = "continue"
+
+    body = (
+        f"Your verification code is: {code}\n\n"
+        f"Use this code to {action}. It expires in 10 minutes.\n\n"
+        "If you did not request this code, ignore this email."
+    )
+    return _send_mail(to_email, subject, body)
