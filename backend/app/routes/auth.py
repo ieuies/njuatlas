@@ -279,7 +279,6 @@ def login():
         password_valid = True
 
     if password_valid and not user.email_verified:
-        email_delivered = _send_new_verification_email(user)
         db.session.commit()
         log_event(
             current_app.logger,
@@ -287,10 +286,9 @@ def login():
             level="warning",
             user_id=user.id,
             email=user.email,
-            email_delivered=email_delivered,
         )
         return error_response(
-            "请先完成邮箱验证后再登录。新的验证邮件已发送。",
+            "请先完成邮箱验证后再登录。",
             403,
             code="email_not_verified",
         )

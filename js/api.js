@@ -2,6 +2,8 @@ import { API_BASE } from './config.js';
 import { showToast } from './utils.js';
 
 let authToken = localStorage.getItem('access_token') || null;
+const DEFAULT_TIMEOUT_MS = 12000;
+const LOGIN_TIMEOUT_MS = 10000;
 
 export function setAuthToken(token) {
     authToken = token;
@@ -13,14 +15,17 @@ export function getAuthToken() {
     return authToken;
 }
 
-async function request(endpoint, method = 'GET', body = null, needAuth = true) {
+async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS) {
     const url = `${API_BASE}${endpoint}`;
     const headers = { 'Content-Type': 'application/json' };
     if (needAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
-    const options = { method, headers };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const options = { method, headers, signal: controller.signal };
     if (body) options.body = JSON.stringify(body);
     try {
         const res = await fetch(url, options);
+        clearTimeout(timeoutId);
         let data;
         try {
             data = await res.json();
@@ -37,6 +42,10 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true) {
         }
         return data;
     } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            err = new Error('请求超时，请稍后重试');
+        }
         if (err.message === 'UNAUTHORIZED') throw err;
         console.error('API请求错误:', err);
         showToast(err.message || '网络错误，请检查后端是否启动');
@@ -49,7 +58,7 @@ export async function register(username, email, password, code) {
     return request('/user/register', 'POST', { username, email, password, code }, false);
 }
 export async function login(email, password) {
-    return request('/user/login', 'POST', { email, password }, false);
+    return request('/user/login', 'POST', { email, password }, false, LOGIN_TIMEOUT_MS);
 }
 export async function logout() {
     return request('/user/logout', 'POST', null, true);
