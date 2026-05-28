@@ -110,6 +110,19 @@ class PasswordResetToken(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class EmailVerificationCode(db.Model):
+    __tablename__ = "email_verification_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), index=True, nullable=False)
+    purpose = db.Column(db.String(30), index=True, nullable=False)
+    code_hash = db.Column(db.String(64), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime)
+    attempt_count = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
 class RevokedToken(db.Model):
     __tablename__ = "revoked_tokens"
 
