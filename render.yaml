@@ -45,7 +45,7 @@ services:
       - key: RATELIMIT_STORAGE_URI
         value: "memory://"
       - key: FRONTEND_URL
-        sync: false
+        value: "https://njuatlas.cn"
       - key: EMAIL_VERIFICATION_TOKEN_SECONDS
         value: "86400"
       - key: PASSWORD_RESET_TOKEN_SECONDS
