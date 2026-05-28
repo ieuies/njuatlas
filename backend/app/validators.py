@@ -50,7 +50,7 @@ def clean_string(value, field, *, required=False, min_length=1, max_length=255):
 
 
 def positive_int(value, field, *, required=True, max_value=None):
-    """校验正整数 ID、页码等字段。"""
+    """校验正整数，比如 ID、页码等字段。"""
     if value is None or value == "":
         if required:
             raise ValidationError(f"需要 {field}")

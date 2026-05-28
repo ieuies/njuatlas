@@ -45,7 +45,7 @@ services:
       - key: RATELIMIT_STORAGE_URI
         value: "memory://"
       - key: FRONTEND_URL
-        sync: false
+        value: "https://njuatlas.cn"
       - key: EMAIL_VERIFICATION_TOKEN_SECONDS
         value: "86400"
       - key: PASSWORD_RESET_TOKEN_SECONDS
@@ -54,8 +54,6 @@ services:
         value: "600"
       - key: EMAIL_CODE_RESEND_SECONDS
         value: "60"
-      - key: EMAIL_CODE_HOURLY_LIMIT
-        value: "5"
       - key: EMAIL_CODE_MAX_ATTEMPTS
         value: "5"
       - key: SMTP_HOST
@@ -66,6 +64,10 @@ services:
         sync: false
       - key: SMTP_PASSWORD
         sync: false
+      - key: SMTP_TIMEOUT_SECONDS
+        value: "5"
+      - key: SMTP_USE_SSL
+        value: "false"
       - key: SMTP_USE_TLS
         value: "true"
       - key: MAIL_FROM

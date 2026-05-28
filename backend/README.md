@@ -177,7 +177,7 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | `LOG_LEVEL` | 否 | `INFO` | 日志等级 |
 | `RATELIMIT_DEFAULT` | 否 | `200 per hour` | 全局默认限流 |
 | `RATELIMIT_STORAGE_URI` | 否 | `memory://` | 限流存储；生产可切 Redis |
-| `FRONTEND_URL` | 否 | `http://localhost:5173` | 邮箱验证/重置密码链接的前端域名 |
+| `FRONTEND_URL` | 否 | `http://localhost:8080` | 邮箱验证/重置密码链接的前端域名；生产环境使用 `https://njuatlas.cn` |
 | `EMAIL_VERIFICATION_TOKEN_SECONDS` | 否 | `86400` | 邮箱验证 token 有效期 |
 | `PASSWORD_RESET_TOKEN_SECONDS` | 否 | `1800` | 重置密码 token 有效期 |
 | `SMTP_HOST` | 否 | 空 | 邮件服务器；为空时邮件内容写入日志 |
@@ -718,6 +718,12 @@ startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PO
 - `ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`
 - `FRONTEND_URL`
 - SMTP 相关变量，如果需要真实邮件发送
+
+正式域名规划：
+
+- 前端站点：`https://njuatlas.cn`
+- 后端 API：`https://api.njuatlas.cn`
+- 前端生产环境会请求 `https://api.njuatlas.cn/api`
 
 ## Windows 中文乱码处理
 
