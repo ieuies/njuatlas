@@ -31,8 +31,12 @@ def _send_mail(to_email, subject, body):
     message.set_content(body)
 
     try:
-        with smtplib.SMTP(smtp_host, current_app.config["SMTP_PORT"], timeout=10) as smtp:
-            if current_app.config.get("SMTP_USE_TLS"):
+        smtp_port = current_app.config["SMTP_PORT"]
+        smtp_timeout = current_app.config["SMTP_TIMEOUT_SECONDS"]
+        smtp_class = smtplib.SMTP_SSL if current_app.config.get("SMTP_USE_SSL") else smtplib.SMTP
+
+        with smtp_class(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
+            if current_app.config.get("SMTP_USE_TLS") and not current_app.config.get("SMTP_USE_SSL"):
                 smtp.starttls()
             username = current_app.config.get("SMTP_USERNAME")
             password = current_app.config.get("SMTP_PASSWORD")
@@ -67,18 +71,18 @@ def send_password_reset_email(user, token):
 
 def send_email_code(to_email, code, purpose):
     if purpose == "register":
-        subject = "Your NjuAtlas registration code"
-        action = "complete your NjuAtlas registration"
+        subject = "NjuAtlas 注册验证码"
+        action = "完成 NjuAtlas 注册"
     elif purpose == "reset_password":
-        subject = "Your NjuAtlas password reset code"
-        action = "reset your NjuAtlas password"
+        subject = "NjuAtlas 重置密码验证码"
+        action = "重置 NjuAtlas 密码"
     else:
-        subject = "Your NjuAtlas verification code"
-        action = "continue"
+        subject = "NjuAtlas 验证码"
+        action = "继续操作"
 
     body = (
-        f"Your verification code is: {code}\n\n"
-        f"Use this code to {action}. It expires in 10 minutes.\n\n"
-        "If you did not request this code, ignore this email."
+        f"你的验证码是：{code}\n\n"
+        f"请使用该验证码{action}。验证码 10 分钟内有效。\n\n"
+        "如果不是你本人操作，请忽略这封邮件。"
     )
     return _send_mail(to_email, subject, body)

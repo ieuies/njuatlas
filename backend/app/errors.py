@@ -10,6 +10,19 @@ from app.logging_utils import log_event
 from app.validators import ValidationError
 
 
+HTTP_ERROR_MESSAGES = {
+    400: "请求参数无效。",
+    401: "未登录或认证失败。",
+    403: "没有权限访问该资源。",
+    404: "请求的地址不存在。",
+    405: "请求方法不允许。",
+    409: "请求存在冲突。",
+    413: "请求内容过大。",
+    415: "请求内容类型不支持。",
+    429: "请求过于频繁，请稍后再试。",
+}
+
+
 def _json_error(message, status_code, *, code=None):
     """生成统一 JSON 错误响应。
 
@@ -25,7 +38,7 @@ def _json_error(message, status_code, *, code=None):
 
 
 def error_response(message, status_code, *, code=None):
-    """Return an expected route error using the global JSON error schema."""
+    """返回业务层可预期错误，并保持统一 JSON 错误结构。"""
     return _json_error(message, status_code, code=code)
 
 
@@ -55,7 +68,7 @@ def register_error_handlers(app):
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error):
-        message = error.description or error.name
+        message = HTTP_ERROR_MESSAGES.get(error.code) or error.description or error.name
         return _json_error(message, error.code, code=error.name.lower().replace(" ", "_"))
 
     @app.errorhandler(Exception)
