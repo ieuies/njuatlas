@@ -50,6 +50,14 @@ services:
         value: "86400"
       - key: PASSWORD_RESET_TOKEN_SECONDS
         value: "1800"
+      - key: EMAIL_CODE_EXPIRATION_SECONDS
+        value: "600"
+      - key: EMAIL_CODE_RESEND_SECONDS
+        value: "60"
+      - key: EMAIL_CODE_HOURLY_LIMIT
+        value: "5"
+      - key: EMAIL_CODE_MAX_ATTEMPTS
+        value: "5"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

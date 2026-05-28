@@ -948,3 +948,17 @@ body:not(.logged-in) .top-bar .page-title {
     border-color: var(--njupurple-light);
     transform: translateY(-1px);
 }
+.code-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.code-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.code-row button {
+    white-space: nowrap;
+}
