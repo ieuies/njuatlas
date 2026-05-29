@@ -825,25 +825,205 @@ body:not(.logged-in) .top-bar .page-title {
 }
 
 /* ========== 个人中心 ========== */
+.profile-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .profile-card {
     background: white;
-    border-radius: 20px;
+    border-radius: 8px;
     padding: 1.5rem;
     box-shadow: var(--card-shadow);
-    margin-top: 1rem;
     border: 1px solid var(--gray-200);
 }
 
-.profile-card hr {
-    margin: 1.5rem 0;
-    border: none;
-    height: 1px;
-    background: var(--gray-200);
+.profile-summary {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
-.profile-card h3 {
-    margin: 1rem 0 0.5rem;
+.profile-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--njupurple-bg);
+    color: var(--njupurple);
+    font-size: 1.5rem;
+    flex: 0 0 auto;
+}
+
+.profile-main {
+    min-width: 0;
+}
+
+.profile-main h2 {
+    margin: 0 0 0.25rem;
     color: var(--njupurple-dark);
+    font-size: 1.35rem;
+}
+
+.profile-main p {
+    margin: 0;
+    color: var(--gray-600);
+    word-break: break-word;
+}
+
+.profile-status-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.profile-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.profile-status.is-verified {
+    background: rgba(22, 163, 74, 0.1);
+    color: #166534;
+}
+
+.profile-status.is-unverified {
+    background: rgba(220, 38, 38, 0.1);
+    color: #991b1b;
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.profile-stat {
+    min-height: 76px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+}
+
+.profile-stat span {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--njupurple-dark);
+}
+
+.profile-stat small {
+    color: var(--gray-600);
+    margin-top: 0.15rem;
+}
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.profile-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: var(--njupurple-dark);
+}
+
+.profile-section-title h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.profile-list-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    background: var(--gray-50);
+}
+
+.profile-list-item strong {
+    display: block;
+    color: var(--gray-900);
+    margin-bottom: 0.25rem;
+}
+
+.profile-list-item p {
+    margin: 0;
+    color: var(--gray-600);
+    line-height: 1.5;
+}
+
+.profile-list-item time {
+    flex: 0 0 auto;
+    color: var(--gray-500);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.profile-empty {
+    padding: 1rem;
+    border: 1px dashed var(--gray-200);
+    border-radius: 8px;
+    color: var(--gray-500);
+    background: var(--gray-50);
+}
+
+.profile-tag {
+    display: inline-flex;
+    margin-top: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--njupurple-bg);
+    color: var(--njupurple);
+    font-size: 0.78rem;
+}
+
+.profile-muted {
+    color: var(--gray-500);
+}
+
+.password-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 0.75rem;
+}
+
+.password-form input {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    padding: 0 0.9rem;
+}
+
+.password-form input:focus {
+    outline: none;
+    border-color: var(--njupurple);
+    box-shadow: 0 0 0 3px rgba(75, 0, 130, 0.1);
 }
 
 /* ========== Toast 提示 ========== */
@@ -905,6 +1085,27 @@ body:not(.logged-in) .top-bar .page-title {
 
     .content-area {
         padding: 1rem;
+    }
+
+    .profile-summary {
+        align-items: flex-start;
+    }
+
+    .profile-stats,
+    .profile-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-list-item {
+        flex-direction: column;
+    }
+
+    .profile-list-item time {
+        white-space: normal;
+    }
+
+    .password-form {
+        grid-template-columns: 1fr;
     }
 
     .hero-title {

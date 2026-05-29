@@ -144,27 +144,53 @@
 
             <!-- 个人中心页面 -->
             <div id="profilePage" class="page">
-                <h2><i class="fas fa-user-circle"></i> 个人中心</h2>
-                <div class="profile-card">
-                    <p><strong>用户名：</strong> <span id="profileUsername"></span></p>
-                    <p><strong>邮箱：</strong> <span id="profileEmail"></span></p>
-                    <p><strong>邮箱验证：</strong> <span id="profileEmailVerified"></span>
-                        <button id="sendVerifyEmailBtn" class="small-btn">重新发送验证邮件</button>
-                    </p>
-                    <hr>
-                    <h3>❤️ 我的收藏</h3>
-                    <div id="favoritesList"></div>
-                    <h3>👍 我的点赞</h3>
-                    <div id="likesList"></div>
-                    <h3>📝 我的评论</h3>
-                    <div id="reviewsList"></div>
-                    <h3>💬 我的对话</h3>
-                    <div id="conversationsList"></div>
-                    <hr>
-                    <h3>修改密码</h3>
-                    <input type="password" id="oldPassword" placeholder="当前密码">
-                    <input type="password" id="newPassword" placeholder="新密码">
-                    <button id="changePasswordBtn" class="primary-btn">修改密码</button>
+                <div class="profile-shell">
+                    <section class="profile-card profile-summary">
+                        <div class="profile-avatar" aria-hidden="true"><i class="fas fa-user"></i></div>
+                        <div class="profile-main">
+                            <h2 id="profileUsername">个人中心</h2>
+                            <p id="profileEmail"></p>
+                            <div class="profile-status-row">
+                                <span id="profileEmailVerified" class="profile-status"></span>
+                                <button id="sendVerifyEmailBtn" class="small-btn">重新发送验证邮件</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="profile-stats" aria-label="个人数据统计">
+                        <div class="profile-stat"><span id="favoriteCount">0</span><small>收藏</small></div>
+                        <div class="profile-stat"><span id="likeCount">0</span><small>点赞</small></div>
+                        <div class="profile-stat"><span id="reviewCount">0</span><small>评论</small></div>
+                        <div class="profile-stat"><span id="conversationCount">0</span><small>对话</small></div>
+                    </section>
+
+                    <section class="profile-grid">
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-heart"></i><h3>我的收藏</h3></div>
+                            <div id="favoritesList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-thumbs-up"></i><h3>我的点赞</h3></div>
+                            <div id="likesList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-pen"></i><h3>我的评论</h3></div>
+                            <div id="reviewsList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-comments"></i><h3>我的对话</h3></div>
+                            <div id="conversationsList" class="profile-list"></div>
+                        </div>
+                    </section>
+
+                    <section class="profile-card password-panel">
+                        <div class="profile-section-title"><i class="fas fa-lock"></i><h3>修改密码</h3></div>
+                        <div class="password-form">
+                            <input type="password" id="oldPassword" placeholder="当前密码" autocomplete="current-password">
+                            <input type="password" id="newPassword" placeholder="新密码，至少 8 位" autocomplete="new-password">
+                            <button id="changePasswordBtn" class="primary-btn">修改密码</button>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
