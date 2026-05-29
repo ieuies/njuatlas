@@ -18,6 +18,12 @@ const pageTitles = {
 };
 
 function switchPage(pageId) {
+    // 如果未登录且要跳转个人中心，则弹出登录框
+    if (pageId === 'profile' && !isLoggedIn()) {
+        const modal = document.getElementById('authModal');
+        if (modal) modal.style.display = 'flex';
+        return;
+    }
     // 隐藏所有页面（仅 content-area 内的 .page）
     document.querySelectorAll('.content-area .page').forEach(p => p.classList.remove('active-page'));
     const target = document.getElementById(`${pageId}Page`);
@@ -56,6 +62,12 @@ function updateNavBar() {
     const pageTitle = document.getElementById('pageTitle');
 
     if (isLoggedIn()) {
+        const usernameSpan = document.getElementById('usernameSpan');
+        if (usernameSpan) {
+            usernameSpan.style.cursor = 'pointer';
+            // 直接绑定点击，不需要 clone
+            usernameSpan.onclick = () => switchPage('profile');
+        }
         if (guestNav) guestNav.style.display = 'none';
         if (userNav) userNav.style.display = 'flex';
         document.body.classList.remove('logged-in');
