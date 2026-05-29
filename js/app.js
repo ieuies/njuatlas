@@ -58,7 +58,7 @@ function updateNavBar() {
     if (isLoggedIn()) {
         if (guestNav) guestNav.style.display = 'none';
         if (userNav) userNav.style.display = 'flex';
-        document.body.classList.remove('logged-in');
+        document.body.classList.add('logged-in');
         const user = getUser();
         if (user) usernameSpan.innerText = user.username || user.email.split('@')[0];
         // 隐藏首页，显示功能页
@@ -69,6 +69,7 @@ function updateNavBar() {
     } else {
         if (guestNav) guestNav.style.display = 'flex';
         if (userNav) userNav.style.display = 'none';
+        document.body.classList.remove('logged-in');
         currentPage = null;
         // 显示首页
         if (homePage) homePage.classList.add('active-page');
