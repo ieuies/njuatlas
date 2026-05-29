@@ -1171,3 +1171,35 @@ body:not(.logged-in) .top-bar .page-title {
     opacity: 0.8;
     text-decoration: underline;
 }
+/* 分页样式 */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+.page-btn {
+    min-width: 40px;
+    padding: 6px 12px;
+    border: 1px solid var(--gray-300);
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    color: var(--gray-800);
+}
+.page-btn.active {
+    background: var(--njupurple);
+    border-color: var(--njupurple);
+    color: white;
+}
+.page-btn:hover:not(.active) {
+    background: var(--njupurple-bg);
+    border-color: var(--njupurple-light);
+}
+.page-btn.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}

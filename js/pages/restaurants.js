@@ -2,9 +2,16 @@ import { searchPlaces, addRestaurant, getRestaurantStats, toggleLike, toggleFavo
 import { showToast, escapeHtml } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
-let currentRestaurants = [];   // 存储搜索结果
+let currentRestaurants = [];
 let map = null;
 let markers = [];
+
+// 分页相关变量
+let currentPage = 1;
+const pageSize = 20;
+let totalPages = 1;
+let currentKeyword = '美食';
+let currentCity = '南京';
 
 // 渲染餐厅卡片
 function renderRestaurantList(restaurants) {
@@ -32,11 +39,54 @@ function renderRestaurantList(restaurants) {
     });
 }
 
-// 显示餐厅详情（模态框）
+// 渲染分页按钮
+function renderPagination() {
+    const container = document.getElementById('pagination');
+    if (!container) return;
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    // 上一页
+    html += `<button class="page-btn prev-btn" data-page="prev" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`;
+    
+    // 页码列表（最多显示5个）
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    if (endPage - startPage + 1 < maxVisible) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+    }
+    
+    // 下一页
+    html += `<button class="page-btn next-btn" data-page="next" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`;
+    
+    container.innerHTML = html;
+    
+    // 绑定事件
+    container.querySelectorAll('.page-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (btn.classList.contains('disabled')) return;
+            let targetPage = currentPage;
+            if (btn.classList.contains('prev-btn')) targetPage = currentPage - 1;
+            else if (btn.classList.contains('next-btn')) targetPage = currentPage + 1;
+            else targetPage = parseInt(btn.getAttribute('data-page'), 10);
+            if (targetPage >= 1 && targetPage <= totalPages) {
+                refreshRestaurants(currentKeyword, currentCity, targetPage);
+            }
+        });
+    });
+}
+
+// 显示餐厅详情（保持不变，只复制你原有的代码即可）
 async function showRestaurantDetail(poi) {
     // 检查本地是否已存在该餐厅（通过poi_id）
     let localRestaurantId = null;
-    // 调用后端添加餐厅（如果已存在会返回已有id）
     try {
         const addRes = await addRestaurant(poi.name, poi.address, poi.location, poi.id);
         localRestaurantId = addRes.id;
@@ -44,7 +94,7 @@ async function showRestaurantDetail(poi) {
         showToast('无法获取餐厅信息');
         return;
     }
-    // 获取统计信息（点赞、收藏、评论）
+    // 获取统计信息
     let stats = { likes: 0, favorites: 0, reviews: [] };
     try {
         stats = await getRestaurantStats(localRestaurantId);
@@ -55,14 +105,12 @@ async function showRestaurantDetail(poi) {
     const reviewsHtml = stats.reviews.map(r => `<div><b>用户${r.user_id}</b>: ${escapeHtml(r.content)} <small>${new Date(r.created_at).toLocaleString()}</small></div>`).join('');
     document.getElementById('modalReviews').innerHTML = reviewsHtml || '暂无评论';
     
-    // 绑定点赞收藏按钮
     const likeBtn = document.getElementById('likeRestoBtn');
     const favBtn = document.getElementById('favRestoBtn');
     likeBtn.onclick = async () => {
         if (!isLoggedIn()) { showToast('请先登录'); return; }
         await toggleLike(localRestaurantId);
         showToast('已切换点赞');
-        // 刷新详情
         showRestaurantDetail(poi);
     };
     favBtn.onclick = async () => {
@@ -71,7 +119,6 @@ async function showRestaurantDetail(poi) {
         showToast('已切换收藏');
         showRestaurantDetail(poi);
     };
-    // 发表评论
     const postBtn = document.getElementById('postReviewBtn');
     const newReview = document.getElementById('newReview');
     postBtn.onclick = async () => {
@@ -89,24 +136,36 @@ async function showRestaurantDetail(poi) {
     };
 }
 
-// 搜索餐厅（默认关键词“美食”）
-export async function refreshRestaurants(keyword = '美食', city = '南京') {
+// 搜索餐厅（支持分页）
+export async function refreshRestaurants(keyword = '美食', city = '南京', page = 1) {
     const container = document.getElementById('restoList');
-    container.innerHTML = '加载中...';
+    if (container) container.innerHTML = '加载中...';
+    currentKeyword = keyword;
+    currentCity = city;
+    currentPage = page;
+    
     try {
-        const data = await searchPlaces(keyword, city);
+        const data = await searchPlaces(keyword, city, null, page, pageSize);
         if (data.status === '1' && data.pois) {
             currentRestaurants = data.pois;
             renderRestaurantList(currentRestaurants);
+            // 计算总页数（高德返回的count是字符串，表示符合条件的总数）
+            const totalCount = parseInt(data.count, 10) || 0;
+            totalPages = Math.ceil(totalCount / pageSize);
+            renderPagination();
         } else {
             container.innerHTML = '<p>未找到餐厅，试试其他关键词</p>';
+            totalPages = 1;
+            renderPagination();
         }
     } catch(e) {
         container.innerHTML = '<p>加载失败</p>';
+        totalPages = 1;
+        renderPagination();
     }
 }
 
-// 地图初始化与标记
+// 地图初始化
 export async function initMapPage() {
     if (!window.AMap) {
         setTimeout(initMapPage, 500);
@@ -116,7 +175,7 @@ export async function initMapPage() {
     if (!map) {
         map = new AMap.Map('mapContainer', { zoom: 14, center: [118.788, 32.042] });
     }
-    // 加载餐厅并打点
+    // 加载餐厅并打点（如果没有数据则先搜索）
     if (!currentRestaurants.length) await refreshRestaurants();
     if (markers.length) map.remove(markers);
     markers = [];
@@ -133,6 +192,9 @@ export async function initMapPage() {
 }
 
 export function initRestaurantsPage() {
-    document.getElementById('refreshRestosBtn').onclick = () => refreshRestaurants();
+    const refreshBtn = document.getElementById('refreshRestosBtn');
+    if (refreshBtn) {
+        refreshBtn.onclick = () => refreshRestaurants(currentKeyword, currentCity, 1);
+    }
     refreshRestaurants();
 }
