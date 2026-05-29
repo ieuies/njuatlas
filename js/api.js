@@ -103,9 +103,11 @@ export async function getRestaurantStats(restaurantId) {
 }
 
 // 地图搜索
-export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 20) {
-    let url = `/places/search?keyword=${encodeURIComponent(keyword)}&city=${encodeURIComponent(city)}&page=${page}&page_size=${pageSize}`;
+export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null) {
+    let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
     if (location) url += `&location=${encodeURIComponent(location)}`;
+    if (radius) url += `&radius=${encodeURIComponent(radius)}`;
     return request(url, 'GET', null, false);
 }
 export async function getHotAreas() {

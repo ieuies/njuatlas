@@ -459,12 +459,21 @@ body:not(.logged-in) .top-bar .page-title {
 #mapContainer {
     width: 100%;
     height: 520px;
-    border-radius: 20px;
+    border-radius: 8px;
     overflow: hidden;
     box-shadow: var(--card-shadow);
     margin: 1rem 0;
     background: var(--gray-200);
     border: 1px solid var(--gray-200);
+}
+
+.map-loading,
+.list-empty {
+    min-height: 160px;
+    display: grid;
+    place-items: center;
+    color: var(--gray-600);
+    background: var(--gray-50);
 }
 
 /* ========== AI 聊天 ========== */
@@ -1170,36 +1179,4 @@ body:not(.logged-in) .top-bar .page-title {
 .topbar-username:hover {
     opacity: 0.8;
     text-decoration: underline;
-}
-/* 分页样式 */
-.pagination {
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 2rem;
-    flex-wrap: wrap;
-}
-.page-btn {
-    min-width: 40px;
-    padding: 6px 12px;
-    border: 1px solid var(--gray-300);
-    background: white;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.9rem;
-    color: var(--gray-800);
-}
-.page-btn.active {
-    background: var(--njupurple);
-    border-color: var(--njupurple);
-    color: white;
-}
-.page-btn:hover:not(.active) {
-    background: var(--njupurple-bg);
-    border-color: var(--njupurple-light);
-}
-.page-btn.disabled {
-    opacity: 0.5;
-    pointer-events: none;
 }

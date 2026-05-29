@@ -10,6 +10,7 @@ const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname
 // before loading modules if a deployment uses a different backend URL or map key.
 export const API_BASE = runtimeConfig.API_BASE || (isLocal ? LOCAL_API_BASE : RENDER_API_BASE);
 export const AMAP_KEY = runtimeConfig.AMAP_KEY || '97ac6e711cde17463af06c10b8b05f42';
+export const AMAP_SECURITY_CODE = runtimeConfig.AMAP_SECURITY_CODE || '';
 
 export function loadAmapScript() {
     if (window.AMap) return Promise.resolve(window.AMap);
@@ -27,6 +28,11 @@ export function loadAmapScript() {
     }
 
     return new Promise((resolve, reject) => {
+        if (AMAP_SECURITY_CODE) {
+            window._AMapSecurityConfig = {
+                securityJsCode: AMAP_SECURITY_CODE
+            };
+        }
         const script = document.createElement('script');
         script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(AMAP_KEY)}`;
         script.async = true;
