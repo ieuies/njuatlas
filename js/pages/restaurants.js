@@ -1,42 +1,65 @@
-import { searchPlaces, addRestaurant, getRestaurantStats, toggleLike, toggleFavorite, addReview, getRecommendSlogan } from '../api.js';
+import { searchPlaces, addRestaurant, getRestaurantStats, toggleLike, toggleFavorite, addReview } from '../api.js';
+import { loadAmapScript } from '../config.js';
 import { showToast, escapeHtml } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
-let currentRestaurants = [];   // 存储搜索结果
+const NJU_GULOU = {
+    name: '南京大学鼓楼校区',
+    location: '118.7784,32.0572',
+    center: [118.7784, 32.0572],
+};
+const DEFAULT_KEYWORD = '餐厅';
+const DEFAULT_RADIUS = 5000;
+const PAGE_SIZE = 25;
+const PAGE_COUNT = 3;
+
+let currentRestaurants = [];
 let map = null;
 let markers = [];
 
-// 渲染餐厅卡片
+function decodePoi(encoded) {
+    return JSON.parse(decodeURIComponent(encoded));
+}
+
+function validLocation(location) {
+    if (!location || !location.includes(',')) return null;
+    const [lng, lat] = location.split(',').map(Number);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    return [lng, lat];
+}
+
 function renderRestaurantList(restaurants) {
     const container = document.getElementById('restoList');
     if (!restaurants.length) {
-        container.innerHTML = '<p>暂无餐厅，试试搜索其他关键词</p>';
+        container.innerHTML = '<p class="list-empty">南京大学附近暂未找到餐厅，试试刷新或稍后再试</p>';
         return;
     }
-    container.innerHTML = restaurants.map(r => `
-        <div class="resto-card" data-poi='${JSON.stringify(r)}'>
-            <div class="resto-img" style="background-image: url('${r.photos?.[0]?.url || 'https://picsum.photos/300/160?random='+r.id}');"></div>
-            <div class="resto-info">
-                <div class="resto-name">${escapeHtml(r.name)}</div>
-                <div>${escapeHtml(r.address)}</div>
-                <div>⭐ ${r.biz_ext?.rating || '暂无评分'} | 💰 ${r.biz_ext?.cost || '未知'}</div>
+
+    container.innerHTML = restaurants.map(r => {
+        const image = r.photos?.[0]?.url || `https://picsum.photos/300/160?random=${encodeURIComponent(r.id || r.name)}`;
+        const rating = r.biz_ext?.rating || '暂无评分';
+        const cost = r.biz_ext?.cost || '未知';
+        return `
+            <div class="resto-card" data-poi="${encodeURIComponent(JSON.stringify(r))}">
+                <div class="resto-img" style="background-image: url('${image}');"></div>
+                <div class="resto-info">
+                    <div class="resto-name">${escapeHtml(r.name)}</div>
+                    <div>${escapeHtml(r.address || '')}</div>
+                    <div>评分 ${escapeHtml(String(rating))} | 人均 ${escapeHtml(String(cost))}</div>
+                </div>
             </div>
-        </div>
-    `).join('');
-    // 绑定点击事件
+        `;
+    }).join('');
+
     document.querySelectorAll('.resto-card').forEach(card => {
         card.addEventListener('click', () => {
-            const poi = JSON.parse(card.getAttribute('data-poi'));
-            showRestaurantDetail(poi);
+            showRestaurantDetail(decodePoi(card.getAttribute('data-poi')));
         });
     });
 }
 
-// 显示餐厅详情（模态框）
 async function showRestaurantDetail(poi) {
-    // 检查本地是否已存在该餐厅（通过poi_id）
     let localRestaurantId = null;
-    // 调用后端添加餐厅（如果已存在会返回已有id）
     try {
         const addRes = await addRestaurant(poi.name, poi.address, poi.location, poi.id);
         localRestaurantId = addRes.id;
@@ -44,38 +67,39 @@ async function showRestaurantDetail(poi) {
         showToast('无法获取餐厅信息');
         return;
     }
-    // 获取统计信息（点赞、收藏、评论）
+
     let stats = { likes: 0, favorites: 0, reviews: [] };
     try {
         stats = await getRestaurantStats(localRestaurantId);
     } catch(e) {}
-    
+
     document.getElementById('modalTitle').innerText = poi.name;
-    document.getElementById('modalDesc').innerHTML = `${escapeHtml(poi.address)}<br>👍 ${stats.likes} 点赞 | ⭐ ${stats.favorites} 收藏`;
-    const reviewsHtml = stats.reviews.map(r => `<div><b>用户${r.user_id}</b>: ${escapeHtml(r.content)} <small>${new Date(r.created_at).toLocaleString()}</small></div>`).join('');
+    document.getElementById('modalDesc').innerHTML =
+        `${escapeHtml(poi.address || '')}<br>点赞 ${stats.likes} | 收藏 ${stats.favorites}`;
+    const reviewsHtml = stats.reviews.map(r => `
+        <div><b>用户${r.user_id}</b>: ${escapeHtml(r.content)} <small>${new Date(r.created_at).toLocaleString()}</small></div>
+    `).join('');
     document.getElementById('modalReviews').innerHTML = reviewsHtml || '暂无评论';
-    
-    // 绑定点赞收藏按钮
+
     const likeBtn = document.getElementById('likeRestoBtn');
     const favBtn = document.getElementById('favRestoBtn');
     likeBtn.onclick = async () => {
-        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        if (!isLoggedIn()) return showToast('请先登录');
         await toggleLike(localRestaurantId);
         showToast('已切换点赞');
-        // 刷新详情
         showRestaurantDetail(poi);
     };
     favBtn.onclick = async () => {
-        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        if (!isLoggedIn()) return showToast('请先登录');
         await toggleFavorite(localRestaurantId);
         showToast('已切换收藏');
         showRestaurantDetail(poi);
     };
-    // 发表评论
+
     const postBtn = document.getElementById('postReviewBtn');
     const newReview = document.getElementById('newReview');
     postBtn.onclick = async () => {
-        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        if (!isLoggedIn()) return showToast('请先登录');
         const content = newReview.value.trim();
         if (!content) return showToast('评论内容不能为空');
         await addReview(localRestaurantId, content);
@@ -89,47 +113,101 @@ async function showRestaurantDetail(poi) {
     };
 }
 
-// 搜索餐厅（默认关键词“美食”）
-export async function refreshRestaurants(keyword = '美食', city = '南京') {
+async function searchNearbyRestaurants(keyword = DEFAULT_KEYWORD) {
+    const results = [];
+    const seen = new Set();
+
+    for (let page = 1; page <= PAGE_COUNT; page += 1) {
+        const data = await searchPlaces(keyword, null, NJU_GULOU.location, page, PAGE_SIZE, DEFAULT_RADIUS);
+        if (data.status !== '1' || !Array.isArray(data.pois) || !data.pois.length) break;
+
+        data.pois.forEach(poi => {
+            const key = poi.id || `${poi.name}-${poi.location}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                results.push(poi);
+            }
+        });
+
+        if (data.pois.length < PAGE_SIZE) break;
+    }
+
+    return results;
+}
+
+export async function refreshRestaurants(keyword = DEFAULT_KEYWORD) {
     const container = document.getElementById('restoList');
-    container.innerHTML = '加载中...';
+    container.innerHTML = '加载南京大学附近餐厅...';
     try {
-        const data = await searchPlaces(keyword, city);
-        if (data.status === '1' && data.pois) {
-            currentRestaurants = data.pois;
-            renderRestaurantList(currentRestaurants);
-        } else {
-            container.innerHTML = '<p>未找到餐厅，试试其他关键词</p>';
-        }
+        currentRestaurants = await searchNearbyRestaurants(keyword);
+        renderRestaurantList(currentRestaurants);
+        renderMapMarkers();
     } catch(e) {
-        container.innerHTML = '<p>加载失败</p>';
+        container.innerHTML = '<p class="list-empty">加载失败，请检查高德 API 配置或稍后重试</p>';
     }
 }
 
-// 地图初始化与标记
-export async function initMapPage() {
-    if (!window.AMap) {
-        setTimeout(initMapPage, 500);
-        return;
-    }
-    const mapContainer = document.getElementById('mapContainer');
-    if (!map) {
-        map = new AMap.Map('mapContainer', { zoom: 14, center: [118.788, 32.042] });
-    }
-    // 加载餐厅并打点
-    if (!currentRestaurants.length) await refreshRestaurants();
+function renderMapMarkers() {
+    if (!map || !window.AMap) return;
+
     if (markers.length) map.remove(markers);
     markers = [];
-    currentRestaurants.forEach(poi => {
-        if (poi.location) {
-            const lnglat = poi.location.split(',');
-            const marker = new AMap.Marker({ position: [parseFloat(lnglat[0]), parseFloat(lnglat[1])], title: poi.name });
-            marker.on('click', () => showRestaurantDetail(poi));
-            map.add(marker);
-            markers.push(marker);
-        }
+
+    const campusMarker = new AMap.Marker({
+        position: NJU_GULOU.center,
+        title: NJU_GULOU.name,
+        label: { content: NJU_GULOU.name, direction: 'top' },
     });
-    if (markers.length) map.setFitView(markers);
+    map.add(campusMarker);
+    markers.push(campusMarker);
+
+    currentRestaurants.forEach(poi => {
+        const position = validLocation(poi.location);
+        if (!position) return;
+        const marker = new AMap.Marker({ position, title: poi.name });
+        marker.on('click', () => showRestaurantDetail(poi));
+        map.add(marker);
+        markers.push(marker);
+    });
+
+    if (markers.length > 1) {
+        map.setFitView(markers, false, [60, 60, 60, 60], 16);
+    } else {
+        map.setZoomAndCenter(15, NJU_GULOU.center);
+    }
+}
+
+export async function initMapPage() {
+    const mapContainer = document.getElementById('mapContainer');
+    if (!mapContainer) return;
+
+    if (!map) mapContainer.innerHTML = '<div class="map-loading">地图加载中...</div>';
+
+    try {
+        const AMapInstance = await loadAmapScript();
+        if (!AMapInstance) {
+            mapContainer.innerHTML = '<div class="map-loading">高德地图 Key 未配置</div>';
+            return;
+        }
+
+        if (!map) {
+            mapContainer.innerHTML = '';
+            map = new AMapInstance.Map(mapContainer, {
+                zoom: 15,
+                center: NJU_GULOU.center,
+                viewMode: '2D',
+            });
+        } else {
+            map.resize();
+            map.setZoomAndCenter(15, NJU_GULOU.center);
+        }
+
+        if (!currentRestaurants.length) await refreshRestaurants();
+        renderMapMarkers();
+        setTimeout(() => map.resize(), 0);
+    } catch(e) {
+        mapContainer.innerHTML = '<div class="map-loading">地图加载失败，请检查高德 JS API Key 或安全密钥</div>';
+    }
 }
 
 export function initRestaurantsPage() {
