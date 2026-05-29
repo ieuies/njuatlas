@@ -184,10 +184,10 @@ def request_email_code():
 
     code = _create_email_code(email, purpose)
     delivered = send_email_code(email, code, purpose)
-    if current_app.config.get("SMTP_HOST") and not delivered:
+    if current_app.config.get("RESEND_API_KEY") and not delivered:
         db.session.rollback()
         return error_response(
-            "验证码邮件发送失败，请检查 SMTP 配置。",
+            "验证码邮件发送失败，请检查 Resend 配置。",
             502,
             code="email_delivery_failed",
         )
@@ -279,7 +279,6 @@ def login():
         password_valid = True
 
     if password_valid and not user.email_verified:
-        email_delivered = _send_new_verification_email(user)
         db.session.commit()
         log_event(
             current_app.logger,
@@ -287,10 +286,9 @@ def login():
             level="warning",
             user_id=user.id,
             email=user.email,
-            email_delivered=email_delivered,
         )
         return error_response(
-            "请先完成邮箱验证后再登录。新的验证邮件已发送。",
+            "请先完成邮箱验证后再登录。",
             403,
             code="email_not_verified",
         )

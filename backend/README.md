@@ -31,7 +31,7 @@ backend/
 │  ├─ db_utils.py              # 本地开发自动建表和旧 SQLite 兼容补列
 │  ├─ errors.py                # 全局异常处理与统一 JSON 错误响应
 │  ├─ logging_utils.py         # JSON 行日志工具
-│  ├─ mail_utils.py            # 邮箱验证/密码重置邮件发送；未配 SMTP 时写日志
+│  ├─ mail_utils.py            # 邮箱验证/密码重置邮件发送；未配 Resend 时写日志
 │  ├─ models.py                # SQLAlchemy 数据模型
 │  ├─ rate_limit.py            # Flask-Limiter 实例和初始化
 │  ├─ validators.py            # 请求体验证、字符串/ID/评分/坐标/session_id 校验
@@ -180,11 +180,7 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | `FRONTEND_URL` | 否 | `http://localhost:8080` | 邮箱验证/重置密码链接的前端域名；生产环境使用 `https://njuatlas.cn` |
 | `EMAIL_VERIFICATION_TOKEN_SECONDS` | 否 | `86400` | 邮箱验证 token 有效期 |
 | `PASSWORD_RESET_TOKEN_SECONDS` | 否 | `1800` | 重置密码 token 有效期 |
-| `SMTP_HOST` | 否 | 空 | 邮件服务器；为空时邮件内容写入日志 |
-| `SMTP_PORT` | 否 | `587` | SMTP 端口 |
-| `SMTP_USERNAME` | 否 | 空 | SMTP 用户名 |
-| `SMTP_PASSWORD` | 否 | 空 | SMTP 密码 |
-| `SMTP_USE_TLS` | 否 | `true` | 是否启用 STARTTLS |
+| `RESEND_API_KEY` | 否 | 空 | Resend API Key；为空时邮件内容写入日志 |
 | `MAIL_FROM` | 否 | `no-reply@njuatlas.local` | 发件人 |
 
 ## 数据模型
@@ -258,7 +254,7 @@ Authorization: Bearer <access_token>
 
 #### `POST /api/user/register`
 
-邮箱注册。注册成功后返回 JWT，同时生成邮箱验证 token 并发送邮件；未配置 SMTP 时邮件内容写入日志。
+邮箱注册。注册成功后返回 JWT，同时生成邮箱验证 token 并发送邮件；未配置 Resend 时邮件内容写入日志。
 
 请求：
 
@@ -717,7 +713,7 @@ startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PO
 - `GAODE_API_KEY`
 - `ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`
 - `FRONTEND_URL`
-- SMTP 相关变量，如果需要真实邮件发送
+- Resend 相关变量，如果需要真实邮件发送
 
 正式域名规划：
 
@@ -738,8 +734,8 @@ Windows 本地开发时如果终端中文乱码，可以使用这些脚本或手
 
 ## 当前已知限制
 
-- 邮箱验证目前只记录验证状态，登录接口尚未强制要求 `email_verified=true`。
-- 邮件发送依赖外部 SMTP；未配置时只写日志，适合开发但不适合正式生产。
+- 登录接口会强制要求 `email_verified=true`。
+- 邮件发送依赖 Resend API；未配置时只写日志，适合开发但不适合正式生产。
 - JWT 只有 access token，没有 refresh token 体系。
 - token 黑名单会持续写入 `revoked_tokens`，后续需要定期清理过期记录。
 - 个人中心列表当前未分页，数据量上来后需要加 `page/page_size`。

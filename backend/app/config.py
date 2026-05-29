@@ -75,13 +75,7 @@ class Config:
     EMAIL_CODE_EXPIRATION_SECONDS = _get_int_env("EMAIL_CODE_EXPIRATION_SECONDS", 10 * 60)
     EMAIL_CODE_RESEND_SECONDS = _get_int_env("EMAIL_CODE_RESEND_SECONDS", 60)
     EMAIL_CODE_MAX_ATTEMPTS = _get_int_env("EMAIL_CODE_MAX_ATTEMPTS", 5)
-    SMTP_HOST = _get_env("SMTP_HOST", "")
-    SMTP_PORT = _get_int_env("SMTP_PORT", 587)
-    SMTP_USERNAME = _get_env("SMTP_USERNAME", "")
-    SMTP_PASSWORD = _get_env("SMTP_PASSWORD", "")
-    SMTP_TIMEOUT_SECONDS = _get_int_env("SMTP_TIMEOUT_SECONDS", 5)
-    SMTP_USE_SSL = _get_env("SMTP_USE_SSL", "false").lower() == "true"
-    SMTP_USE_TLS = _get_env("SMTP_USE_TLS", "true").lower() == "true"
+    RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
     MAIL_FROM = _get_env("MAIL_FROM", "no-reply@njuatlas.local")
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False

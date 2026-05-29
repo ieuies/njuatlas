@@ -56,19 +56,7 @@ services:
         value: "60"
       - key: EMAIL_CODE_MAX_ATTEMPTS
         value: "5"
-      - key: SMTP_HOST
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_TIMEOUT_SECONDS
-        value: "5"
-      - key: SMTP_USE_SSL
-        value: "false"
-      - key: SMTP_USE_TLS
-        value: "true"
       - key: MAIL_FROM
         sync: false

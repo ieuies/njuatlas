@@ -41,6 +41,10 @@ async function handleLogin() {
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
     if (!email || !password) return showToast('请填写邮箱和密码');
+    const loginBtn = document.getElementById('doLoginBtn');
+    const originalText = loginBtn.innerText;
+    loginBtn.disabled = true;
+    loginBtn.innerText = '登录中...';
     const { doLogin, updateUserFromLogin } = await import('../auth.js');
     try {
         const user = await doLogin(email, password);
@@ -51,6 +55,9 @@ async function handleLogin() {
         showToast('登录成功');
     } catch(e) {
         showToast(e.message);
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.innerText = originalText;
     }
 }
 
