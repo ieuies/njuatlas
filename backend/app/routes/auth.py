@@ -184,10 +184,10 @@ def request_email_code():
 
     code = _create_email_code(email, purpose)
     delivered = send_email_code(email, code, purpose)
-    if current_app.config.get("SMTP_HOST") and not delivered:
+    if current_app.config.get("RESEND_API_KEY") and not delivered:
         db.session.rollback()
         return error_response(
-            "验证码邮件发送失败，请检查 SMTP 配置。",
+            "验证码邮件发送失败，请检查 Resend 配置。",
             502,
             code="email_delivery_failed",
         )
