@@ -17,6 +17,12 @@ const pageTitles = {
 };
 
 function switchPage(pageId) {
+    if (pageId === 'profile' && !isLoggedIn()) {
+        const modal = document.getElementById('authModal');
+        if (modal) modal.style.display = 'flex';
+        return;
+    }
+
     document.querySelectorAll('.content-area .page').forEach(page => {
         page.classList.remove('active-page');
     });
@@ -53,7 +59,10 @@ function updateNavBar() {
         document.body.classList.add('logged-in');
 
         const user = getUser();
-        if (user && usernameSpan) usernameSpan.innerText = user.username || user.email.split('@')[0];
+        if (usernameSpan) {
+            if (user) usernameSpan.innerText = user.username || user.email.split('@')[0];
+            usernameSpan.onclick = () => switchPage('profile');
+        }
         if (homePage) homePage.classList.remove('active-page');
         if (pageTitle) pageTitle.innerText = pageTitles.restaurants;
         if (!currentPage) switchPage('restaurants');

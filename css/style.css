@@ -1172,3 +1172,11 @@ body:not(.logged-in) .top-bar .page-title {
 .code-row button {
     white-space: nowrap;
 }
+.topbar-username {
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.topbar-username:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
