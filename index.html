@@ -35,17 +35,18 @@
             <a href="#" class="nav-item" data-page="ai">
                 <i class="fas fa-robot"></i><span>AI助手</span>
             </a>
+            <!-- 找搭子 (新入口) -->
+            <a href="#" class="nav-item" data-page="partner">
+                <i class="fas fa-user-friends"></i><span>找搭子</span>
+            </a>
             <a href="#" class="nav-item" data-page="profile">
                 <i class="fas fa-user-circle"></i><span>个人中心</span>
             </a>
             <a href="#" class="nav-item" data-page="scenic">
                 <i class="fas fa-mountain"></i><span>景点</span>
             </a>
-            <!-- 预留空白栏目（可后续添加） -->
+            <!-- 预留空白栏目 -->
             <a href="#" class="nav-item nav-placeholder" style="opacity:0.2; pointer-events:none;">
-                <i class="fas fa-plus-circle"></i><span>更多...</span>
-            </a>
-            <a href="#" class="nav-item nav-placeholder" style="opacity:0.1; pointer-events:none;">
                 <i class="fas fa-plus-circle"></i><span>更多...</span>
             </a>
         </nav>
@@ -60,12 +61,10 @@
         <!-- 右上角工具栏 -->
         <header class="top-bar">
             <div class="top-bar-left">
-                <!-- 移动端菜单按钮 -->
                 <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
                 <span class="page-title" id="pageTitle">餐厅</span>
             </div>
             <div class="top-bar-right">
-                <!-- 登录/未登录 -->
                 <div id="navGuestTop" class="topbar-guest">
                     <button id="showLoginBtn" class="login-round-btn">登录</button>
                 </div>
@@ -94,7 +93,6 @@
                             <div class="feature-card"><i class="fas fa-map-marker-alt"></i><h3>美食地图</h3><p>高德地图集成，一目了然</p></div>
                             <div class="feature-card"><i class="fas fa-comments"></i><h3>真实评价</h3><p>点赞、收藏、评论，分享你的美食体验</p></div>
                         </div>
-                        <!-- 图片展示区（以后详细设计） -->
                         <div class="hero-gallery" style="margin-top:2.5rem; display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; max-width:700px; margin-left:auto; margin-right:auto;">
                             <div style="aspect-ratio:4/3; border-radius:16px; background:linear-gradient(135deg, #e8d5f5, #d4b8e8);"></div>
                             <div style="aspect-ratio:4/3; border-radius:16px; background:linear-gradient(135deg, #d4b8e8, #c4a0d8);"></div>
@@ -125,7 +123,6 @@
                 <div class="chat-area" id="chatMessages">
                     <div class="chat-message chat-bot"><i class="fas fa-robot"></i> 👋 你好！我是你的校园美食助手，可以帮你推荐餐厅～</div>
                 </div>
-                <!-- 快捷提问按钮 -->
                 <div id="quickQuestions" class="quick-questions"></div>
                 <div class="chat-input-area">
                     <input type="text" id="chatInput" placeholder="输入消息...">
@@ -193,6 +190,32 @@
                     </section>
                 </div>
             </div>
+
+            <!-- ========== 找搭子页面 (新增) ========== -->
+            <div id="partnerPage" class="page">
+                <div class="partner-header">
+                    <div class="partner-header-left">
+                        <h2><i class="fas fa-user-friends"></i> 校园找搭子</h2>
+                        <p class="partner-subtitle">寻找饭搭子、学习搭子、运动搭子和兴趣伙伴</p>
+                    </div>
+                    <button id="openPartnerModalBtn" class="primary-btn"><i class="fas fa-plus"></i> 发布搭子</button>
+                </div>
+
+                <!-- 分类筛选胶囊 -->
+                <div class="partner-filter" id="partnerFilter">
+                    <button data-category="all" class="filter-chip active">全部</button>
+                    <button data-category="饭搭子" class="filter-chip">🍜 饭搭子</button>
+                    <button data-category="学习搭子" class="filter-chip">📚 学习搭子</button>
+                    <button data-category="运动搭子" class="filter-chip">🏃 运动搭子</button>
+                    <button data-category="游戏搭子" class="filter-chip">🎮 游戏搭子</button>
+                    <button data-category="电影搭子" class="filter-chip">🎬 电影搭子</button>
+                </div>
+
+                <!-- 卡片网格 -->
+                <div id="partnerGrid" class="partner-grid">
+                    <!-- 动态渲染搭子卡片 -->
+                </div>
+            </div>
         </div>
 
         <!-- ====== 底栏 ====== -->
@@ -215,18 +238,11 @@
             <i class="fas fa-bell"></i>
             <span>消息中心</span>
         </div>
-        <div class="message-panel-body">
+        <div class="message-panel-body" id="messagePanelBody">
+            <!-- 动态消息会在这里渲染 -->
             <div class="message-empty">
                 <i class="fas fa-inbox"></i>
                 <p>暂无新消息</p>
-            </div>
-            <!-- 消息条目（隐藏占位，以后启用） -->
-            <div class="message-item" style="display:none;">
-                <div class="message-dot"></div>
-                <div class="message-content">
-                    <div class="message-title">消息标题</div>
-                    <div class="message-time">刚刚</div>
-                </div>
             </div>
         </div>
     </aside>
@@ -286,6 +302,31 @@
     </div>
 </div>
 
+<!-- 发布搭子模态框 (新增) -->
+<div id="partnerModal" class="modal">
+    <div class="modal-card">
+        <button class="modal-close-btn" id="closePartnerModalBtn"><i class="fas fa-times"></i></button>
+        <h2><i class="fas fa-user-friends"></i> 发布搭子信息</h2>
+        <form id="partnerForm">
+            <select id="partnerCategory" required>
+                <option value="">选择分类</option>
+                <option value="饭搭子">🍜 饭搭子</option>
+                <option value="学习搭子">📚 学习搭子</option>
+                <option value="运动搭子">🏃 运动搭子</option>
+                <option value="游戏搭子">🎮 游戏搭子</option>
+                <option value="电影搭子">🎬 电影搭子</option>
+            </select>
+            <input type="text" id="partnerTitle" placeholder="标题 (例如: 一起去南苑吃火锅)" required>
+            <textarea id="partnerDesc" rows="3" placeholder="内容描述 (时间、地点、人数等)" required></textarea>
+            <input type="text" id="partnerContact" placeholder="联系方式 (微信/QQ/手机号)" required>
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button type="button" id="submitPartnerBtn" class="primary-btn">确认发布</button>
+                <button type="button" id="cancelPartnerBtn" class="secondary-btn">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- 邮箱验证提示 -->
 <div id="verifyMessage" class="toast" style="display:none;"></div>
 
@@ -297,6 +338,7 @@
 <script type="module" src="js/pages/restaurants.js"></script>
 <script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/pages/profile.js"></script>
+<script type="module" src="js/pages/partner.js"></script>   <!-- 新增找搭子模块 -->
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

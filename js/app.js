@@ -1,3 +1,4 @@
+import { initPartnerPage } from './pages/partner.js';
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
@@ -14,6 +15,7 @@ const pageTitles = {
     ai: 'AI助手',
     scenic: '景点',
     profile: '个人中心',
+    partner: '找搭子',   // 新增
 };
 
 function switchPage(pageId) {
@@ -39,9 +41,11 @@ function switchPage(pageId) {
         item.classList.toggle('active', item.getAttribute('data-page') === pageId);
     });
 
+    // 页面切换时调用的刷新逻辑
     if (pageId === 'restaurants') refreshRestaurants();
     else if (pageId === 'map') initMapPage();
     else if (pageId === 'profile') refreshProfile();
+    else if (pageId === 'partner') initPartnerPage();  // 新增
 
     closeSidebar();
 }
