@@ -1,4 +1,4 @@
-/* =====================================================================
+/* /* =====================================================================
    南大图谱 · 校园美食地图 — 南大紫色主题风格
    主色: #4B0082 (Indigo / 南大紫) 辅色: #7B2D8E
    ===================================================================== */
@@ -267,16 +267,24 @@ body:not(.logged-in) .top-bar .page-title {
 
 .page {
     display: none;
-    animation: fadeSlideUp 0.3s ease;
+    will-change: transform, opacity;
+    animation: fadeSlideUp 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1) forwards;
 }
 
 .page.active-page {
     display: block;
 }
 
+/* 页面切换平滑过渡（淡入 + 轻微上滑） */
 @keyframes fadeSlideUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ========== 未登录主页 — 简介区 ========== */
@@ -1349,4 +1357,94 @@ body:not(.logged-in) .top-bar .page-title {
     border-color: var(--njupurple);
     outline: none;
     box-shadow: 0 0 0 3px rgba(75, 0, 130, 0.1);
+}
+
+/* ========== 新增特效：按钮点击缩放 ========== */
+button,
+.primary-btn,
+.secondary-btn,
+.small-btn,
+.nav-item,
+.join-btn,
+.contact-btn,
+.filter-chip,
+.quick-q-btn,
+.hero-btn,
+.login-round-btn,
+.logout-btn,
+.modal-close-btn,
+.close-btn,
+#refreshRestosBtn,
+#sendChatBtn,
+.resto-card,
+.partner-card,
+.feature-card,
+.sidebar-nav .nav-item,
+.message-item,
+.hero-btn,
+.code-row button,
+#openPartnerModalBtn,
+#submitPartnerBtn,
+#cancelPartnerBtn,
+#closePartnerModalBtn,
+#likeRestoBtn,
+#favRestoBtn,
+#postReviewBtn,
+#changePasswordBtn,
+#sendVerifyEmailBtn,
+#doLoginBtn,
+#doRegisterBtn,
+#doForgotBtn,
+#sendRegCodeBtn,
+#sendForgotCodeBtn,
+#getStartedBtn,
+#showLoginBtn,
+.menu-toggle {
+    transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease;
+    will-change: transform;
+}
+
+button:active,
+.primary-btn:active,
+.secondary-btn:active,
+.small-btn:active,
+.nav-item:active,
+.join-btn:active,
+.contact-btn:active,
+.filter-chip:active,
+.quick-q-btn:active,
+.hero-btn:active,
+.login-round-btn:active,
+.logout-btn:active,
+.modal-close-btn:active,
+.close-btn:active,
+#refreshRestosBtn:active,
+#sendChatBtn:active,
+.code-row button:active,
+#openPartnerModalBtn:active,
+#submitPartnerBtn:active,
+#cancelPartnerBtn:active,
+#closePartnerModalBtn:active,
+#likeRestoBtn:active,
+#favRestoBtn:active,
+#postReviewBtn:active,
+#changePasswordBtn:active,
+#sendVerifyEmailBtn:active,
+#doLoginBtn:active,
+#doRegisterBtn:active,
+#doForgotBtn:active,
+#sendRegCodeBtn:active,
+#sendForgotCodeBtn:active,
+#getStartedBtn:active,
+#showLoginBtn:active,
+.menu-toggle:active {
+    transform: scale(0.96);
+}
+
+/* 卡片类点击反馈（略微缩小） */
+.resto-card:active,
+.partner-card:active,
+.feature-card:active,
+.message-item:active {
+    transform: scale(0.98);
 }
