@@ -141,18 +141,31 @@ export async function refreshRestaurants(keyword = DEFAULT_KEYWORD) {
     try {
         currentRestaurants = await searchNearbyRestaurants(keyword);
         renderRestaurantList(currentRestaurants);
-        renderMapMarkers();
+        // 如果地图已经存在，同时更新地图上的标记
+        if (map && window.AMap) {
+            renderMapMarkers();
+        }
     } catch(e) {
         container.innerHTML = '<p class="list-empty">加载失败，请检查高德 API 配置或稍后重试</p>';
     }
 }
 
+/**
+ * 在地图上绘制标记（同时包含南大标记和餐厅标记）
+ */
 function renderMapMarkers() {
-    if (!map || !window.AMap) return;
+    if (!map || !window.AMap) {
+        console.warn('地图未初始化，无法绘制标记');
+        return;
+    }
 
-    if (markers.length) map.remove(markers);
-    markers = [];
+    // 清除旧标记
+    if (markers.length) {
+        map.remove(markers);
+        markers = [];
+    }
 
+    // 添加南大校区标记
     const campusMarker = new AMap.Marker({
         position: NJU_GULOU.center,
         title: NJU_GULOU.name,
@@ -161,6 +174,7 @@ function renderMapMarkers() {
     map.add(campusMarker);
     markers.push(campusMarker);
 
+    // 添加餐厅标记
     currentRestaurants.forEach(poi => {
         const position = validLocation(poi.location);
         if (!position) return;
@@ -170,6 +184,7 @@ function renderMapMarkers() {
         markers.push(marker);
     });
 
+    // 自动调整视野
     if (markers.length > 1) {
         map.setFitView(markers, false, [60, 60, 60, 60], 16);
     } else {
@@ -177,40 +192,94 @@ function renderMapMarkers() {
     }
 }
 
+/**
+ * 初始化地图页面（由页面切换时调用）
+ * 确保地图容器可见且高德 API 加载完成
+ */
 export async function initMapPage() {
     const mapContainer = document.getElementById('mapContainer');
-    if (!mapContainer) return;
+    if (!mapContainer) {
+        console.error('地图容器 #mapContainer 不存在');
+        return;
+    }
 
-    if (!map) mapContainer.innerHTML = '<div class="map-loading">地图加载中...</div>';
+    // 确保容器有高度（如果为0则设置一个最小高度，防止地图渲染空白）
+    const ensureHeight = () => {
+        if (mapContainer.clientHeight <= 0) {
+            mapContainer.style.height = '500px';
+            mapContainer.style.minHeight = '500px';
+        }
+    };
+    ensureHeight();
+
+    // 显示加载中状态
+    mapContainer.innerHTML = '<div class="map-loading">地图加载中…</div>';
 
     try {
+        // 等待高德 JS API 加载完成
         const AMapInstance = await loadAmapScript();
         if (!AMapInstance) {
-            mapContainer.innerHTML = '<div class="map-loading">高德地图 Key 未配置</div>';
+            mapContainer.innerHTML = '<div class="map-loading">高德地图 Key 未配置或无效，请检查 config.js</div>';
             return;
         }
 
-        if (!map) {
-            mapContainer.innerHTML = '';
-            map = new AMapInstance.Map(mapContainer, {
-                zoom: 15,
-                center: NJU_GULOU.center,
-                viewMode: '2D',
-            });
-        } else {
-            map.resize();
-            map.setZoomAndCenter(15, NJU_GULOU.center);
+        // 如果地图实例已存在，先销毁（避免重复创建）
+        if (map) {
+            map.destroy();
+            map = null;
         }
 
-        if (!currentRestaurants.length) await refreshRestaurants();
-        renderMapMarkers();
-        setTimeout(() => map.resize(), 0);
-    } catch(e) {
-        mapContainer.innerHTML = '<div class="map-loading">地图加载失败，请检查高德 JS API Key 或安全密钥</div>';
+        // 清空容器，创建新地图
+        mapContainer.innerHTML = '';
+        map = new AMapInstance.Map(mapContainer, {
+            zoom: 15,
+            center: NJU_GULOU.center,
+            viewMode: '2D',
+            resizeEnable: true,       // 允许窗口大小改变时自动调整
+            showIndoorMap: false,     // 关闭室内地图，减少干扰
+        });
+
+        // 可选：添加一个简单的背景测试标记，确认地图底层已加载（正式使用时可以删除）
+        // new AMapInstance.Marker({ position: NJU_GULOU.center, map: map });
+
+        // 监听地图渲染完成事件（确保底图瓦片已加载）
+        map.on('complete', () => {
+            console.log('高德地图底图加载完成');
+            // 如果还没有餐厅数据，就加载一次
+            if (!currentRestaurants.length) {
+                refreshRestaurants().then(() => {
+                    renderMapMarkers();
+                });
+            } else {
+                renderMapMarkers();
+            }
+        });
+
+        // 如果地图已经完成（避免 complete 事件未触发），直接渲染标记
+        if (map.getZoom()) {
+            if (!currentRestaurants.length) {
+                await refreshRestaurants();
+            }
+            renderMapMarkers();
+        }
+
+        // 监听窗口 resize 事件，避免地图容器变化后空白
+        window.addEventListener('resize', () => {
+            if (map) map.resize();
+        });
+
+    } catch (err) {
+        console.error('地图初始化失败:', err);
+        mapContainer.innerHTML = `<div class="map-loading">地图加载失败：${err.message || '请检查高德 Key 或网络'}</div>`;
+        showToast('地图加载失败，请检查控制台错误', 3000);
     }
 }
 
+/**
+ * 初始化餐厅页面（仅绑定刷新按钮，不直接加载地图）
+ */
 export function initRestaurantsPage() {
-    document.getElementById('refreshRestosBtn').onclick = () => refreshRestaurants();
+    const refreshBtn = document.getElementById('refreshRestosBtn');
+    if (refreshBtn) refreshBtn.onclick = () => refreshRestaurants();
     refreshRestaurants();
 }
