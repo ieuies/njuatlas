@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    南大图谱 · 校园美食地图 — 现代优化设计版本
    主色: #7C3AED (渐变紫) 辅色: #EC4899 (玫瑰粉)
    ===================================================================== */
@@ -75,50 +75,6 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     overflow-x: hidden;
-}
-
-/* 通用排版 */
-h1, h2, h3, h4, h5, h6 {
-    color: var(--text-primary);
-    font-weight: 700;
-    line-height: 1.3;
-}
-
-h4 {
-    font-size: 1rem;
-    margin: 1.2rem 0 0.8rem;
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
-p {
-    line-height: 1.6;
-    color: var(--text-secondary);
-}
-
-a {
-    color: var(--primary);
-    text-decoration: none;
-    transition: var(--transition-fast);
-}
-
-a:hover {
-    color: var(--accent);
-    text-decoration: underline;
-}
-
-/* 表单元素统一样式 */
-input, textarea, select {
-    font-family: inherit;
-}
-
-input::placeholder, textarea::placeholder {
-    color: var(--text-tertiary);
-}
-
-textarea {
-    resize: vertical;
-    min-height: 100px;
 }
 
 /* =====================================================================
@@ -255,60 +211,49 @@ textarea {
 /* ========== 顶栏 ========== */
 .top-bar {
     height: var(--topbar-height);
-    border-bottom: var(--shadow-sm);
+    border-bottom: var(--shadow-xs);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 2rem;
+    padding: 0 1.5rem;
     position: sticky;
     top: 0;
     z-index: 100;
-    backdrop-filter: blur(12px);
-    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
 }
 
 .top-bar-left {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
 }
 
 .menu-toggle {
     display: none;
     background: none;
     border: none;
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     color: var(--primary);
     cursor: pointer;
-    padding: 6px 8px;
-    border-radius: 10px;
+    padding: 6px;
+    border-radius: 8px;
     transition: var(--transition-fast);
 }
 
 .menu-toggle:hover {
     background: var(--bg-tertiary);
-    color: var(--accent);
 }
 
 .page-title {
     font-weight: 700;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.page-title i {
-    color: var(--primary);
 }
 
 /* 未登录时顶栏标题 */
 body:not(.logged-in) .top-bar .page-title {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--primary);
 }
 
 .top-bar-right {
@@ -319,8 +264,8 @@ body:not(.logged-in) .top-bar .page-title {
 
 /* 圆形登录按钮 */
 .login-round-btn {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     color: white;
@@ -328,25 +273,22 @@ body:not(.logged-in) .top-bar .page-title {
     font-size: 0.85rem;
     font-weight: 700;
     cursor: pointer;
-    transition: var(--transition);
+    transition: var(--transition-fast);
     box-shadow: var(--shadow-md);
-    letter-spacing: 0.5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    letter-spacing: 1px;
 }
 
 .login-round-btn:hover {
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: var(--shadow-xl);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .topbar-user {
     display: flex;
     align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.05), rgba(236, 72, 153, 0.05));
-    padding: 0.5rem 0.5rem 0.5rem 1.2rem;
+    gap: 10px;
+    background: var(--bg-tertiary);
+    padding: 0.4rem 0.4rem 0.4rem 1rem;
     border-radius: 50px;
     border: 1px solid var(--gray-200);
 }
@@ -355,22 +297,18 @@ body:not(.logged-in) .top-bar .page-title {
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--primary);
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .logout-btn {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     border: none;
-    background: var(--bg-tertiary);
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     transition: var(--transition-fast);
-    font-size: 1rem;
+    font-size: 0.95rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -379,7 +317,6 @@ body:not(.logged-in) .top-bar .page-title {
 .logout-btn:hover {
     background: var(--danger);
     color: white;
-    transform: scale(1.1);
 }
 
 /* ========== 内容区域 ========== */
@@ -739,22 +676,19 @@ body:not(.logged-in) .top-bar .page-title {
     border-radius: 12px;
     transition: var(--transition-fast);
     cursor: pointer;
-    border: 1px solid transparent;
 }
 
 .message-item:hover {
     background: var(--bg-tertiary);
-    border-color: var(--gray-200);
 }
 
 .message-dot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    margin-top: 5px;
+    background: var(--accent);
+    margin-top: 6px;
     flex-shrink: 0;
-    box-shadow: 0 0 6px rgba(236, 72, 153, 0.4);
 }
 
 .message-content {
@@ -932,29 +866,18 @@ body:not(.logged-in) .top-bar .page-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.2rem;
-}
-
-.flex-between h3 {
-    font-size: 1.15rem;
-    color: var(--text-primary);
-    font-weight: 700;
-    margin: 0;
 }
 
 .close-btn {
     background: var(--bg-tertiary);
     border: none;
-    font-size: 1.15rem;
-    width: 40px;
-    height: 40px;
+    font-size: 1.1rem;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     cursor: pointer;
     transition: var(--transition-fast);
     color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .close-btn:hover {
@@ -965,18 +888,15 @@ body:not(.logged-in) .top-bar .page-title {
 /* ========== 按钮 ========== */
 .primary-btn, .secondary-btn, .small-btn {
     border: none;
-    padding: 0.75rem 1.7rem;
+    padding: 0.7rem 1.6rem;
     border-radius: 60px;
     font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: var(--transition-fast);
     font-size: 0.9rem;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
-    position: relative;
-    overflow: hidden;
 }
 
 .primary-btn {
@@ -986,46 +906,32 @@ body:not(.logged-in) .top-bar .page-title {
 }
 
 .primary-btn:hover {
-    transform: translateY(-3px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
-}
-
-.primary-btn:active {
-    transform: translateY(-1px);
 }
 
 .secondary-btn {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-    border: 1.5px solid var(--gray-300);
+    border: 1px solid var(--gray-300);
 }
 
 .secondary-btn:hover {
     background: var(--gray-200);
     border-color: var(--primary);
-    color: var(--primary);
-}
-
-.secondary-btn:active {
-    transform: scale(0.98);
 }
 
 .small-btn {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-    padding: 0.4rem 1.2rem;
+    padding: 0.35rem 1.1rem;
     font-size: 0.85rem;
-    border: 1.5px solid var(--gray-300);
+    border: 1px solid var(--gray-300);
 }
 
 .small-btn:hover {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1));
+    background: var(--gray-300);
     border-color: var(--primary);
-    color: var(--primary);
-}
-
-.small-btn:active {
-    transform: scale(0.96);
 }
 
 /* ========== 个人中心 ========== */

@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    南大图谱 · 校园美食地图 — 现代优化设计版本
    主色: #7C3AED (渐变紫) 辅色: #EC4899 (玫瑰粉)
    ===================================================================== */
@@ -965,18 +965,15 @@ body:not(.logged-in) .top-bar .page-title {
 /* ========== 按钮 ========== */
 .primary-btn, .secondary-btn, .small-btn {
     border: none;
-    padding: 0.75rem 1.7rem;
+    padding: 0.7rem 1.6rem;
     border-radius: 60px;
     font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: var(--transition-fast);
     font-size: 0.9rem;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
-    position: relative;
-    overflow: hidden;
 }
 
 .primary-btn {
@@ -986,46 +983,32 @@ body:not(.logged-in) .top-bar .page-title {
 }
 
 .primary-btn:hover {
-    transform: translateY(-3px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
-}
-
-.primary-btn:active {
-    transform: translateY(-1px);
 }
 
 .secondary-btn {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-    border: 1.5px solid var(--gray-300);
+    border: 1px solid var(--gray-300);
 }
 
 .secondary-btn:hover {
     background: var(--gray-200);
     border-color: var(--primary);
-    color: var(--primary);
-}
-
-.secondary-btn:active {
-    transform: scale(0.98);
 }
 
 .small-btn {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-    padding: 0.4rem 1.2rem;
+    padding: 0.35rem 1.1rem;
     font-size: 0.85rem;
-    border: 1.5px solid var(--gray-300);
+    border: 1px solid var(--gray-300);
 }
 
 .small-btn:hover {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1));
+    background: var(--gray-300);
     border-color: var(--primary);
-    color: var(--primary);
-}
-
-.small-btn:active {
-    transform: scale(0.96);
 }
 
 /* ========== 个人中心 ========== */
