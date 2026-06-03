@@ -355,7 +355,7 @@ GET /api/me/conversations/<session_id>/messages
 - Render 中配置 PostgreSQL `DATABASE_URL`。
 - Render 中配置 `GAODE_API_KEY`。
 - Render 中至少配置一个 LLM Key：`ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`。
-- Render 中配置 `FRONTEND_URL` 为真实前端域名。
+- Render 中配置 `FRONTEND_URL=https://njuatlas.cn`。
 - 若要真实发送邮件，配置 SMTP 相关变量。
 - 首次迁移确认数据库状态：
   - 全新数据库：`flask db upgrade`

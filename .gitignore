@@ -1,6 +1,21 @@
 
-.idea/
-__pycache__/
-*.pyc
+
+
 backend/.env
 backend/foodmap.db
+# 忽略所有 .env 文件（敏感配置）
+.env
+.env.*
+!.env.example
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# IDE 配置（可选，如果你用 PyCharm）
+.idea/
+.vscode/
+
+# 本地数据库
+*.db
+*.sqlite

@@ -60,32 +60,32 @@ def create_access_token(user):
 def decode_access_token(token):
     parts = token.split(".")
     if len(parts) != 3:
-        return None, "token format is invalid"
+        return None, "token 格式无效"
 
     encoded_header, encoded_payload, encoded_signature = parts
     signing_input = f"{encoded_header}.{encoded_payload}"
     expected_signature = _base64url_encode(_sign(signing_input, current_app.config["SECRET_KEY"]))
 
     if not hmac.compare_digest(encoded_signature, expected_signature):
-        return None, "token signature is invalid"
+        return None, "token 签名无效"
 
     try:
         header = json.loads(_base64url_decode(encoded_header))
         payload = json.loads(_base64url_decode(encoded_payload))
     except (ValueError, json.JSONDecodeError):
-        return None, "token payload is invalid"
+        return None, "token 内容无效"
 
     if header.get("alg") != "HS256" or header.get("typ") != "JWT":
-        return None, "token algorithm is invalid"
+        return None, "token 算法无效"
 
     if int(time.time()) >= int(payload.get("exp", 0)):
-        return None, "token has expired"
+        return None, "token 已过期"
 
     if not payload.get("sub"):
-        return None, "token is missing user identity"
+        return None, "token 缺少用户身份"
 
     if not payload.get("jti"):
-        return None, "token is missing jti"
+        return None, "token 缺少 jti"
 
     return payload, None
 
@@ -128,18 +128,18 @@ def jwt_required(view_func):
 
         token = extract_bearer_token()
         if not token:
-            return error_response("Missing Authorization Bearer token", 401, code="missing_token")
+            return error_response("缺少 Authorization Bearer token", 401, code="missing_token")
 
         payload, error = decode_access_token(token)
         if error:
             return error_response(error, 401, code="invalid_token")
 
         if RevokedToken.query.filter_by(jti=payload["jti"]).first():
-            return error_response("Token has been revoked", 401, code="revoked_token")
+            return error_response("token 已失效", 401, code="revoked_token")
 
         user = User.query.get(payload["sub"])
         if not user:
-            return error_response("User does not exist", 401, code="user_not_found")
+            return error_response("用户不存在", 401, code="user_not_found")
 
         g.current_token = token
         g.current_token_payload = payload

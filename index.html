@@ -3,91 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>南大图谱 · 校园美食地图</title>
-    <!-- 高德地图 JS API (请替换为你的 Key) -->
-    <script src="https://webapi.amap.com/maps?v=2.0&key=、your key"></script>
-    <!-- Font Awesome -->
+    <title>nju.atlas · 找搭子</title>
+    <script>
+        window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
+    </script>
+    <!-- 高德地图 JSAPI 安全密钥 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: "367ebc1de103bfdca104452e48447318"
+        };
+    </script>
+    <!-- 高德地图 JSAPI -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=97ac6e711cde17463af06c10b8b05f42"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="body-hero">
+<body>
 
-<!-- 导航栏 -->
-<div class="navbar">
-    <div class="logo">🍜 南大图谱 <span>AI美食地图</span></div>
-    <div class="nav-links" id="navGuest">
-        <button id="showLoginBtn" class="login-btn">登录</button>
-        <button id="showRegisterBtn" class="login-btn">注册</button>
-    </div>
-    <div class="nav-links" id="navUser" style="display: none;">
-        <a href="#" data-page="restaurants">🍽️ 餐厅</a>
-        <a href="#" data-page="map">🗺️ 地图</a>
-        <a href="#" data-page="ai">🤖 AI助手</a>
-        <a href="#" data-page="profile">👤 我的</a>
-        <div class="user-info">
-            <span id="usernameSpan"></span>
-            <button id="logoutBtn">退出</button>
-        </div>
-    </div>
-</div>
+<!-- ==================== 移动端竖屏 Tab 结构 ==================== -->
+<div class="app-layout mobile-layout">
 
-<!-- 未登录主页 -->
-<div id="homePage" class="page active-page">
-    <div class="hero-content">
-        <div class="hero-title">探索南大周边美味</div>
-        <div class="hero-subtitle">AI 推荐 · 地图找店 · 同学评价</div>
-        <div class="feature-grid">
-            <div class="feature-card"><i class="fas fa-robot"></i><h3>智能推荐</h3><p>基于大模型的餐厅推荐</p></div>
-            <div class="feature-card"><i class="fas fa-map-marker-alt"></i><h3>美食地图</h3><p>高德地图集成</p></div>
-            <div class="feature-card"><i class="fas fa-comments"></i><h3>真实评价</h3><p>点赞、收藏、评论</p></div>
-        </div>
-        <button id="getStartedBtn" class="primary-btn">✨ 开始探索 →</button>
-    </div>
-</div>
+    <!-- ====== 主内容区 ====== -->
+    <main class="main-content">
 
-<!-- 登录后的主要容器 -->
-<div class="container" id="appContainer" style="display: none;">
-    <div id="restaurantsPage" class="page">
-        <div class="flex-between"><h2>📌 附近美食</h2><button id="refreshRestosBtn" class="secondary-btn">刷新</button></div>
-        <div id="restoList" class="resto-grid">加载中...</div>
-    </div>
-    <div id="mapPage" class="page">
-        <h2>🗺️ 附近餐厅地图</h2>
-        <div id="mapContainer"></div>
-    </div>
-    <div id="aiPage" class="page">
-        <h2>🤖 南大美食AI</h2>
-        <p>向我提问，例如：“推荐一家川菜馆”、“哪里有安静的自习咖啡厅”</p>
-        <div class="chat-area" id="chatMessages">
-            <div class="chat-message chat-bot">👋 你好！我是你的校园美食助手，可以帮你推荐餐厅～</div>
+        <!-- 顶部标题栏 -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <span class="top-logo">nju.atlas</span>
+                <span class="top-divider">·</span>
+                <span class="page-title" id="pageTitle">找搭子</span>
+            </div>
+            <div class="top-bar-right">
+                <!-- AI 助手入口 -->
+                <button class="ai-entry-btn" id="aiEntryBtn" title="问问AI">
+                    <i class="fas fa-robot"></i>
+                    <span>问问AI</span>
+                </button>
+                <div id="navGuestTop" class="topbar-guest">
+                    <button id="showLoginBtn" class="login-round-btn">登录</button>
+                </div>
+                <div id="navUserTop" class="topbar-user" style="display:none;">
+                    <span id="usernameSpan" class="topbar-username"></span>
+                    <button id="logoutBtn" class="logout-btn" title="退出登录"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 页面内容区 -->
+        <div class="content-area" id="contentArea">
+
+            <!-- ========== 找搭子页面（核心：瀑布流+地图+AI） ========== -->
+            <div id="partnerPage" class="page active-page">
+
+                <!-- 分类筛选条（横向滚动） -->
+                <div class="partner-filter" id="partnerFilter">
+                    <button data-category="all" class="filter-chip active">全部</button>
+                    <button data-category="饭搭子" class="filter-chip">🍜 饭搭子</button>
+                    <button data-category="运动搭子" class="filter-chip">🏃 运动搭子</button>
+                    <button data-category="学习搭子" class="filter-chip">📚 学习搭子</button>
+                    <button data-category="游戏搭子" class="filter-chip">🎮 游戏搭子</button>
+                    <button data-category="电影搭子" class="filter-chip">🎬 电影搭子</button>
+                </div>
+
+                <!-- 地图预览卡片 -->
+                <div class="map-preview-card" id="mapPreviewCard">
+                    <div class="map-preview-header">
+                        <span class="map-preview-title">
+                            <i class="fas fa-map-marker-alt"></i> 附近组局
+                        </span>
+                        <button class="map-expand-btn" id="mapExpandBtn">
+                            全屏地图 <i class="fas fa-expand-alt"></i>
+                        </button>
+                    </div>
+                    <div class="map-preview-body" id="mapPreviewBody">
+                        <div class="map-container" id="previewMap"></div>
+                    </div>
+                    <div class="map-legend" id="mapLegend">
+                        <span class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> 饭搭子</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#10B981;"></span> 运动</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#7C3AED;"></span> 游戏</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#EC4899;"></span> 电影</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#3B82F6;"></span> 学习</span>
+                    </div>
+                </div>
+
+                <!-- 瀑布流卡片区（双列Pinterest风格） -->
+                <div class="partner-waterfall" id="partnerWaterfall">
+                    <!-- 动态渲染搭子卡片 -->
+                </div>
+
+                <!-- 底部悬浮「发起组局」按钮 -->
+                <button class="fab-create-group" id="fabCreateGroup" title="发起组局">
+                    <i class="fas fa-plus"></i>
+                    <span>发起组局</span>
+                </button>
+            </div>
+
+            <!-- ========== 指南页面（瀑布流） ========== -->
+            <div id="guidePage" class="page">
+                <div class="page-header-flex">
+                    <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐指南</h2>
+                </div>
+                <div id="guideGrid" class="guide-grid">
+                    <div class="guide-loading">加载精彩推荐中...</div>
+                </div>
+            </div>
+
+            <!-- ========== 个人中心页面 ========== -->
+            <div id="profilePage" class="page">
+                <div class="profile-shell">
+                    <section class="profile-card profile-summary">
+                        <div class="profile-avatar" aria-hidden="true"><i class="fas fa-user"></i></div>
+                        <div class="profile-main">
+                            <h2 id="profileUsername">个人中心</h2>
+                            <p id="profileEmail"></p>
+                            <div class="profile-status-row">
+                                <span id="profileEmailVerified" class="profile-status"></span>
+                                <button id="sendVerifyEmailBtn" class="small-btn">重新发送验证邮件</button>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="profile-stats" aria-label="个人数据统计">
+                        <div class="profile-stat"><span id="favoriteCount">0</span><small>收藏</small></div>
+                        <div class="profile-stat"><span id="likeCount">0</span><small>点赞</small></div>
+                        <div class="profile-stat"><span id="reviewCount">0</span><small>评论</small></div>
+                        <div class="profile-stat"><span id="conversationCount">0</span><small>对话</small></div>
+                    </section>
+                    <section class="profile-grid">
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-heart"></i><h3>我的收藏</h3></div>
+                            <div id="favoritesList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-thumbs-up"></i><h3>我的点赞</h3></div>
+                            <div id="likesList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-pen"></i><h3>我的评论</h3></div>
+                            <div id="reviewsList" class="profile-list"></div>
+                        </div>
+                        <div class="profile-card">
+                            <div class="profile-section-title"><i class="fas fa-comments"></i><h3>我的对话</h3></div>
+                            <div id="conversationsList" class="profile-list"></div>
+                        </div>
+                    </section>
+                    <section class="profile-card password-panel">
+                        <div class="profile-section-title"><i class="fas fa-lock"></i><h3>修改密码</h3></div>
+                        <div class="password-form">
+                            <input type="password" id="oldPassword" placeholder="当前密码" autocomplete="current-password">
+                            <input type="password" id="newPassword" placeholder="新密码，至少 8 位" autocomplete="new-password">
+                            <button id="changePasswordBtn" class="primary-btn">修改密码</button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- ========== 全屏地图页面 ========== -->
+            <div id="fullMapPage" class="page">
+                <div class="full-map-header">
+                    <button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> 返回</button>
+                    <h2>附近组局地图</h2>
+                </div>
+                <div class="full-map-container" id="fullMapContainer">
+                    <div class="map-container" id="fullMap"></div>
+                </div>
+            </div>
+
         </div>
-        <div class="chat-input-area">
-            <input type="text" id="chatInput" placeholder="输入消息...">
-            <button id="sendChatBtn" class="primary-btn">发送</button>
-        </div>
-    </div>
-    <div id="profilePage" class="page">
-        <h2>👤 个人中心</h2>
-        <div class="profile-card">
-            <p><strong>用户名：</strong> <span id="profileUsername"></span></p>
-            <p><strong>邮箱：</strong> <span id="profileEmail"></span></p>
-            <p><strong>邮箱验证：</strong> <span id="profileEmailVerified"></span> 
-                <button id="sendVerifyEmailBtn" class="small-btn">重新发送验证邮件</button>
-            </p>
-            <hr>
-            <h3>❤️ 我的收藏</h3>
-            <div id="favoritesList"></div>
-            <h3>👍 我的点赞</h3>
-            <div id="likesList"></div>
-            <h3>📝 我的评论</h3>
-            <div id="reviewsList"></div>
-            <h3>💬 我的对话</h3>
-            <div id="conversationsList"></div>
-            <hr>
-            <h3>修改密码</h3>
-            <input type="password" id="oldPassword" placeholder="当前密码">
-            <input type="password" id="newPassword" placeholder="新密码">
-            <button id="changePasswordBtn" class="primary-btn">修改密码</button>
+    </main>
+
+    <!-- ====== 底部 Tab 导航栏 ====== -->
+    <nav class="bottom-tab-bar" id="bottomTabBar">
+        <button class="tab-item active" data-page="partner">
+            <i class="fas fa-user-friends"></i>
+            <span>找搭子</span>
+        </button>
+        <button class="tab-item" data-page="guide">
+            <i class="fas fa-compass"></i>
+            <span>指南</span>
+        </button>
+        <button class="tab-item" data-page="profile">
+            <i class="fas fa-user-circle"></i>
+            <span>我的</span>
+        </button>
+    </nav>
+
+    <!-- ====== AI 助手悬浮球 + 对话浮层 ====== -->
+    <button class="ai-float-ball" id="aiFloatBall" title="AI助手">
+        <i class="fas fa-robot"></i>
+    </button>
+
+    <div class="ai-chat-overlay" id="aiChatOverlay">
+        <div class="ai-chat-panel">
+            <div class="ai-chat-header">
+                <span><i class="fas fa-robot"></i> 搭子AI助手</span>
+                <button class="ai-chat-close" id="aiChatClose"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ai-chat-body" id="aiChatMessages">
+                <div class="chat-message chat-bot">
+                    <i class="fas fa-robot"></i> 👋 你好！我是搭子AI助手，可以帮你找搭子、推荐附近好吃好玩～
+                </div>
+            </div>
+            <div class="ai-quick-btns" id="aiQuickBtns">
+                <button class="ai-quick-btn">帮我找一个今天下午的羽毛球搭子</button>
+                <button class="ai-quick-btn">仙林有哪些组局离我近？</button>
+                <button class="ai-quick-btn">推荐剧本杀组局附近的好餐厅</button>
+                <button class="ai-quick-btn ai-quick-food">🍲 仙林有什么好吃的火锅？</button>
+                <button class="ai-quick-btn ai-quick-food">🌙 南大周边晚上去哪玩？</button>
+                <button class="ai-quick-btn ai-quick-food">☕ 推荐一家适合约会的咖啡店</button>
+            </div>
+            <div class="ai-chat-input-row">
+                <input type="text" id="aiChatInput" placeholder="输入你的问题...">
+                <button id="aiChatSendBtn" class="primary-btn"><i class="fas fa-paper-plane"></i></button>
+            </div>
         </div>
     </div>
 </div>
@@ -95,26 +223,36 @@
 <!-- 登录/注册模态框 -->
 <div id="authModal" class="modal">
     <div class="modal-card">
+        <button class="modal-close-btn" id="closeAuthModalBtn"><i class="fas fa-times"></i></button>
         <div id="loginForm">
-            <h2>登录</h2>
+            <h2><i class="fas fa-sign-in-alt"></i> 登录</h2>
             <input type="email" id="loginEmail" placeholder="邮箱">
             <input type="password" id="loginPassword" placeholder="密码">
-            <button id="doLoginBtn" class="primary-btn">登录</button>
+            <button id="doLoginBtn" class="primary-btn" style="width:100%;">登录</button>
             <div class="switch-mode">还没有账号？ <a id="switchToRegister">立即注册</a></div>
             <div class="switch-mode"><a id="forgotPasswordLink">忘记密码？</a></div>
         </div>
         <div id="registerForm" style="display:none;">
-            <h2>注册</h2>
+            <h2><i class="fas fa-user-plus"></i> 注册</h2>
             <input type="text" id="regUsername" placeholder="用户名">
             <input type="email" id="regEmail" placeholder="邮箱">
+            <div class="code-row">
+                <input type="text" id="regCode" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendRegCodeBtn" class="secondary-btn" type="button">获取验证码</button>
+            </div>
             <input type="password" id="regPassword" placeholder="密码 (至少8位)">
-            <button id="doRegisterBtn" class="primary-btn">注册</button>
+            <button id="doRegisterBtn" class="primary-btn" style="width:100%;">注册</button>
             <div class="switch-mode">已有账号？ <a id="switchToLogin">去登录</a></div>
         </div>
         <div id="forgotForm" style="display:none;">
-            <h2>找回密码</h2>
+            <h2><i class="fas fa-key"></i> 找回密码</h2>
             <input type="email" id="forgotEmail" placeholder="注册邮箱">
-            <button id="doForgotBtn" class="primary-btn">发送重置链接</button>
+            <div class="code-row">
+                <input type="text" id="forgotCode" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendForgotCodeBtn" class="secondary-btn" type="button">获取验证码</button>
+            </div>
+            <input type="password" id="forgotNewPassword" placeholder="新密码 (至少8位)">
+            <button id="doForgotBtn" class="primary-btn" style="width:100%;">重置密码</button>
             <div class="switch-mode"><a id="backToLogin">返回登录</a></div>
         </div>
     </div>
@@ -136,18 +274,51 @@
     </div>
 </div>
 
-<!-- 邮箱验证结果页面（独立） -->
+<!-- 发布搭子模态框 -->
+<div id="partnerModal" class="modal">
+    <div class="modal-card">
+        <button class="modal-close-btn" id="closePartnerModalBtn"><i class="fas fa-times"></i></button>
+        <h2><i class="fas fa-user-friends"></i> 发起组局</h2>
+        <form id="partnerForm">
+            <select id="partnerCategory" required>
+                <option value="">选择分类</option>
+                <option value="饭搭子">🍜 饭搭子</option>
+                <option value="学习搭子">📚 学习搭子</option>
+                <option value="运动搭子">🏃 运动搭子</option>
+                <option value="游戏搭子">🎮 游戏搭子</option>
+                <option value="电影搭子">🎬 电影搭子</option>
+            </select>
+            <input type="text" id="partnerTitle" placeholder="标题 (例如: 周五晚仙林剧本杀 缺1人)" required>
+            <div class="partner-form-row">
+                <input type="text" id="partnerLocation" placeholder="地点 (例如: 仙林金鹰)">
+                <input type="text" id="partnerTime" placeholder="时间 (例如: 周五 19:00)">
+            </div>
+            <div class="partner-form-row">
+                <input type="text" id="partnerBudget" placeholder="预算 (例如: AA/50元)">
+                <input type="number" id="partnerSlots" placeholder="缺几人" min="1" max="20" value="1">
+            </div>
+            <textarea id="partnerDesc" rows="3" placeholder="内容描述 (活动详情、要求等)" required></textarea>
+            <input type="text" id="partnerContact" placeholder="联系方式 (微信/QQ/手机号)" required>
+            <div class="modal-actions" style="margin-top: 1rem;">
+                <button type="button" id="submitPartnerBtn" class="primary-btn">确认发布</button>
+                <button type="button" id="cancelPartnerBtn" class="secondary-btn">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 邮箱验证提示 -->
 <div id="verifyMessage" class="toast" style="display:none;"></div>
 
-<!-- 关键修复：所有 script 标签加上 type="module" -->
 <script type="module" src="js/config.js"></script>
 <script type="module" src="js/utils.js"></script>
 <script type="module" src="js/api.js"></script>
-<script type="module" src="js/auth.js"></script>
 <script type="module" src="js/pages/home.js"></script>
-<script type="module" src="js/pages/restaurants.js"></script>
+<script type="module" src="js/pages/places.js"></script>
 <script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/pages/profile.js"></script>
+<script type="module" src="js/pages/partner.js"></script>
+<script type="module" src="js/pages/guide.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

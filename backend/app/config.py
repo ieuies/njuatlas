@@ -37,14 +37,21 @@ def _normalize_database_url(value):
     """规范化数据库连接字符串。
 
     本地开发不配置 DATABASE_URL 时，Flask-SQLAlchemy 会使用默认 SQLite 文件。
-    Render PostgreSQL 通常会提供 DATABASE_URL。部分平台给出的旧格式可能是
-    postgres://，SQLAlchemy 推荐使用 postgresql://，这里做一次兼容转换。
+    Render PostgreSQL 通常会提供 DATABASE_URL。这里做三层兼容转换：
+    1. postgres:// → postgresql+psycopg://（旧格式，如 Render）
+    2. postgresql:// → postgresql+psycopg://（Neon 默认格式）
+    3. 强制使用 psycopg 3.x 驱动，因为 Windows + Python 3.14 不支持 psycopg2
     """
     if not value:
         return None
 
+    # 统一转换为 postgresql+psycopg 协议（使用 psycopg v3 驱动）
+    if value.startswith("postgresql+psycopg://"):
+        return value  # 已经是正确的格式
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value[len("postgresql://"):]
     if value.startswith("postgres://"):
-        return "postgresql://" + value[len("postgres://"):]
+        return "postgresql+psycopg://" + value[len("postgres://"):]
 
     return value
 
@@ -72,11 +79,10 @@ class Config:
     FRONTEND_URL = _get_env("FRONTEND_URL", "http://localhost:5173")
     EMAIL_VERIFICATION_TOKEN_SECONDS = _get_int_env("EMAIL_VERIFICATION_TOKEN_SECONDS", 60 * 60 * 24)
     PASSWORD_RESET_TOKEN_SECONDS = _get_int_env("PASSWORD_RESET_TOKEN_SECONDS", 60 * 30)
-    SMTP_HOST = _get_env("SMTP_HOST", "")
-    SMTP_PORT = _get_int_env("SMTP_PORT", 587)
-    SMTP_USERNAME = _get_env("SMTP_USERNAME", "")
-    SMTP_PASSWORD = _get_env("SMTP_PASSWORD", "")
-    SMTP_USE_TLS = _get_env("SMTP_USE_TLS", "true").lower() == "true"
+    EMAIL_CODE_EXPIRATION_SECONDS = _get_int_env("EMAIL_CODE_EXPIRATION_SECONDS", 10 * 60)
+    EMAIL_CODE_RESEND_SECONDS = _get_int_env("EMAIL_CODE_RESEND_SECONDS", 60)
+    EMAIL_CODE_MAX_ATTEMPTS = _get_int_env("EMAIL_CODE_MAX_ATTEMPTS", 5)
+    RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
     MAIL_FROM = _get_env("MAIL_FROM", "no-reply@njuatlas.local")
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False

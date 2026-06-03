@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -48,5 +48,17 @@ def create_app():
     init_rate_limiter(app)
 
     CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+    @app.route("/")
+    def index():
+        return jsonify({
+            "status": "ok",
+            "service": "njuatlas-backend",
+            "message": "NjuAtlas backend is running. Use /health or /api/* endpoints.",
+        })
+
+    @app.route("/health")
+    def health():
+        return jsonify({"status": "ok", "service": "njuatlas-backend"})
 
     return app

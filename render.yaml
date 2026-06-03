@@ -1,5 +1,15 @@
 services:
   - type: web
+    name: njuatlas-frontend
+    runtime: static
+    buildCommand: echo "No build step for static frontend"
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
     name: njuatlas-backend
     runtime: python
     rootDir: backend
@@ -35,20 +45,18 @@ services:
       - key: RATELIMIT_STORAGE_URI
         value: "memory://"
       - key: FRONTEND_URL
-        sync: false
+        value: "https://njuatlas.cn"
       - key: EMAIL_VERIFICATION_TOKEN_SECONDS
         value: "86400"
       - key: PASSWORD_RESET_TOKEN_SECONDS
         value: "1800"
-      - key: SMTP_HOST
+      - key: EMAIL_CODE_EXPIRATION_SECONDS
+        value: "600"
+      - key: EMAIL_CODE_RESEND_SECONDS
+        value: "60"
+      - key: EMAIL_CODE_MAX_ATTEMPTS
+        value: "5"
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_USE_TLS
-        value: "true"
       - key: MAIL_FROM
         sync: false

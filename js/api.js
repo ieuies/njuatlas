@@ -2,6 +2,8 @@ import { API_BASE } from './config.js';
 import { showToast } from './utils.js';
 
 let authToken = localStorage.getItem('access_token') || null;
+const DEFAULT_TIMEOUT_MS = 12000;
+const LOGIN_TIMEOUT_MS = 10000;
 
 export function setAuthToken(token) {
     authToken = token;
@@ -13,36 +15,50 @@ export function getAuthToken() {
     return authToken;
 }
 
-async function request(endpoint, method = 'GET', body = null, needAuth = true) {
+async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS) {
     const url = `${API_BASE}${endpoint}`;
     const headers = { 'Content-Type': 'application/json' };
     if (needAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
-    const options = { method, headers };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const options = { method, headers, signal: controller.signal };
     if (body) options.body = JSON.stringify(body);
     try {
         const res = await fetch(url, options);
-        const data = await res.json();
+        clearTimeout(timeoutId);
+        let data;
+        try {
+            data = await res.json();
+        } catch (jsonErr) {
+            const text = await res.text();
+            console.error('API非JSON响应:', res.status, text);
+            throw new Error(`服务器返回异常 (${res.status})`);
+        }
         if (!res.ok) {
             if (res.status === 401 && needAuth) {
-                // token 失效，触发全局登出（由调用方处理）
                 throw new Error('UNAUTHORIZED');
             }
             throw new Error(data.message || `请求失败: ${res.status}`);
         }
         return data;
     } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            err = new Error('请求超时，请稍后重试');
+        }
         if (err.message === 'UNAUTHORIZED') throw err;
-        showToast(err.message);
+        console.error('API请求错误:', err);
+        showToast(err.message || '网络错误，请检查后端是否启动');
         throw err;
     }
 }
 
-// 用户认证
-export async function register(username, email, password) {
-    return request('/user/register', 'POST', { username, email, password }, false);
+// ── 用户认证 ──
+export async function register(username, email, password, code) {
+    return request('/user/register', 'POST', { username, email, password, code }, false);
 }
 export async function login(email, password) {
-    return request('/user/login', 'POST', { email, password }, false);
+    return request('/user/login', 'POST', { email, password }, false, LOGIN_TIMEOUT_MS);
 }
 export async function logout() {
     return request('/user/logout', 'POST', null, true);
@@ -54,53 +70,81 @@ export async function verifyEmail(token) {
     return request('/user/email/verify', 'POST', { token }, false);
 }
 export async function forgotPassword(email) {
-    return request('/user/password/forgot', 'POST', { email }, false);
+    return request('/user/email/code', 'POST', { email, purpose: 'reset_password' }, false);
 }
-export async function resetPassword(token, newPassword) {
-    return request('/user/password/reset', 'POST', { token, new_password: newPassword }, false);
+export async function requestRegisterCode(email) {
+    return request('/user/email/code', 'POST', { email, purpose: 'register' }, false);
+}
+export async function requestPasswordResetCode(email) {
+    return request('/user/email/code', 'POST', { email, purpose: 'reset_password' }, false);
+}
+export async function resetPassword(email, code, newPassword) {
+    return request('/user/password/reset', 'POST', { email, code, new_password: newPassword }, false);
 }
 export async function changePassword(currentPassword, newPassword) {
     return request('/user/password/change', 'POST', { current_password: currentPassword, new_password: newPassword });
 }
 
-// 餐厅互动
-export async function addRestaurant(name, address, location, poiId) {
-    return request('/restaurant', 'POST', { name, address, location, poi_id: poiId });
+// ── 个人资料（阶段二新增） ──
+export async function getMyProfile() {
+    return request('/me/profile', 'GET');
 }
-export async function addReview(restaurantId, content, rating = null) {
-    return request('/review', 'POST', { restaurant_id: restaurantId, content, rating });
-}
-export async function toggleLike(restaurantId) {
-    return request('/like', 'POST', { restaurant_id: restaurantId });
-}
-export async function toggleFavorite(restaurantId) {
-    return request('/favorite', 'POST', { restaurant_id: restaurantId });
-}
-export async function getRestaurantStats(restaurantId) {
-    return request(`/restaurant/${restaurantId}/stats`, 'GET');
+export async function updateMyProfile({ username, bio, tags } = {}) {
+    return request('/me/profile', 'PUT', { username, bio, tags });
 }
 
-// 地图搜索
-export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 20) {
-    let url = `/places/search?keyword=${encodeURIComponent(keyword)}&city=${encodeURIComponent(city)}&page=${page}&page_size=${pageSize}`;
+// ── 场所互动 ──
+export async function addPlace(name, address, location, poiId, category = null) {
+    return request('/place', 'POST', { name, address, location, poi_id: poiId, category });
+}
+export async function addReview(placeId, content, rating = null) {
+    return request('/review', 'POST', { place_id: placeId, content, rating });
+}
+export async function toggleLike(placeId) {
+    return request('/like', 'POST', { place_id: placeId });
+}
+export async function toggleFavorite(placeId) {
+    return request('/favorite', 'POST', { place_id: placeId });
+}
+export async function getPlaceStats(placeId) {
+    return request(`/place/${placeId}/stats`, 'GET', null, false);
+}
+
+// ── 地图搜索 ──
+export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null) {
+    let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
     if (location) url += `&location=${encodeURIComponent(location)}`;
+    if (radius) url += `&radius=${encodeURIComponent(radius)}`;
+    if (types) url += `&types=${encodeURIComponent(types)}`;
     return request(url, 'GET', null, false);
 }
 export async function getHotAreas() {
     return request('/places/hot_areas', 'GET', null, false);
 }
+export async function getPlaceCategories() {
+    return request('/places/categories', 'GET', null, false);
+}
+export async function geocode(address, city = null) {
+    let url = `/places/geocode?address=${encodeURIComponent(address)}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
+    return request(url, 'GET', null, false);
+}
+export async function regeocode(location) {
+    return request(`/places/regeocode?location=${encodeURIComponent(location)}`, 'GET', null, false);
+}
 
-// AI 聊天
+// ── AI 聊天 ──
 export async function chatRecommend(message, sessionId = null, city = '南京') {
     const body = { message, city };
     if (sessionId) body.session_id = sessionId;
     return request('/llm/chat_recommend', 'POST', body);
 }
-export async function getRecommendSlogan(restaurantId) {
-    return request(`/llm/recommend_slogan?restaurant_id=${restaurantId}`, 'GET', null, false);
+export async function getRecommendSlogan(placeId) {
+    return request(`/llm/recommend_slogan?place_id=${placeId}`, 'GET', null, false);
 }
 
-// 个人中心
+// ── 个人中心 ──
 export async function getFavorites() {
     return request('/me/favorites', 'GET');
 }

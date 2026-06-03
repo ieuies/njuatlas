@@ -4,7 +4,7 @@ from app import db
 from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.logging_utils import log_event
-from app.models import Favorite, Like, Restaurant, Review
+from app.models import Favorite, Like, Place, Review
 from app.rate_limit import limiter
 from app.validators import (
     clean_string,
@@ -18,46 +18,48 @@ from app.validators import (
 inter_bp = Blueprint("interactions", __name__, url_prefix="/api")
 
 
-@inter_bp.route("/restaurant", methods=["POST"])
+@inter_bp.route("/place", methods=["POST"])
 @jwt_required
 @limiter.limit("30 per minute")
-def add_restaurant():
+def add_place():
     data = get_json_body(request)
     name = clean_string(data.get("name"), "name", required=True, max_length=100)
     address = clean_string(data.get("address"), "address", max_length=200) or ""
     location = clean_string(data.get("location"), "location", max_length=50) or ""
     location = validate_location(location)
     poi_id = clean_string(data.get("poi_id"), "poi_id", max_length=100)
+    category = clean_string(data.get("category"), "category", max_length=50)
 
     if poi_id:
-        existing = Restaurant.query.filter_by(poi_id=poi_id).first()
+        existing = Place.query.filter_by(poi_id=poi_id).first()
         if existing:
             log_event(
                 current_app.logger,
-                "restaurant_duplicate",
+                "place_duplicate",
                 user_id=g.current_user_id,
-                restaurant_id=existing.id,
+                place_id=existing.id,
                 poi_id=poi_id,
             )
-            return jsonify({"id": existing.id, "name": existing.name, "message": "餐厅已存在"}), 200
+            return jsonify({"id": existing.id, "name": existing.name, "message": "场所已存在"}), 200
 
-    restaurant = Restaurant(
+    place = Place(
         name=name,
         address=address,
         location=location,
         poi_id=poi_id,
+        category=category,
         added_by=g.current_user_id,
     )
-    db.session.add(restaurant)
+    db.session.add(place)
     db.session.commit()
     log_event(
         current_app.logger,
-        "restaurant_created",
+        "place_created",
         user_id=g.current_user_id,
-        restaurant_id=restaurant.id,
+        place_id=place.id,
         poi_id=poi_id,
     )
-    return jsonify({"id": restaurant.id, "name": restaurant.name}), 201
+    return jsonify({"id": place.id, "name": place.name}), 201
 
 
 @inter_bp.route("/review", methods=["POST"])
@@ -65,19 +67,19 @@ def add_restaurant():
 @limiter.limit("30 per minute")
 def add_review():
     data = get_json_body(request)
-    restaurant_id = positive_int(data.get("restaurant_id"), "restaurant_id")
+    place_id = positive_int(data.get("place_id"), "place_id")
     content = clean_string(data.get("content"), "content", required=True, max_length=500)
     rating = optional_rating(data.get("rating"))
 
-    restaurant = Restaurant.query.get(restaurant_id)
-    if not restaurant:
-        return error_response("餐厅不存在", 404, code="restaurant_not_found")
+    place = Place.query.get(place_id)
+    if not place:
+        return error_response("场所不存在", 404, code="place_not_found")
 
     review = Review(
         content=content,
         rating=rating,
         user_id=g.current_user_id,
-        restaurant_id=restaurant_id,
+        place_id=place_id,
     )
     db.session.add(review)
     db.session.commit()
@@ -85,7 +87,7 @@ def add_review():
         current_app.logger,
         "review_created",
         user_id=g.current_user_id,
-        restaurant_id=restaurant_id,
+        place_id=place_id,
         review_id=review.id,
         rating=rating,
     )
@@ -97,22 +99,22 @@ def add_review():
 @limiter.limit("60 per minute")
 def toggle_like():
     data = get_json_body(request)
-    restaurant_id = positive_int(data.get("restaurant_id"), "restaurant_id")
+    place_id = positive_int(data.get("place_id"), "place_id")
 
-    if not Restaurant.query.get(restaurant_id):
-        return error_response("餐厅不存在", 404, code="restaurant_not_found")
+    if not Place.query.get(place_id):
+        return error_response("场所不存在", 404, code="place_not_found")
 
-    existing = Like.query.filter_by(user_id=g.current_user_id, restaurant_id=restaurant_id).first()
+    existing = Like.query.filter_by(user_id=g.current_user_id, place_id=place_id).first()
     if existing:
         db.session.delete(existing)
         db.session.commit()
-        log_event(current_app.logger, "like_removed", user_id=g.current_user_id, restaurant_id=restaurant_id)
+        log_event(current_app.logger, "like_removed", user_id=g.current_user_id, place_id=place_id)
         return jsonify({"liked": False, "message": "已取消点赞"})
 
-    like = Like(user_id=g.current_user_id, restaurant_id=restaurant_id)
+    like = Like(user_id=g.current_user_id, place_id=place_id)
     db.session.add(like)
     db.session.commit()
-    log_event(current_app.logger, "like_added", user_id=g.current_user_id, restaurant_id=restaurant_id)
+    log_event(current_app.logger, "like_added", user_id=g.current_user_id, place_id=place_id)
     return jsonify({"liked": True, "message": "点赞成功"})
 
 
@@ -121,37 +123,37 @@ def toggle_like():
 @limiter.limit("60 per minute")
 def toggle_favorite():
     data = get_json_body(request)
-    restaurant_id = positive_int(data.get("restaurant_id"), "restaurant_id")
+    place_id = positive_int(data.get("place_id"), "place_id")
 
-    if not Restaurant.query.get(restaurant_id):
-        return error_response("餐厅不存在", 404, code="restaurant_not_found")
+    if not Place.query.get(place_id):
+        return error_response("场所不存在", 404, code="place_not_found")
 
-    existing = Favorite.query.filter_by(user_id=g.current_user_id, restaurant_id=restaurant_id).first()
+    existing = Favorite.query.filter_by(user_id=g.current_user_id, place_id=place_id).first()
     if existing:
         db.session.delete(existing)
         db.session.commit()
-        log_event(current_app.logger, "favorite_removed", user_id=g.current_user_id, restaurant_id=restaurant_id)
+        log_event(current_app.logger, "favorite_removed", user_id=g.current_user_id, place_id=place_id)
         return jsonify({"favorited": False, "message": "已取消收藏"})
 
-    fav = Favorite(user_id=g.current_user_id, restaurant_id=restaurant_id)
+    fav = Favorite(user_id=g.current_user_id, place_id=place_id)
     db.session.add(fav)
     db.session.commit()
-    log_event(current_app.logger, "favorite_added", user_id=g.current_user_id, restaurant_id=restaurant_id)
+    log_event(current_app.logger, "favorite_added", user_id=g.current_user_id, place_id=place_id)
     return jsonify({"favorited": True, "message": "收藏成功"})
 
 
-@inter_bp.route("/restaurant/<int:restaurant_id>/stats", methods=["GET"])
-def restaurant_stats(restaurant_id):
-    restaurant = Restaurant.query.get(restaurant_id)
-    if not restaurant:
-        return error_response("餐厅不存在", 404, code="restaurant_not_found")
+@inter_bp.route("/place/<int:place_id>/stats", methods=["GET"])
+def place_stats(place_id):
+    place = Place.query.get(place_id)
+    if not place:
+        return error_response("场所不存在", 404, code="place_not_found")
 
-    likes_count = Like.query.filter_by(restaurant_id=restaurant_id).count()
-    favs_count = Favorite.query.filter_by(restaurant_id=restaurant_id).count()
-    reviews = Review.query.filter_by(restaurant_id=restaurant_id).order_by(Review.created_at.desc()).all()
+    likes_count = Like.query.filter_by(place_id=place_id).count()
+    favs_count = Favorite.query.filter_by(place_id=place_id).count()
+    reviews = Review.query.filter_by(place_id=place_id).order_by(Review.created_at.desc()).all()
 
     return jsonify({
-        "restaurant_id": restaurant_id,
+        "place_id": place_id,
         "likes": likes_count,
         "favorites": favs_count,
         "reviews": [
