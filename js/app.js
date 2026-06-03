@@ -1,4 +1,5 @@
 import { initPartnerPage } from './pages/partner.js';
+import { initGuidePage } from './pages/guide.js';      // 新增指南模块
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
@@ -10,12 +11,13 @@ import { loadAmapScript } from './config.js';
 let currentPage = null;
 
 const pageTitles = {
+    partner: '找搭子',      // 核心：找搭子放在第一个
     restaurants: '餐厅',
     map: '地图',
     ai: 'AI助手',
+    guide: '指南',          // 新增指南页标题
     scenic: '景点',
     profile: '个人中心',
-    partner: '找搭子',   // 新增
 };
 
 function switchPage(pageId) {
@@ -45,7 +47,8 @@ function switchPage(pageId) {
     if (pageId === 'restaurants') refreshRestaurants();
     else if (pageId === 'map') initMapPage();
     else if (pageId === 'profile') refreshProfile();
-    else if (pageId === 'partner') initPartnerPage();  // 新增
+    else if (pageId === 'partner') initPartnerPage();
+    else if (pageId === 'guide') initGuidePage();   // 新增指南初始化
 
     closeSidebar();
 }
@@ -68,8 +71,8 @@ function updateNavBar() {
             usernameSpan.onclick = () => switchPage('profile');
         }
         if (homePage) homePage.classList.remove('active-page');
-        if (pageTitle) pageTitle.innerText = pageTitles.restaurants;
-        if (!currentPage) switchPage('restaurants');
+        if (pageTitle) pageTitle.innerText = pageTitles.partner;   // 默认显示找搭子标题
+        if (!currentPage) switchPage('partner');   // 登录后默认打开找搭子
         return;
     }
 
@@ -161,6 +164,10 @@ function init() {
     initRestaurantsPage();
     initAIPage();
     initProfilePage();
+    // 注意：partner 和 guide 页面在首次切换到它们时才会初始化（懒加载）
+    // 但为了确保数据预加载，可以在这里调用一次（可选）
+    // 如果你希望用户未登录时也能预加载一些静态数据，可以去掉注释
+    // 但建议保持按需加载，避免不必要的 API 调用
 }
 
 window.switchPage = switchPage;

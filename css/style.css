@@ -1353,6 +1353,16 @@ body:not(.logged-in) .top-bar .page-title {
     .footer-copyright {
         text-align: center;
     }
+
+    /* 移动端：指南瀑布流变单列 */
+    .guide-grid {
+        column-count: 1 !important;
+    }
+
+    /* 找搭子卡片在移动端保持单列，但边距调整 */
+    .partner-grid {
+        max-width: 100%;
+    }
 }
 
 /* ========== 快捷提问按钮 ========== */
@@ -1408,6 +1418,7 @@ body:not(.logged-in) .top-bar .page-title {
     text-decoration: underline;
 }
 
+/* ========== 找搭子页面：单列等高列表（爆改核心） ========== */
 .partner-header {
     display: flex;
     justify-content: space-between;
@@ -1462,21 +1473,24 @@ body:not(.logged-in) .top-bar .page-title {
     box-shadow: var(--shadow-md);
 }
 
+/* 单列等高列表 */
 .partner-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 800px;
+    margin: 0 auto;
 }
 
 .partner-card {
+    width: 100%;
     background: var(--bg-primary);
-    border-radius: 16px;
+    border-radius: 20px;
     overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-md);
     transition: var(--transition);
-    display: flex;
-    flex-direction: column;
+    border: 1px solid var(--gray-200);
 }
 
 .partner-card:hover {
@@ -1486,8 +1500,7 @@ body:not(.logged-in) .top-bar .page-title {
 }
 
 .partner-card-content {
-    padding: 1.4rem;
-    flex: 1;
+    padding: 1.5rem;
 }
 
 .partner-card-header {
@@ -1525,7 +1538,7 @@ body:not(.logged-in) .top-bar .page-title {
     font-size: 0.9rem;
     color: var(--text-secondary);
     line-height: 1.5;
-    margin-bottom: 0.8rem;
+    margin-bottom: 1rem;
     white-space: pre-wrap;
 }
 
@@ -1564,6 +1577,72 @@ body:not(.logged-in) .top-bar .page-title {
     border-color: transparent;
 }
 
+/* ========== 指南页面：双列瀑布流 ========== */
+.guide-grid {
+    column-count: 2;
+    column-gap: 1.5rem;
+}
+
+.guide-card {
+    break-inside: avoid;
+    margin-bottom: 1.5rem;
+    background: var(--bg-primary);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    border: 1px solid var(--gray-200);
+}
+
+.guide-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-light);
+}
+
+.guide-img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    background-color: var(--gray-200);
+}
+
+.guide-info {
+    padding: 1rem;
+}
+
+.guide-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.guide-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+}
+
+.guide-type {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(236, 72, 153, 0.1));
+    color: var(--primary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.7rem;
+    border-radius: 30px;
+    margin-top: 0.5rem;
+}
+
+.guide-loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-tertiary);
+    grid-column: 1 / -1;
+}
+
 /* 发布模态框内的下拉框样式 */
 #partnerModal select {
     width: 100%;
@@ -1582,14 +1661,6 @@ body:not(.logged-in) .top-bar .page-title {
     border-color: var(--primary);
     background: var(--bg-primary);
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-}
-    font-family: inherit;
-}
-
-#partnerModal select:focus {
-    border-color: var(--njupurple);
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(75, 0, 130, 0.1);
 }
 
 /* ========== 新增特效：按钮点击缩放 ========== */

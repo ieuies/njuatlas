@@ -26,7 +26,11 @@
             </div>
         </div>
         <nav class="sidebar-nav">
-            <a href="#" class="nav-item active" data-page="restaurants">
+            <!-- 找搭子（核心，默认激活） -->
+            <a href="#" class="nav-item active" data-page="partner">
+                <i class="fas fa-user-friends"></i><span>找搭子</span>
+            </a>
+            <a href="#" class="nav-item" data-page="restaurants">
                 <i class="fas fa-utensils"></i><span>餐厅</span>
             </a>
             <a href="#" class="nav-item" data-page="map">
@@ -35,9 +39,9 @@
             <a href="#" class="nav-item" data-page="ai">
                 <i class="fas fa-robot"></i><span>AI助手</span>
             </a>
-            <!-- 找搭子 (新入口) -->
-            <a href="#" class="nav-item" data-page="partner">
-                <i class="fas fa-user-friends"></i><span>找搭子</span>
+            <!-- 指南（新增瀑布流页面） -->
+            <a href="#" class="nav-item" data-page="guide">
+                <i class="fas fa-compass"></i><span>指南</span>
             </a>
             <a href="#" class="nav-item" data-page="profile">
                 <i class="fas fa-user-circle"></i><span>个人中心</span>
@@ -62,7 +66,7 @@
         <header class="top-bar">
             <div class="top-bar-left">
                 <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
-                <span class="page-title" id="pageTitle">餐厅</span>
+                <span class="page-title" id="pageTitle">找搭子</span>
             </div>
             <div class="top-bar-right">
                 <div id="navGuestTop" class="topbar-guest">
@@ -78,7 +82,7 @@
         <!-- 页面内容区 -->
         <div class="content-area" id="contentArea">
 
-            <!-- 未登录主页（网站简介 + 图片展示区） —— 已移除无用图库 -->
+            <!-- 未登录主页（网站简介 + 图片展示区） -->
             <div id="homePage" class="page active-page">
                 <div class="hero-wrapper">
                     <div class="hero-content">
@@ -128,7 +132,7 @@
             <!-- 景点页面（预留） -->
             <div id="scenicPage" class="page">
                 <div class="page-placeholder">
-                    <i class="fas fa-mountain" style="font-size:4rem;color:var(--njupurple-light);"></i>
+                    <i class="fas fa-mountain" style="font-size:4rem;color:var(--primary-light);"></i>
                     <h2>南大周边景点</h2>
                     <p>功能开发中，敬请期待...</p>
                 </div>
@@ -186,7 +190,7 @@
                 </div>
             </div>
 
-            <!-- ========== 找搭子页面 (新增) ========== -->
+            <!-- ========== 找搭子页面（单列列表） ========== -->
             <div id="partnerPage" class="page">
                 <div class="partner-header">
                     <div class="partner-header-left">
@@ -206,11 +210,22 @@
                     <button data-category="电影搭子" class="filter-chip">🎬 电影搭子</button>
                 </div>
 
-                <!-- 卡片网格 -->
+                <!-- 单列列表容器 -->
                 <div id="partnerGrid" class="partner-grid">
                     <!-- 动态渲染搭子卡片 -->
                 </div>
             </div>
+
+            <!-- ========== 指南页面（瀑布流） ========== -->
+            <div id="guidePage" class="page">
+                <div class="page-header-flex">
+                    <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐指南</h2>
+                </div>
+                <div id="guideGrid" class="guide-grid">
+                    <div class="guide-loading">加载精彩推荐中...</div>
+                </div>
+            </div>
+
         </div>
 
         <!-- ====== 底栏 ====== -->
@@ -297,7 +312,7 @@
     </div>
 </div>
 
-<!-- 发布搭子模态框 (新增) -->
+<!-- 发布搭子模态框 -->
 <div id="partnerModal" class="modal">
     <div class="modal-card">
         <button class="modal-close-btn" id="closePartnerModalBtn"><i class="fas fa-times"></i></button>
@@ -333,7 +348,8 @@
 <script type="module" src="js/pages/restaurants.js"></script>
 <script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/pages/profile.js"></script>
-<script type="module" src="js/pages/partner.js"></script>   <!-- 新增找搭子模块 -->
+<script type="module" src="js/pages/partner.js"></script>
+<script type="module" src="js/pages/guide.js"></script>   <!-- 新增指南模块 -->
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
