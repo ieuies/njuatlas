@@ -1,6 +1,6 @@
 import { searchPlaces, addPlace, getPlaceStats, toggleLike, toggleFavorite, addReview } from '../api.js';
 import { loadAmapScript } from '../config.js';
-import { showToast, escapeHtml } from '../utils.js';
+import { showToast, escapeHtml, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
 const NJU_GULOU = {
@@ -8,12 +8,14 @@ const NJU_GULOU = {
     location: '118.7784,32.0572',
     center: [118.7784, 32.0572],
 };
+// NJU_GULOU.center 是 WGS-84，高德地图需要 GCJ-02
+const NJU_GULOU_CENTER_GCJ = wgs84ToGcj02(NJU_GULOU.center[0], NJU_GULOU.center[1]);
 const DEFAULT_KEYWORD = '餐厅';
 const DEFAULT_RADIUS = 5000;
 const PAGE_SIZE = 25;
 const PAGE_COUNT = 3;
 
-let currentRestaurants = [];
+let currentPlaces = [];
 let map = null;
 let markers = [];
 
@@ -28,22 +30,22 @@ function validLocation(location) {
     return [lng, lat];
 }
 
-function renderRestaurantList(restaurants) {
-    const container = document.getElementById('restoList');
-    if (!restaurants.length) {
+function renderPlaceList(places) {
+    const container = document.getElementById('placeList');
+    if (!places.length) {
         container.innerHTML = '<p class="list-empty">南京大学附近暂未找到餐厅，试试刷新或稍后再试</p>';
         return;
     }
 
-    container.innerHTML = restaurants.map(r => {
+    container.innerHTML = places.map(r => {
         const image = r.photos?.[0]?.url || `https://picsum.photos/300/160?random=${encodeURIComponent(r.id || r.name)}`;
         const rating = r.biz_ext?.rating || '暂无评分';
         const cost = r.biz_ext?.cost || '未知';
         return `
-            <div class="resto-card" data-poi="${encodeURIComponent(JSON.stringify(r))}">
-                <div class="resto-img" style="background-image: url('${image}');"></div>
-                <div class="resto-info">
-                    <div class="resto-name">${escapeHtml(r.name)}</div>
+            <div class="place-card" data-poi="${encodeURIComponent(JSON.stringify(r))}">
+                <div class="place-img" style="background-image: url('${image}');"></div>
+                <div class="place-info">
+                    <div class="place-name">${escapeHtml(r.name)}</div>
                     <div>${escapeHtml(r.address || '')}</div>
                     <div>评分 ${escapeHtml(String(rating))} | 人均 ${escapeHtml(String(cost))}</div>
                 </div>
@@ -51,14 +53,14 @@ function renderRestaurantList(restaurants) {
         `;
     }).join('');
 
-    document.querySelectorAll('.resto-card').forEach(card => {
+    document.querySelectorAll('.place-card').forEach(card => {
         card.addEventListener('click', () => {
-            showRestaurantDetail(decodePoi(card.getAttribute('data-poi')));
+            showPlaceDetail(decodePoi(card.getAttribute('data-poi')));
         });
     });
 }
 
-async function showRestaurantDetail(poi) {
+async function showPlaceDetail(poi) {
     let localPlaceId = null;
     try {
         const addRes = await addPlace(poi.name, poi.address, poi.location, poi.id);
@@ -81,19 +83,19 @@ async function showRestaurantDetail(poi) {
     `).join('');
     document.getElementById('modalReviews').innerHTML = reviewsHtml || '暂无评论';
 
-    const likeBtn = document.getElementById('likeRestoBtn');
-    const favBtn = document.getElementById('favRestoBtn');
+    const likeBtn = document.getElementById('likePlaceBtn');
+    const favBtn = document.getElementById('favPlaceBtn');
     likeBtn.onclick = async () => {
         if (!isLoggedIn()) return showToast('请先登录');
         await toggleLike(localPlaceId);
         showToast('已切换点赞');
-        showRestaurantDetail(poi);
+        showPlaceDetail(poi);
     };
     favBtn.onclick = async () => {
         if (!isLoggedIn()) return showToast('请先登录');
         await toggleFavorite(localPlaceId);
         showToast('已切换收藏');
-        showRestaurantDetail(poi);
+        showPlaceDetail(poi);
     };
 
     const postBtn = document.getElementById('postReviewBtn');
@@ -105,15 +107,15 @@ async function showRestaurantDetail(poi) {
         await addReview(localPlaceId, content);
         showToast('评论成功');
         newReview.value = '';
-        showRestaurantDetail(poi);
+        showPlaceDetail(poi);
     };
-    document.getElementById('restoModal').style.display = 'flex';
+    document.getElementById('placeModal').style.display = 'flex';
     document.getElementById('closeModalBtn').onclick = () => {
-        document.getElementById('restoModal').style.display = 'none';
+        document.getElementById('placeModal').style.display = 'none';
     };
 }
 
-async function searchNearbyRestaurants(keyword = DEFAULT_KEYWORD) {
+async function searchNearbyPlaces(keyword = DEFAULT_KEYWORD) {
     const results = [];
     const seen = new Set();
 
@@ -135,12 +137,12 @@ async function searchNearbyRestaurants(keyword = DEFAULT_KEYWORD) {
     return results;
 }
 
-export async function refreshRestaurants(keyword = DEFAULT_KEYWORD) {
-    const container = document.getElementById('restoList');
+export async function refreshPlaces(keyword = DEFAULT_KEYWORD) {
+    const container = document.getElementById('placeList');
     container.innerHTML = '加载南京大学附近餐厅...';
     try {
-        currentRestaurants = await searchNearbyRestaurants(keyword);
-        renderRestaurantList(currentRestaurants);
+        currentPlaces = await searchNearbyPlaces(keyword);
+        renderPlaceList(currentPlaces);
         // 如果地图已经存在，同时更新地图上的标记
         if (map && window.AMap) {
             renderMapMarkers();
@@ -167,7 +169,7 @@ function renderMapMarkers() {
 
     // 添加南大校区标记
     const campusMarker = new AMap.Marker({
-        position: NJU_GULOU.center,
+        position: NJU_GULOU_CENTER_GCJ,
         title: NJU_GULOU.name,
         label: { content: NJU_GULOU.name, direction: 'top' },
     });
@@ -175,11 +177,11 @@ function renderMapMarkers() {
     markers.push(campusMarker);
 
     // 添加餐厅标记
-    currentRestaurants.forEach(poi => {
+    currentPlaces.forEach(poi => {
         const position = validLocation(poi.location);
         if (!position) return;
         const marker = new AMap.Marker({ position, title: poi.name });
-        marker.on('click', () => showRestaurantDetail(poi));
+        marker.on('click', () => showPlaceDetail(poi));
         map.add(marker);
         markers.push(marker);
     });
@@ -188,7 +190,7 @@ function renderMapMarkers() {
     if (markers.length > 1) {
         map.setFitView(markers, false, [60, 60, 60, 60], 16);
     } else {
-        map.setZoomAndCenter(15, NJU_GULOU.center);
+        map.setZoomAndCenter(15, NJU_GULOU_CENTER_GCJ);
     }
 }
 
@@ -233,7 +235,7 @@ export async function initMapPage() {
         mapContainer.innerHTML = '';
         map = new AMapInstance.Map(mapContainer, {
             zoom: 15,
-            center: NJU_GULOU.center,
+            center: NJU_GULOU_CENTER_GCJ,
             viewMode: '2D',
             resizeEnable: true,       // 允许窗口大小改变时自动调整
             showIndoorMap: false,     // 关闭室内地图，减少干扰
@@ -245,9 +247,9 @@ export async function initMapPage() {
         // 监听地图渲染完成事件（确保底图瓦片已加载）
         map.on('complete', () => {
             console.log('高德地图底图加载完成');
-            // 如果还没有餐厅数据，就加载一次
-            if (!currentRestaurants.length) {
-                refreshRestaurants().then(() => {
+            // 如果还没有场所数据，就加载一次
+            if (!currentPlaces.length) {
+                refreshPlaces().then(() => {
                     renderMapMarkers();
                 });
             } else {
@@ -257,8 +259,8 @@ export async function initMapPage() {
 
         // 如果地图已经完成（避免 complete 事件未触发），直接渲染标记
         if (map.getZoom()) {
-            if (!currentRestaurants.length) {
-                await refreshRestaurants();
+            if (!currentPlaces.length) {
+                await refreshPlaces();
             }
             renderMapMarkers();
         }
@@ -278,8 +280,8 @@ export async function initMapPage() {
 /**
  * 初始化餐厅页面（仅绑定刷新按钮，不直接加载地图）
  */
-export function initRestaurantsPage() {
-    const refreshBtn = document.getElementById('refreshRestosBtn');
-    if (refreshBtn) refreshBtn.onclick = () => refreshRestaurants();
-    refreshRestaurants();
+export function initPlacesPage() {
+    const refreshBtn = document.getElementById('refreshPlacesBtn');
+    if (refreshBtn) refreshBtn.onclick = () => refreshPlaces();
+    refreshPlaces();
 }

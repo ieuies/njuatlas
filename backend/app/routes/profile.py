@@ -43,7 +43,7 @@ def my_favorites():
             {
                 "id": row.id,
                 "created_at": _dt(row.created_at),
-                "restaurant": _place_payload(row.place),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]
@@ -65,7 +65,7 @@ def my_likes():
             {
                 "id": row.id,
                 "created_at": _dt(row.created_at),
-                "restaurant": _place_payload(row.place),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]
@@ -89,7 +89,7 @@ def my_reviews():
                 "content": row.content,
                 "rating": row.rating,
                 "created_at": _dt(row.created_at),
-                "restaurant": _place_payload(row.place),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]

@@ -24,16 +24,16 @@ function renderEmpty(sectionKey) {
     return `<div class="profile-empty">${sections[sectionKey].empty}</div>`;
 }
 
-function restaurantLine(restaurant) {
-    if (!restaurant) return '<span class="profile-muted">餐厅信息已不可用</span>';
-    const address = restaurant.address ? `<p>${escapeHtml(restaurant.address)}</p>` : '';
+function placeLine(place) {
+    if (!place) return '<span class="profile-muted">场所信息已不可用</span>';
+    const address = place.address ? `<p>${escapeHtml(place.address)}</p>` : '';
     return `
-        <strong>${escapeHtml(restaurant.name || '未命名餐厅')}</strong>
+        <strong>${escapeHtml(place.name || '未命名场所')}</strong>
         ${address}
     `;
 }
 
-function renderRestaurantItems(sectionKey, items) {
+function renderPlaceItems(sectionKey, items) {
     const container = document.getElementById(sections[sectionKey].listId);
     setCount(sectionKey, items.length);
     if (!items.length) {
@@ -43,7 +43,7 @@ function renderRestaurantItems(sectionKey, items) {
 
     container.innerHTML = items.map(item => `
         <article class="profile-list-item">
-            <div>${restaurantLine(item.restaurant)}</div>
+            <div>${placeLine(item.place)}</div>
             <time>${formatDate(item.created_at)}</time>
         </article>
     `).join('');
@@ -60,7 +60,7 @@ function renderReviews(items) {
     container.innerHTML = items.map(item => `
         <article class="profile-list-item">
             <div>
-                <strong>${escapeHtml(item.restaurant?.name || '未命名餐厅')}</strong>
+                <strong>${escapeHtml(item.place?.name || '未命名场所')}</strong>
                 <p>${escapeHtml(item.content)}</p>
                 ${item.rating ? `<span class="profile-tag">${item.rating} 分</span>` : ''}
             </div>
@@ -147,8 +147,8 @@ export async function refreshProfile() {
     if (!isLoggedIn()) return;
     renderUser();
     await Promise.all([
-        loadSection('favorites', getFavorites, items => renderRestaurantItems('favorites', items)),
-        loadSection('likes', getLikes, items => renderRestaurantItems('likes', items)),
+        loadSection('favorites', getFavorites, items => renderPlaceItems('favorites', items)),
+        loadSection('likes', getLikes, items => renderPlaceItems('likes', items)),
         loadSection('reviews', getReviews, renderReviews),
         loadSection('conversations', getConversations, renderConversations),
     ]);

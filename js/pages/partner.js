@@ -1,5 +1,6 @@
-import { showToast } from '../utils.js';
+import { showToast, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
+import { geocode } from '../api.js';
 
 // ============================================================
 // 全局状态
@@ -21,7 +22,7 @@ const categoryColors = {
     '电影搭子': { tag: 'tag-dianying', color: '#EC4899', icon: '🎬' },
 };
 
-// 南大附近各类型组局的模拟经纬度（用于地图标记）
+// 南大附近各类型组局的模拟经纬度（用于地图标记，WGS-84 兜底值）
 const locationCoords = [
     { name: '仙林金鹰', lnglat: [118.938, 32.106] },
     { name: '南大仙林体育馆', lnglat: [118.944, 32.113] },
@@ -30,6 +31,43 @@ const locationCoords = [
     { name: '南大杜厦图书馆', lnglat: [118.948, 32.118] },
     { name: '南苑食堂三楼', lnglat: [118.942, 32.108] },
 ];
+
+// 地理编码缓存：地点名 → [lng, lat]（GCJ-02，来自高德 API）
+const locationCoordCache = {};
+
+/**
+ * 调用后端地理编码 API，为所有地点名获取精确 GCJ-02 坐标。
+ * 结果写入 locationCoordCache，失败的地点静默跳过（后续用硬编码兜底）。
+ */
+async function loadAccurateCoords() {
+    // 去重收集所有地点名
+    const names = [...new Set(partnersData.map(p => p.location).filter(Boolean))];
+    if (!names.length) return;
+
+    const results = await Promise.allSettled(
+        names.map(async (name) => {
+            if (name === '线上' || !name.trim()) return null;
+            try {
+                const data = await geocode(name, '南京');
+                if (data.status === '1' && Array.isArray(data.geocodes) && data.geocodes.length > 0) {
+                    const [lng, lat] = data.geocodes[0].location.split(',').map(Number);
+                    if (Number.isFinite(lng) && Number.isFinite(lat)) {
+                        return { name, coords: [lng, lat] };
+                    }
+                }
+            } catch (e) {
+                console.warn(`地理编码失败 "${name}":`, e.message);
+            }
+            return null;
+        })
+    );
+
+    for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+            locationCoordCache[result.value.name] = result.value.coords;
+        }
+    }
+}
 
 // ============================================================
 // 示例数据
@@ -137,13 +175,25 @@ function initSampleData() {
 }
 
 // ============================================================
-// 工具：根据 location 字符串近似获取经纬度
+// 工具：根据 location 字符串获取准确的 GCJ-02 经纬度
 // ============================================================
 function guessLngLat(location) {
+    // 优先用高德地理编码 API 返回的精确 GCJ-02 坐标
+    if (locationCoordCache[location]) {
+        return locationCoordCache[location];
+    }
+    // 兜底：硬编码 WGS-84 → GCJ-02 转换
     const found = locationCoords.find(c => c.name === location);
-    if (found) return found.lnglat;
-    // 默认回到南大仙林中心
-    return [118.945, 32.112];
+    const wgs = found ? found.lnglat : [118.945, 32.112];
+    return wgs84ToGcj02(wgs[0], wgs[1]);
+}
+
+/** 获取地图初始中心点（GCJ-02） */
+function getMapCenter() {
+    // 尝试用南大仙林的精确坐标
+    const centerKey = Object.keys(locationCoordCache).find(k => k.includes('仙林'));
+    if (centerKey) return locationCoordCache[centerKey];
+    return wgs84ToGcj02(118.945, 32.112);
 }
 
 // ============================================================
@@ -184,7 +234,7 @@ function createMapInstance(containerId) {
 
     return new window.AMap.Map(containerId, {
         zoom: 14,
-        center: [118.945, 32.112],  // 南大仙林
+        center: getMapCenter(),  // 精确 GCJ-02 坐标（优先地理编码，兜底转换）
         mapStyle: 'amap://styles/light',
         resizeEnable: true,
     });
@@ -475,14 +525,15 @@ function initPartnerModal() {
 // ============================================================
 // 页面入口
 // ============================================================
-export function initPartnerPage() {
+export async function initPartnerPage() {
     if (!partnersData.length) {
         partnersData = initSampleData();
     }
     initPartnerModal();
     initFilters();
     renderWaterfall();
-    // 异步初始化地图（不阻塞页面渲染）
+    // 先获取精确坐标（GCJ-02），再初始化地图
+    await loadAccurateCoords();
     initPreviewMap();
 }
 
