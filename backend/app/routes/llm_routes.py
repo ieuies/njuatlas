@@ -4,7 +4,7 @@ from app import db
 from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.logging_utils import log_event
-from app.models import ConversationMessage, Favorite, Like, Restaurant, Review
+from app.models import ConversationMessage, Favorite, Like, Place, Review
 from app.rate_limit import limiter
 from app.services.amap import search_places
 from app.services.llm import chat_with_llm
@@ -17,12 +17,12 @@ llm_bp = Blueprint("llm", __name__, url_prefix="/api/llm")
 @llm_bp.route("/recommend_slogan", methods=["GET"])
 @limiter.limit("20 per minute")
 def recommend_slogan():
-    restaurant_id = positive_int(request.args.get("restaurant_id"), "restaurant_id")
-    restaurant = Restaurant.query.get(restaurant_id)
-    if not restaurant:
-        return error_response("餐厅不存在", 404, code="restaurant_not_found")
+    place_id = positive_int(request.args.get("place_id"), "place_id")
+    place = Place.query.get(place_id)
+    if not place:
+        return error_response("场所不存在", 404, code="place_not_found")
 
-    reviews = Review.query.filter_by(restaurant_id=restaurant_id).limit(3).all()
+    reviews = Review.query.filter_by(place_id=place_id).limit(3).all()
     reviews_text = ""
     if reviews:
         reviews_text = "已有食客评价：" + "；".join([r.content for r in reviews])
@@ -31,7 +31,7 @@ def recommend_slogan():
         {
             "role": "system",
             "content": (
-                "用一句不超过30字的口语评价描述这家餐厅。"
+                "用一句不超过30字的口语评价描述这家店。"
                 "语气自然，像朋友随口说的一样。"
                 "禁止使用 Markdown 语法，只输出纯文本。"
                 "不要用'这家店'、'它'等代词。"
@@ -39,15 +39,15 @@ def recommend_slogan():
         },
         {
             "role": "user",
-            "content": f"餐厅名称：{restaurant.name}\n地址：{restaurant.address or '未知'}\n{reviews_text}\n\n用一句话评价这家餐厅。",
+            "content": f"店名：{place.name}\n地址：{place.address or '未知'}\n{reviews_text}\n\n用一句话评价这家店。",
         },
     ]
 
     try:
         slogan = chat_with_llm(messages, temperature=0.7, max_tokens=60)
-        return jsonify({"restaurant_id": restaurant_id, "slogan": slogan})
+        return jsonify({"place_id": place_id, "slogan": slogan})
     except Exception as exc:
-        log_event(current_app.logger, "slogan_generation_failed", level="error", restaurant_id=restaurant_id, error=str(exc))
+        log_event(current_app.logger, "slogan_generation_failed", level="error", place_id=place_id, error=str(exc))
         return error_response("AI 生成失败", 502, code="llm_error")
 
 
@@ -90,15 +90,15 @@ def chat_recommend():
     liked = Like.query.filter_by(user_id=user_id).limit(10).all()
     favorited = Favorite.query.filter_by(user_id=user_id).limit(10).all()
 
-    restaurant_names = set()
+    place_names = set()
     for item in liked:
-        restaurant_names.add(item.restaurant.name)
+        place_names.add(item.place.name)
     for item in favorited:
-        restaurant_names.add(item.restaurant.name)
+        place_names.add(item.place.name)
 
     preference_text = ""
-    if restaurant_names:
-        preference_text = "这位用户喜欢的餐厅有：" + "、".join(list(restaurant_names)[:5]) + "。"
+    if place_names:
+        preference_text = "这位用户喜欢的场所有：" + "、".join(list(place_names)[:5]) + "。"
 
     # 意图判断：只有用户明确在找餐厅时才去高德搜索
     food_keywords = [

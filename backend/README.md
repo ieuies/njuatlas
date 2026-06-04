@@ -425,9 +425,9 @@ Authorization: Bearer <access_token>
     {
       "id": 1,
       "created_at": "2026-05-25T12:00:00",
-      "restaurant": {
+      "place": {
         "id": 10,
-        "name": "餐厅名",
+        "name": "场所名",
         "address": "地址",
         "location": "118.78,32.03",
         "poi_id": "B0..."
@@ -439,7 +439,7 @@ Authorization: Bearer <access_token>
 
 #### `GET /api/me/likes`
 
-返回我的点赞餐厅。响应结构与收藏类似。
+返回我的点赞场所。响应结构与收藏类似。
 
 #### `GET /api/me/reviews`
 
@@ -453,9 +453,9 @@ Authorization: Bearer <access_token>
       "content": "很好吃",
       "rating": 5,
       "created_at": "2026-05-25T12:00:00",
-      "restaurant": {
+      "place": {
         "id": 10,
-        "name": "餐厅名",
+        "name": "场所名",
         "address": "地址",
         "location": "118.78,32.03",
         "poi_id": "B0..."

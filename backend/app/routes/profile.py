@@ -1,8 +1,12 @@
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, current_app, g, jsonify, request
 
+from app import db
 from app.auth_utils import jwt_required
+from app.errors import error_response
+from app.logging_utils import log_event
 from app.models import ConversationMessage, Favorite, Like, Review
 from app.rate_limit import limiter
+from app.validators import clean_string, get_json_body
 
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/me")
@@ -12,15 +16,15 @@ def _dt(value):
     return value.isoformat() if value else None
 
 
-def _restaurant_payload(restaurant):
-    if not restaurant:
+def _place_payload(place):
+    if not place:
         return None
     return {
-        "id": restaurant.id,
-        "name": restaurant.name,
-        "address": restaurant.address,
-        "location": restaurant.location,
-        "poi_id": restaurant.poi_id,
+        "id": place.id,
+        "name": place.name,
+        "address": place.address,
+        "location": place.location,
+        "poi_id": place.poi_id,
     }
 
 
@@ -39,7 +43,7 @@ def my_favorites():
             {
                 "id": row.id,
                 "created_at": _dt(row.created_at),
-                "restaurant": _restaurant_payload(row.restaurant),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]
@@ -61,7 +65,7 @@ def my_likes():
             {
                 "id": row.id,
                 "created_at": _dt(row.created_at),
-                "restaurant": _restaurant_payload(row.restaurant),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]
@@ -85,7 +89,7 @@ def my_reviews():
                 "content": row.content,
                 "rating": row.rating,
                 "created_at": _dt(row.created_at),
-                "restaurant": _restaurant_payload(row.restaurant),
+                "place": _place_payload(row.place),
             }
             for row in rows
         ]
@@ -122,3 +126,75 @@ def my_conversations():
             session["last_at"] = _dt(message.created_at)
 
     return jsonify({"items": list(sessions.values())})
+
+
+def _profile_payload(user):
+    """返回当前用户的完整 profile。"""
+    import json
+    tags = []
+    if user.tags:
+        try:
+            tags = json.loads(user.tags)
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "email_verified": bool(user.email_verified),
+        "bio": user.bio or "",
+        "tags": tags,
+        "avatar_url": user.avatar_url or "",
+        "created_at": _dt(user.created_at),
+        "updated_at": _dt(user.updated_at),
+    }
+
+
+@profile_bp.route("/profile", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def get_profile():
+    """获取当前登录用户的个人资料。"""
+    return jsonify(_profile_payload(g.current_user))
+
+
+@profile_bp.route("/profile", methods=["PUT"])
+@jwt_required
+@limiter.limit("30 per minute")
+def update_profile():
+    """修改个人资料（username、bio、tags）。"""
+    import json
+    data = get_json_body(request)
+
+    username = clean_string(data.get("username"), "username", max_length=50)
+    bio = clean_string(data.get("bio"), "bio", max_length=300)
+    tags_raw = data.get("tags")
+
+    user = g.current_user
+
+    if username and username != user.username:
+        from app.models import User
+        if User.query.filter_by(username=username).first():
+            return error_response("用户名已被使用", 409, code="username_exists")
+        user.username = username
+
+    if bio is not None:
+        user.bio = bio
+
+    if tags_raw is not None:
+        if not isinstance(tags_raw, list):
+            return error_response("tags 必须是数组", 400, code="invalid_tags")
+        if len(tags_raw) > 20:
+            return error_response("标签最多 20 个", 400, code="too_many_tags")
+        for t in tags_raw:
+            if not isinstance(t, str) or len(t) > 20:
+                return error_response("每个标签最长 20 个字符", 400, code="invalid_tag")
+        user.tags = json.dumps(tags_raw, ensure_ascii=False)
+
+    db.session.commit()
+    log_event(
+        current_app.logger,
+        "profile_updated",
+        user_id=user.id,
+    )
+    return jsonify(_profile_payload(user))

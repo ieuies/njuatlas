@@ -37,14 +37,21 @@ def _normalize_database_url(value):
     """规范化数据库连接字符串。
 
     本地开发不配置 DATABASE_URL 时，Flask-SQLAlchemy 会使用默认 SQLite 文件。
-    Render PostgreSQL 通常会提供 DATABASE_URL。部分平台给出的旧格式可能是
-    postgres://，SQLAlchemy 推荐使用 postgresql://，这里做一次兼容转换。
+    Render PostgreSQL 通常会提供 DATABASE_URL。这里做三层兼容转换：
+    1. postgres:// → postgresql+psycopg://（旧格式，如 Render）
+    2. postgresql:// → postgresql+psycopg://（Neon 默认格式）
+    3. 强制使用 psycopg 3.x 驱动，因为 Windows + Python 3.14 不支持 psycopg2
     """
     if not value:
         return None
 
+    # 统一转换为 postgresql+psycopg 协议（使用 psycopg v3 驱动）
+    if value.startswith("postgresql+psycopg://"):
+        return value  # 已经是正确的格式
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value[len("postgresql://"):]
     if value.startswith("postgres://"):
-        return "postgresql://" + value[len("postgres://"):]
+        return "postgresql+psycopg://" + value[len("postgres://"):]
 
     return value
 
@@ -77,6 +84,17 @@ class Config:
     EMAIL_CODE_MAX_ATTEMPTS = _get_int_env("EMAIL_CODE_MAX_ATTEMPTS", 5)
     RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
     MAIL_FROM = _get_env("MAIL_FROM", "no-reply@njuatlas.local")
+
+    # ── 帖子热度与过期阈值（均可通过 .env 覆盖）─────────────────
+    HOT_NOW_BOOST = float(_get_env("HOT_NOW_BOOST", "2.0"))
+    HOT_NOW_BOOST_WINDOW_HOURS = _get_int_env("HOT_NOW_BOOST_WINDOW_HOURS", 2)
+    HOT_NOW_EXPIRY_HOURS = _get_int_env("HOT_NOW_EXPIRY_HOURS", 3)
+    HOT_LONG_TERM_HALF_LIFE_HOURS = _get_int_env("HOT_LONG_TERM_HALF_LIFE_HOURS", 48)
+    HOT_SCHEDULED_HALF_LIFE_HOURS = _get_int_env("HOT_SCHEDULED_HALF_LIFE_HOURS", 24)
+    HOT_WEIGHT_VIEW = _get_int_env("HOT_WEIGHT_VIEW", 1)
+    HOT_WEIGHT_LIKE = _get_int_env("HOT_WEIGHT_LIKE", 3)
+    HOT_WEIGHT_COMMENT = _get_int_env("HOT_WEIGHT_COMMENT", 5)
+    HOT_WEIGHT_PARTICIPANT = _get_int_env("HOT_WEIGHT_PARTICIPANT", 10)
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 

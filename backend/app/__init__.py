@@ -26,6 +26,11 @@ def create_app():
         basedir = os.path.abspath(os.path.dirname(__file__))
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "..", "foodmap.db")
 
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+
     validate_config(app)
 
     db.init_app(app)
@@ -36,6 +41,7 @@ def create_app():
     from app.routes.auth import auth_bp
     from app.routes.interactions import inter_bp
     from app.routes.llm_routes import llm_bp
+    from app.routes.note_routes import note_bp
     from app.routes.places import places_bp
     from app.routes.profile import profile_bp
 
@@ -43,6 +49,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(inter_bp)
     app.register_blueprint(llm_bp)
+    app.register_blueprint(note_bp)
     app.register_blueprint(profile_bp)
     register_error_handlers(app)
     init_rate_limiter(app)

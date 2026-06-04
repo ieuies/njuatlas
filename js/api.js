@@ -53,7 +53,7 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
     }
 }
 
-// 用户认证
+// ── 用户认证 ──
 export async function register(username, email, password, code) {
     return request('/user/register', 'POST', { username, email, password, code }, false);
 }
@@ -85,46 +85,120 @@ export async function changePassword(currentPassword, newPassword) {
     return request('/user/password/change', 'POST', { current_password: currentPassword, new_password: newPassword });
 }
 
-// 餐厅互动
-export async function addRestaurant(name, address, location, poiId) {
-    return request('/restaurant', 'POST', { name, address, location, poi_id: poiId });
+// ── 个人资料（阶段二新增） ──
+export async function getMyProfile() {
+    return request('/me/profile', 'GET');
 }
-export async function addReview(restaurantId, content, rating = null) {
-    return request('/review', 'POST', { restaurant_id: restaurantId, content, rating });
-}
-export async function toggleLike(restaurantId) {
-    return request('/like', 'POST', { restaurant_id: restaurantId });
-}
-export async function toggleFavorite(restaurantId) {
-    return request('/favorite', 'POST', { restaurant_id: restaurantId });
-}
-export async function getRestaurantStats(restaurantId) {
-    return request(`/restaurant/${restaurantId}/stats`, 'GET');
+export async function updateMyProfile({ username, bio, tags } = {}) {
+    return request('/me/profile', 'PUT', { username, bio, tags });
 }
 
-// 地图搜索
-export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null) {
+// ── 场所互动 ──
+export async function addPlace(name, address, location, poiId, category = null) {
+    return request('/place', 'POST', { name, address, location, poi_id: poiId, category });
+}
+export async function addReview(placeId, content, rating = null) {
+    return request('/review', 'POST', { place_id: placeId, content, rating });
+}
+export async function toggleLike(placeId) {
+    return request('/like', 'POST', { place_id: placeId });
+}
+export async function toggleFavorite(placeId) {
+    return request('/favorite', 'POST', { place_id: placeId });
+}
+export async function getPlaceStats(placeId) {
+    return request(`/place/${placeId}/stats`, 'GET', null, false);
+}
+
+// ── 地图搜索 ──
+export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null) {
     let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
     if (location) url += `&location=${encodeURIComponent(location)}`;
     if (radius) url += `&radius=${encodeURIComponent(radius)}`;
+    if (types) url += `&types=${encodeURIComponent(types)}`;
     return request(url, 'GET', null, false);
 }
 export async function getHotAreas() {
     return request('/places/hot_areas', 'GET', null, false);
 }
+export async function getPlaceCategories() {
+    return request('/places/categories', 'GET', null, false);
+}
+export async function geocode(address, city = null) {
+    let url = `/places/geocode?address=${encodeURIComponent(address)}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
+    return request(url, 'GET', null, false);
+}
+export async function regeocode(location) {
+    return request(`/places/regeocode?location=${encodeURIComponent(location)}`, 'GET', null, false);
+}
 
-// AI 聊天
+// ── AI 聊天 ──
 export async function chatRecommend(message, sessionId = null, city = '南京') {
     const body = { message, city };
     if (sessionId) body.session_id = sessionId;
     return request('/llm/chat_recommend', 'POST', body);
 }
-export async function getRecommendSlogan(restaurantId) {
-    return request(`/llm/recommend_slogan?restaurant_id=${restaurantId}`, 'GET', null, false);
+export async function getRecommendSlogan(placeId) {
+    return request(`/llm/recommend_slogan?place_id=${placeId}`, 'GET', null, false);
 }
 
-// 个人中心
+// ── 帖子系统（搭子论坛） ──
+export async function createPost({ type, title, content, tags, place_id, event_time, location, location_name } = {}) {
+    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, location, location_name });
+}
+export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size } = {}) {
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
+    if (tags) params.set('tags', Array.isArray(tags) ? tags.join(',') : tags);
+    if (place_id) params.set('place_id', place_id);
+    if (sort) params.set('sort', sort);
+    if (lat) params.set('lat', lat);
+    if (lng) params.set('lng', lng);
+    if (radius) params.set('radius', radius);
+    if (user_id) params.set('user_id', user_id);
+    if (page) params.set('page', page);
+    if (page_size) params.set('page_size', page_size);
+    const qs = params.toString();
+    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, false);
+}
+export async function getPost(postId) {
+    return request(`/posts/${postId}`, 'GET', null, false);
+}
+export async function updatePost(postId, data) {
+    return request(`/posts/${postId}`, 'PUT', data);
+}
+export async function deletePost(postId) {
+    return request(`/posts/${postId}`, 'DELETE');
+}
+export async function togglePostLike(postId) {
+    return request(`/posts/${postId}/like`, 'POST');
+}
+export async function addPostComment(postId, content, parentId = null) {
+    return request(`/posts/${postId}/comments`, 'POST', { content, parent_id: parentId });
+}
+export async function getPostComments(postId, page = 1, pageSize = 20) {
+    return request(`/posts/${postId}/comments?page=${page}&page_size=${pageSize}`, 'GET', null, false);
+}
+export async function participateEvent(postId, status = 'going') {
+    return request(`/posts/${postId}/participate`, 'POST', { status });
+}
+export async function listTags(category = null) {
+    const qs = category ? `?category=${category}` : '';
+    return request(`/tags${qs}`, 'GET', null, false);
+}
+export async function getMyTags() {
+    return request('/me/tags', 'GET');
+}
+export async function setMyTags(tags) {
+    return request('/me/tags', 'PUT', { tags });
+}
+export async function getPlacePosts(placeId, page = 1, pageSize = 10) {
+    return request(`/places/${placeId}/posts?page=${page}&page_size=${pageSize}`, 'GET', null, false);
+}
+
+// ── 个人中心 ──
 export async function getFavorites() {
     return request('/me/favorites', 'GET');
 }

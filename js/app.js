@@ -4,6 +4,7 @@ import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { chatRecommend } from './api.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
+import { showHomePage } from './pages/home.js';
 import { loadAmapScript } from './config.js';
 
 let currentPage = 'partner';
@@ -257,6 +258,7 @@ function init() {
     loadAmapScript().catch(err => console.warn('AMap load failed:', err));
 
     // 初始化各模块
+    showHomePage();          // 绑定登录/注册/找回密码等按钮事件
     initBottomTabs();
     initAIFloat();
     initFabButton();
@@ -274,11 +276,6 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     updateNavBar();
     switchPage('partner');
     showToast('已退出登录');
-});
-
-document.getElementById('showLoginBtn')?.addEventListener('click', () => {
-    const modal = document.getElementById('authModal');
-    if (modal) modal.style.display = 'flex';
 });
 
 document.getElementById('closeAuthModalBtn')?.addEventListener('click', () => {

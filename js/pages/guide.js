@@ -74,9 +74,9 @@ export async function loadGuideData() {
     try {
         // 1. 从高德搜索一些餐厅（关键词：美食，南京仙林附近）
         const searchResult = await searchPlaces('美食', '南京', null, 1, 10);
-        let restaurants = [];
+        let amapPois = [];
         if (searchResult.status === '1' && Array.isArray(searchResult.pois)) {
-            restaurants = searchResult.pois.slice(0, 6).map(poi => ({
+            amapPois = searchResult.pois.slice(0, 6).map(poi => ({
                 name: poi.name,
                 desc: poi.address || '',
                 image: poi.photos?.[0]?.url || `https://picsum.photos/400/200?random=${poi.id}`,
@@ -86,7 +86,7 @@ export async function loadGuideData() {
         }
 
         // 2. 合并静态玩乐数据
-        const allItems = [...restaurants, ...funSpots];
+        const allItems = [...amapPois, ...funSpots];
         // 简单打乱顺序，让美食和玩乐混合展示
         for (let i = allItems.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
