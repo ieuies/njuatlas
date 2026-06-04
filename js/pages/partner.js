@@ -1,208 +1,100 @@
-import { showToast, wgs84ToGcj02 } from '../utils.js';
+import { showToast, formatDate, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
-import { geocode } from '../api.js';
+import { listPosts, createPost, participateEvent, listTags } from '../api.js';
 
 // ============================================================
 // 全局状态
 // ============================================================
-let partnersData = [];
-let currentCategory = 'all';
+let partnersData = [];       // 当前显示的帖子列表（来自后端 API）
+let allTags = [];            // 后端返回的所有标签
+let currentCategory = 'all'; // 当前选中的分类标签名
 
-// 高德地图实例（预览 & 全屏）
+// 高德地图实例
 let previewMap = null;
 let fullMapInstance = null;
-let previewMarkers = [];
 
-// 分类 -> 颜色 / 图标映射
-const categoryColors = {
-    '饭搭子': { tag: 'tag-fandazi', color: '#F59E0B', icon: '🍜' },
-    '运动搭子': { tag: 'tag-yundong', color: '#10B981', icon: '🏃' },
-    '学习搭子': { tag: 'tag-xuexi', color: '#3B82F6', icon: '📚' },
-    '游戏搭子': { tag: 'tag-youxi', color: '#7C3AED', icon: '🎮' },
-    '电影搭子': { tag: 'tag-dianying', color: '#EC4899', icon: '🎬' },
-};
+// 动态分类颜色（根据标签名生成 HSL 色相）
+const categoryColorCache = {};
+function _categoryStyle(cat) {
+    if (!cat) return { color: '#999', icon: '📍', tagClass: 'tag-default' };
+    if (!categoryColorCache[cat]) {
+        const hue = [...cat].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+        categoryColorCache[cat] = {
+            color: `hsl(${hue}, 65%, 50%)`,
+            icon: '📍',
+            tagClass: 'tag-dynamic',
+        };
+    }
+    return categoryColorCache[cat];
+}
 
-// 南大附近各类型组局的模拟经纬度（用于地图标记，WGS-84 兜底值）
-const locationCoords = [
-    { name: '仙林金鹰', lnglat: [118.938, 32.106] },
-    { name: '南大仙林体育馆', lnglat: [118.944, 32.113] },
-    { name: '线上', lnglat: [118.92, 32.09] },
-    { name: '新街口德基', lnglat: [118.784, 32.044] },
-    { name: '南大杜厦图书馆', lnglat: [118.948, 32.118] },
-    { name: '南苑食堂三楼', lnglat: [118.942, 32.108] },
-];
-
-// 地理编码缓存：地点名 → [lng, lat]（GCJ-02，来自高德 API）
-const locationCoordCache = {};
-
-/**
- * 调用后端地理编码 API，为所有地点名获取精确 GCJ-02 坐标。
- * 结果写入 locationCoordCache，失败的地点静默跳过（后续用硬编码兜底）。
- */
-async function loadAccurateCoords() {
-    // 去重收集所有地点名
-    const names = [...new Set(partnersData.map(p => p.location).filter(Boolean))];
-    if (!names.length) return;
-
-    const results = await Promise.allSettled(
-        names.map(async (name) => {
-            if (name === '线上' || !name.trim()) return null;
-            try {
-                const data = await geocode(name, '南京');
-                if (data.status === '1' && Array.isArray(data.geocodes) && data.geocodes.length > 0) {
-                    const [lng, lat] = data.geocodes[0].location.split(',').map(Number);
-                    if (Number.isFinite(lng) && Number.isFinite(lat)) {
-                        return { name, coords: [lng, lat] };
-                    }
-                }
-            } catch (e) {
-                console.warn(`地理编码失败 "${name}":`, e.message);
-            }
-            return null;
-        })
-    );
-
-    for (const result of results) {
-        if (result.status === 'fulfilled' && result.value) {
-            locationCoordCache[result.value.name] = result.value.coords;
+// ============================================================
+// 数据加载：从后端 API 获取帖子列表
+// ============================================================
+async function loadPostsFromAPI() {
+    try {
+        const params = { sort: 'hot', page_size: 50 };
+        if (currentCategory !== 'all') {
+            params.tags = currentCategory;  // 后端 AND 匹配
         }
+        const result = await listPosts(params);
+        partnersData = (result.items || []).map(_mapPost);
+        return partnersData;
+    } catch (err) {
+        console.warn('加载帖子失败，使用空列表:', err.message);
+        partnersData = [];
+        return [];
     }
 }
 
-// ============================================================
-// 示例数据
-// ============================================================
-function initSampleData() {
-    const now = new Date();
-    const timeStr = (offset) => {
-        const d = new Date(now);
-        d.setDate(d.getDate() - offset);
-        return `${d.getMonth() + 1}/${d.getDate()}`;
+/** 将后端帖子格式映射为前端卡片和地图所需的字段 */
+function _mapPost(p) {
+    return {
+        id: p.id,
+        type: p.type,
+        category: (p.tags && p.tags.length > 0) ? p.tags[0] : '其他',
+        tags: p.tags || [],
+        title: p.title,
+        description: p.content,
+        location: p.location_name || '',
+        lnglat: p.location ? p.location.split(',').map(Number) : null,  // "lng,lat"
+        urgency: p.urgency || null,
+        time: _formatPostTime(p.event_time, p.urgency),
+        publisher: p.username || '匿名同学',
+        members: p.participant_count || 0,
+        slots: 0,  // 后端暂无人数上限字段，预留
+        likeCount: p.like_count || 0,
+        commentCount: p.comment_count || 0,
+        hotScore: p.hot_score || 0,
+        isLiked: p.is_liked || false,
+        isOwner: p.is_owner || false,
+        participationStatus: p.participation_status,
+        createdAt: formatDate(p.created_at),
+        nearby: '',  // 预留：后续可关联场所推荐
     };
-
-    return [
-        {
-            id: '1',
-            category: '饭搭子',
-            title: '周五晚仙林剧本杀 缺1人',
-            description: '推理本《雾鸦馆》，新手友好，AA制，金鹰旁边那家店',
-            location: '仙林金鹰',
-            time: '周五 19:00',
-            budget: 'AA/80元',
-            slots: 1,
-            publisher: '张同学',
-            contact: 'zhang123@nju.edu.cn',
-            members: 4,
-            createdAt: timeStr(0),
-            nearby: '附近推荐：海底捞火锅 · 步行5分钟',
-        },
-        {
-            id: '2',
-            category: '运动搭子',
-            title: '周六下午羽毛球 二缺二',
-            description: '仙林体育馆3号场，自带球拍，中等水平即可',
-            location: '南大仙林体育馆',
-            time: '周六 14:00',
-            budget: '场地AA/20元',
-            slots: 2,
-            publisher: '李同学',
-            contact: 'lixiao@nju.edu.cn',
-            members: 2,
-            createdAt: timeStr(1),
-            nearby: '附近推荐：南大游泳馆 · 步行3分钟',
-        },
-        {
-            id: '3',
-            category: '游戏搭子',
-            title: '王者荣耀开黑 缺中路',
-            description: '周末五排，缺中路和辅助，段位星耀以上，心态好不喷人',
-            location: '线上',
-            time: '周末晚上',
-            budget: '免费',
-            slots: 2,
-            publisher: '陈同学',
-            contact: 'chenchen@nju.edu.cn',
-            members: 3,
-            createdAt: timeStr(2),
-            nearby: '',
-        },
-        {
-            id: '4',
-            category: '电影搭子',
-            title: '周六新街口看《好东西》',
-            description: '德基影城下午场，喜欢剧情片的一起，看完可以讨论',
-            location: '新街口德基',
-            time: '周六 15:00',
-            budget: 'AA/60元',
-            slots: 2,
-            publisher: '周同学',
-            contact: 'zhoumo@nju.edu.cn',
-            members: 2,
-            createdAt: timeStr(3),
-            nearby: '附近推荐：新街口美食街 · 步行2分钟',
-        },
-        {
-            id: '5',
-            category: '学习搭子',
-            title: '高数期末冲刺自习',
-            description: '图书馆自习，每天19:00-22:00，互相监督答疑，仅限仙林校区',
-            location: '南大杜厦图书馆',
-            time: '每天 19:00-22:00',
-            budget: '免费',
-            slots: 3,
-            publisher: '王同学',
-            contact: 'wangrun@nju.edu.cn',
-            members: 3,
-            createdAt: timeStr(4),
-            nearby: '附近推荐：图书馆咖啡角',
-        },
-        {
-            id: '6',
-            category: '饭搭子',
-            title: '南苑食堂火锅拼桌',
-            description: '今晚18:00出发，重庆老火锅，AA制，人均不超过50',
-            location: '南苑食堂三楼',
-            time: '今晚 18:00',
-            budget: 'AA/50元',
-            slots: 2,
-            publisher: '赵同学',
-            contact: 'zhao@nju.edu.cn',
-            members: 3,
-            createdAt: timeStr(0),
-            nearby: '附近推荐：南苑奶茶店 · 步行1分钟',
-        },
-    ];
 }
 
-// ============================================================
-// 工具：根据 location 字符串获取准确的 GCJ-02 经纬度
-// ============================================================
-function guessLngLat(location) {
-    // 优先用高德地理编码 API 返回的精确 GCJ-02 坐标
-    if (locationCoordCache[location]) {
-        return locationCoordCache[location];
-    }
-    // 兜底：硬编码 WGS-84 → GCJ-02 转换
-    const found = locationCoords.find(c => c.name === location);
-    const wgs = found ? found.lnglat : [118.945, 32.112];
-    return wgs84ToGcj02(wgs[0], wgs[1]);
-}
-
-/** 获取地图初始中心点（GCJ-02） */
-function getMapCenter() {
-    // 尝试用南大仙林的精确坐标
-    const centerKey = Object.keys(locationCoordCache).find(k => k.includes('仙林'));
-    if (centerKey) return locationCoordCache[centerKey];
-    return wgs84ToGcj02(118.945, 32.112);
+function _formatPostTime(iso, urgency) {
+    // urgency='now' → 显示"⚡ 立即"
+    if (urgency === 'now') return '⚡ 立即';
+    // urgency='long_term' → 显示"📅 长期有效"
+    if (urgency === 'long_term') return '📅 长期有效';
+    // scheduled 或旧数据 → 格式化具体时间
+    if (!iso) return urgency === 'scheduled' ? '已设定' : '';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffDays = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+    const time = d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', weekday: 'short' });
+    if (diffDays === 0) return `今天 ${time.split(' ')[1] || ''}`;
+    if (diffDays === 1) return `明天 ${time.split(' ')[1] || ''}`;
+    return time;
 }
 
 // ============================================================
 // 高德地图初始化
 // ============================================================
 async function ensureAMap() {
-    // 高德JSAPI已通过 <script> 全局引入，检查 window.AMap
     if (window.AMap) return window.AMap;
-    // 等待最多5秒
     return new Promise((resolve, reject) => {
         let elapsed = 0;
         const check = setInterval(() => {
@@ -219,77 +111,70 @@ async function ensureAMap() {
     });
 }
 
-/**
- * 创建地图实例
- * @param {string} containerId - DOM容器ID
- * @returns {Object} AMap instance
- */
 function createMapInstance(containerId) {
-    // 如果已经存在实例，销毁重建
     const container = document.getElementById(containerId);
     if (!container) return null;
-
-    // 清空容器（防止残留）
     container.innerHTML = '';
+
+    // 默认中心：仙林大学城
+    const center = wgs84ToGcj02(118.945, 32.112);
 
     return new window.AMap.Map(containerId, {
         zoom: 14,
-        center: getMapCenter(),  // 精确 GCJ-02 坐标（优先地理编码，兜底转换）
+        center: center,
         mapStyle: 'amap://styles/light',
         resizeEnable: true,
     });
 }
 
-/**
- * 在地图上绘制标记
- * @param {Object} map - AMap实例
- * @param {Array} data - 组局数据
- * @returns {Array} markers
- */
 function addMarkersToMap(map, data) {
-    // 清除地图上旧标记
     map.clearMap();
+    if (!data.length) return [];
 
     const markers = [];
+    data.forEach(post => {
+        // 优先用后端返回的 GCJ-02 坐标；没有坐标的帖子不画在地图上
+        const coords = post.lnglat;
+        if (!coords || coords.length < 2 || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) {
+            return;
+        }
+        const style = _categoryStyle(post.category);
 
-    data.forEach(partner => {
-        const [lng, lat] = guessLngLat(partner.location);
-        const colors = categoryColors[partner.category] || { color: '#999', icon: '📍' };
-
-        // 创建标记点
         const marker = new window.AMap.Marker({
-            position: [lng, lat],
-            title: partner.title,
+            position: coords,
+            title: post.title,
             icon: new window.AMap.Icon({
                 size: new window.AMap.Size(32, 32),
-                image: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='${encodeURIComponent(colors.color)}' stroke='white' stroke-width='3' /%3E%3C/svg%3E`,
+                image: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='${encodeURIComponent(style.color)}' stroke='white' stroke-width='3' /%3E%3C/svg%3E`,
                 imageSize: new window.AMap.Size(32, 32),
             }),
             offset: new window.AMap.Pixel(-16, -16),
             zIndex: 100,
         });
 
-        // 点击标记弹出信息窗体
         marker.on('click', () => {
             const infoContent = `
                 <div class="amap-info-content" style="max-width:240px;font-size:0.85rem;">
-                    <strong style="color:${colors.color};">${escapeHtml(partner.category)}</strong>
-                    <div style="font-weight:700;margin:4px 0;">${escapeHtml(partner.title)}</div>
-                    <div style="color:#666;">📍 ${escapeHtml(partner.location)}<br>⏰ ${escapeHtml(partner.time)}<br>💰 ${escapeHtml(partner.budget)}</div>
-                    <button onclick="window.__mapContactClick('${escapeHtml(partner.contact)}')" style="margin-top:8px;padding:6px 14px;background:linear-gradient(135deg,#5B2E8C,#EC4899);color:white;border:none;border-radius:14px;cursor:pointer;font-size:0.8rem;">👋 联系TA</button>
+                    <strong style="color:${style.color};">${escapeHtml(post.category)}</strong>
+                    <div style="font-weight:700;margin:4px 0;">${escapeHtml(post.title)}</div>
+                    <div style="color:#666;">${escapeHtml(post.description).substring(0, 80)}</div>
+                    ${post.time ? `<div>⏰ ${escapeHtml(post.time)}</div>` : ''}
+                    <button id="map-join-${post.id}" style="margin-top:8px;padding:6px 14px;background:linear-gradient(135deg,#5B2E8C,#EC4899);color:white;border:none;border-radius:14px;cursor:pointer;font-size:0.8rem;">👋 我要参加</button>
                 </div>
             `;
-
             const infoWindow = new window.AMap.InfoWindow({
                 content: infoContent,
                 offset: new window.AMap.Pixel(0, -36),
             });
-            infoWindow.open(map, [lng, lat]);
+            infoWindow.open(map, coords);
 
-            // 绑定全局联系按钮回调
-            window.__mapContactClick = (contact) => {
-                showToast(`联系方式: ${contact}`, 3000);
-            };
+            // 绑定「我要参加」按钮
+            setTimeout(() => {
+                const btn = document.getElementById(`map-join-${post.id}`);
+                if (btn) {
+                    btn.addEventListener('click', () => handleParticipate(post.id));
+                }
+            }, 100);
         });
 
         marker.setMap(map);
@@ -300,7 +185,7 @@ function addMarkersToMap(map, data) {
 }
 
 // ============================================================
-// 预览地图
+// 地图初始化入口
 // ============================================================
 async function initPreviewMap() {
     try {
@@ -311,7 +196,7 @@ async function initPreviewMap() {
         if (previewMap) {
             const filtered = currentCategory === 'all'
                 ? partnersData
-                : partnersData.filter(p => p.category === currentCategory);
+                : partnersData.filter(p => p.tags.includes(currentCategory));
             addMarkersToMap(previewMap, filtered);
         }
     } catch (err) {
@@ -326,18 +211,17 @@ async function refreshPreviewMarkers() {
     }
     const filtered = currentCategory === 'all'
         ? partnersData
-        : partnersData.filter(p => p.category === currentCategory);
+        : partnersData.filter(p => p.tags.includes(currentCategory));
     addMarkersToMap(previewMap, filtered);
 }
 
 // ============================================================
-// 全屏地图（供 app.js 调用）
+// 全屏地图
 // ============================================================
 async function initFullMapMarkers() {
     try {
         await ensureAMap();
         const container = document.getElementById('fullMap');
-        // 如果容器不可见或尺寸为0，等布局完成后再初始化
         if (!container || container.offsetWidth === 0) {
             await new Promise(r => setTimeout(r, 200));
         }
@@ -346,7 +230,6 @@ async function initFullMapMarkers() {
         }
         if (fullMapInstance) {
             addMarkersToMap(fullMapInstance, partnersData);
-            // 触发地图重新计算大小（页面从 display:none 切回后需要）
             setTimeout(() => fullMapInstance?.resize(), 100);
         }
     } catch (err) {
@@ -354,13 +237,10 @@ async function initFullMapMarkers() {
     }
 }
 
-// 暴露给全局
 window.initFullMapMarkers = initFullMapMarkers;
-window.partnersData = partnersData;
-window.categoryColors = categoryColors;
 
 // ============================================================
-// 瀑布流卡片
+// 瀑布流卡片渲染
 // ============================================================
 function renderWaterfall() {
     const container = document.getElementById('partnerWaterfall');
@@ -368,7 +248,7 @@ function renderWaterfall() {
 
     const filtered = currentCategory === 'all'
         ? partnersData
-        : partnersData.filter(p => p.category === currentCategory);
+        : partnersData.filter(p => p.tags.includes(currentCategory));
 
     if (filtered.length === 0) {
         container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary);grid-column:1/-1;">暂无组局，快来发起第一个吧~</div>';
@@ -376,67 +256,108 @@ function renderWaterfall() {
     }
 
     container.innerHTML = filtered.map(p => {
-        const colors = categoryColors[p.category] || { tag: 'tag-fandazi', color: '#999', icon: '📍' };
+        const style = _categoryStyle(p.category);
         return `
         <div class="partner-card" data-id="${p.id}">
             <div class="partner-card-content">
-                <span class="partner-card-tag ${colors.tag}">${colors.icon} ${p.category}</span>
-                <div class="partner-card-title">${escapeHtml(p.title)}</div>
-                <div class="partner-card-members">
-                    <div class="member-avatars">
-                        ${Array(Math.min(p.members, 4)).fill('').map((_, i) =>
-                            `<div class="member-avatar" style="background:hsl(${280 + i * 40}, 50%, 80%);"><i class="fas fa-user"></i></div>`
-                        ).join('')}
-                    </div>
-                    <span class="member-count">已有${p.members}人 · 缺${p.slots}人</span>
+                <div class="partner-card-tags">
+                    ${p.tags.map(t => `<span class="partner-card-tag">📍 ${escapeHtml(t)}</span>`).join('')}
                 </div>
+                <div class="partner-card-title">${escapeHtml(p.title)}</div>
+                <div class="partner-card-desc">${escapeHtml(p.description).substring(0, 100)}</div>
                 <div class="partner-card-meta">
                     ${p.location ? `<span><i class="fas fa-map-pin"></i> ${escapeHtml(p.location)}</span>` : ''}
                     ${p.time ? `<span><i class="fas fa-clock"></i> ${escapeHtml(p.time)}</span>` : ''}
-                    ${p.budget ? `<span><i class="fas fa-yen-sign"></i> ${escapeHtml(p.budget)}</span>` : ''}
+                    <span><i class="fas fa-user"></i> ${p.publisher}</span>
                 </div>
-                <button class="join-btn" data-id="${p.id}">👋 上车</button>
-                ${p.nearby ? `<div class="card-nearby"><i class="fas fa-utensils"></i> ${escapeHtml(p.nearby)}</div>` : ''}
+                <div class="partner-card-stats">
+                    <span>❤️ ${p.likeCount}</span>
+                    <span>💬 ${p.commentCount}</span>
+                    <span>👥 ${p.members}人参加</span>
+                </div>
+                <button class="join-btn" data-id="${p.id}">
+                    ${p.type === 'event' ? '✅ 我要参加' : '👋 我也感兴趣'}
+                </button>
             </div>
         </div>`;
     }).join('');
 
-    // 绑定「上车」按钮
+    // 「参加」按钮
     container.querySelectorAll('.join-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const pid = btn.getAttribute('data-id');
-            const partner = partnersData.find(p => p.id === pid);
-            if (partner) {
-                showToast(`联系TA: ${partner.contact}`, 3000);
-            }
+            handleParticipate(parseInt(btn.getAttribute('data-id')));
         });
     });
 
-    // 绑定卡片点击 → 显示联系人
+    // 卡片点击 → 发 Toast 预览（后续可改为跳详情页）
     container.querySelectorAll('.partner-card').forEach(card => {
         card.addEventListener('click', () => {
-            const pid = card.getAttribute('data-id');
-            const partner = partnersData.find(p => p.id === pid);
-            if (partner) {
-                showToast(`「${partner.title}」— 联系方式: ${partner.contact}`, 3000);
+            const pid = parseInt(card.getAttribute('data-id'));
+            const post = partnersData.find(p => p.id === pid);
+            if (post) {
+                showToast(`「${post.title}」— ${post.publisher} 发布 · ${post.likeCount}赞 ${post.commentCount}评`, 3000);
             }
         });
     });
 }
 
 // ============================================================
-// 分类筛选
+// 参与活动（"上车" / "我要参加"）
 // ============================================================
-function initFilters() {
+async function handleParticipate(postId) {
+    if (!isLoggedIn()) {
+        showToast('请先登录');
+        const authModal = document.getElementById('authModal');
+        if (authModal) authModal.style.display = 'flex';
+        return;
+    }
+    try {
+        const result = await participateEvent(postId, 'going');
+        if (result.status === 'going') {
+            showToast('报名成功！🎉');
+        } else if (result.status === null) {
+            showToast('已取消报名');
+        }
+        // 刷新本地数据
+        await loadPostsFromAPI();
+        renderWaterfall();
+        refreshPreviewMarkers();
+    } catch (err) {
+        showToast('操作失败: ' + err.message);
+    }
+}
+
+// ============================================================
+// 分类筛选（动态生成，基于后端标签）
+// ============================================================
+async function initFilters() {
     const container = document.getElementById('partnerFilter');
     if (!container) return;
 
+    // 先从后端拉取标签列表
+    try {
+        const result = await listTags();
+        allTags = result.items || [];
+    } catch (e) {
+        allTags = [];
+    }
+
+    const chips = [
+        { label: '全部', category: 'all' },
+        ...allTags.slice(0, 10).map(t => ({ label: t.name, category: t.name })),
+    ];
+
+    container.innerHTML = chips.map((c, i) =>
+        `<span class="filter-chip${i === 0 ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${escapeHtml(c.label)}</span>`
+    ).join('');
+
     container.querySelectorAll('.filter-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
+        chip.addEventListener('click', async () => {
             currentCategory = chip.getAttribute('data-category');
             container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
+            await loadPostsFromAPI();
             renderWaterfall();
             refreshPreviewMarkers();
         });
@@ -455,6 +376,19 @@ function initPartnerModal() {
 
     if (!modal) return;
 
+    // 时间模式切换
+    let currentUrgency = 'now';
+    const scheduledRow = document.getElementById('scheduledTimeRow');
+    const timeModeBtns = modal.querySelectorAll('.time-mode-btn');
+    timeModeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            timeModeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentUrgency = btn.getAttribute('data-mode');
+            scheduledRow.style.display = currentUrgency === 'scheduled' ? 'flex' : 'none';
+        });
+    });
+
     const openModal = () => {
         if (!isLoggedIn()) {
             showToast('请先登录后再发起组局');
@@ -462,6 +396,12 @@ function initPartnerModal() {
             if (authModal) authModal.style.display = 'flex';
             return;
         }
+        // 重置时间模式为默认（立即）
+        timeModeBtns.forEach(b => b.classList.remove('active'));
+        const defaultBtn = modal.querySelector('.time-mode-btn[data-mode="now"]');
+        if (defaultBtn) defaultBtn.classList.add('active');
+        currentUrgency = 'now';
+        if (scheduledRow) scheduledRow.style.display = 'none';
         modal.style.display = 'flex';
     };
 
@@ -472,53 +412,67 @@ function initPartnerModal() {
 
     closeBtn?.addEventListener('click', closeModal);
     cancelBtn?.addEventListener('click', closeModal);
-
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
 
-    submitBtn?.addEventListener('click', () => {
+    submitBtn?.addEventListener('click', async () => {
         const category = document.getElementById('partnerCategory')?.value;
         const title = document.getElementById('partnerTitle')?.value.trim();
         const description = document.getElementById('partnerDesc')?.value.trim();
         const location = document.getElementById('partnerLocation')?.value.trim();
-        const time = document.getElementById('partnerTime')?.value.trim();
         const budget = document.getElementById('partnerBudget')?.value.trim();
-        const slots = parseInt(document.getElementById('partnerSlots')?.value) || 1;
-        const contact = document.getElementById('partnerContact')?.value.trim();
 
-        if (!category || !title || !contact) {
-            showToast('请填写分类、标题和联系方式');
+        if (!category || !title) {
+            showToast('请至少填写分类和标题');
             return;
         }
 
-        const user = getUser();
-        const publisher = user?.username || (user?.email?.split('@')[0]) || '匿名同学';
+        // 构建时间相关字段
+        let event_time = null;
+        if (currentUrgency === 'scheduled') {
+            const dateVal = document.getElementById('partnerDate')?.value;
+            const timeVal = document.getElementById('partnerTimePicker')?.value;
+            if (!dateVal || !timeVal) {
+                showToast('请选择具体的日期和时间');
+                return;
+            }
+            event_time = new Date(`${dateVal}T${timeVal}:00`).toISOString();
+        }
 
-        const newPartner = {
-            id: Date.now().toString(),
-            category,
-            title,
-            description,
-            location,
-            time,
-            budget,
-            slots,
-            publisher,
-            contact,
-            members: 1,
-            createdAt: new Date().toLocaleString(),
-            nearby: '',
-        };
+        // 构建标签
+        const tags = [category];
+        if (budget) tags.push(budget);
 
-        partnersData.unshift(newPartner);
-        renderWaterfall();
-        refreshPreviewMarkers();
-        closeModal();
-        showToast('组局发布成功！🎉');
+        submitBtn.disabled = true;
+        submitBtn.innerText = '发布中...';
+
+        try {
+            await createPost({
+                type: category.includes('运动') || category.includes('活动') ? 'event' : 'forum',
+                title: title,
+                content: description || title,
+                tags: tags,
+                location: null,
+                location_name: location || null,
+                urgency: currentUrgency,
+                event_time: event_time,
+            });
+
+            showToast('发布成功！🎉');
+            closeModal();
+            // 刷新列表
+            await loadPostsFromAPI();
+            renderWaterfall();
+            refreshPreviewMarkers();
+        } catch (err) {
+            showToast('发布失败: ' + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = '发布组局';
+        }
     });
 
-    // 暴露给外部（FAB按钮）
     window.openPartnerModal = openModal;
 }
 
@@ -526,14 +480,13 @@ function initPartnerModal() {
 // 页面入口
 // ============================================================
 export async function initPartnerPage() {
+    // 首次加载从 API 获取真实数据
     if (!partnersData.length) {
-        partnersData = initSampleData();
+        await loadPostsFromAPI();
     }
     initPartnerModal();
-    initFilters();
+    await initFilters();
     renderWaterfall();
-    // 先获取精确坐标（GCJ-02），再初始化地图
-    await loadAccurateCoords();
     initPreviewMap();
 }
 

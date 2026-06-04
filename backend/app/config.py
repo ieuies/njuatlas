@@ -85,6 +85,17 @@ class Config:
     RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
     MAIL_FROM = _get_env("MAIL_FROM", "no-reply@njuatlas.local")
 
+    # ── 帖子热度与过期阈值（均可通过 .env 覆盖）─────────────────
+    HOT_NOW_BOOST = float(_get_env("HOT_NOW_BOOST", "2.0"))
+    HOT_NOW_BOOST_WINDOW_HOURS = _get_int_env("HOT_NOW_BOOST_WINDOW_HOURS", 2)
+    HOT_NOW_EXPIRY_HOURS = _get_int_env("HOT_NOW_EXPIRY_HOURS", 3)
+    HOT_LONG_TERM_HALF_LIFE_HOURS = _get_int_env("HOT_LONG_TERM_HALF_LIFE_HOURS", 48)
+    HOT_SCHEDULED_HALF_LIFE_HOURS = _get_int_env("HOT_SCHEDULED_HALF_LIFE_HOURS", 24)
+    HOT_WEIGHT_VIEW = _get_int_env("HOT_WEIGHT_VIEW", 1)
+    HOT_WEIGHT_LIKE = _get_int_env("HOT_WEIGHT_LIKE", 3)
+    HOT_WEIGHT_COMMENT = _get_int_env("HOT_WEIGHT_COMMENT", 5)
+    HOT_WEIGHT_PARTICIPANT = _get_int_env("HOT_WEIGHT_PARTICIPANT", 10)
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 

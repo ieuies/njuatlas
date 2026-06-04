@@ -291,7 +291,17 @@
             <input type="text" id="partnerTitle" placeholder="标题 (例如: 周五晚仙林剧本杀 缺1人)" required>
             <div class="partner-form-row">
                 <input type="text" id="partnerLocation" placeholder="地点 (例如: 仙林金鹰)">
-                <input type="text" id="partnerTime" placeholder="时间 (例如: 周五 19:00)">
+            </div>
+            <!-- 时间模式选择器 -->
+            <div class="time-mode-row" id="timeModeRow">
+                <span class="time-mode-label">⏰ 时间</span>
+                <button type="button" class="time-mode-btn active" data-mode="now">⚡ 立即</button>
+                <button type="button" class="time-mode-btn" data-mode="long_term">📅 长期</button>
+                <button type="button" class="time-mode-btn" data-mode="scheduled">🕐 指定</button>
+            </div>
+            <div class="partner-form-row scheduled-time-row" id="scheduledTimeRow" style="display:none;">
+                <input type="date" id="partnerDate">
+                <input type="time" id="partnerTimePicker">
             </div>
             <div class="partner-form-row">
                 <input type="text" id="partnerBudget" placeholder="预算 (例如: AA/50元)">

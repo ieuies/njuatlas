@@ -1,6 +1,6 @@
 import secrets
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -18,6 +18,18 @@ from app.validators import clean_string, get_json_body
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/user")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 EMAIL_CODE_PURPOSES = {"register", "reset_password"}
+
+
+def _utcnow():
+    """返回当前 UTC 时间（aware），替代已废弃的 _utcnow()。"""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware(dt):
+    """SQLite 不保存时区——读出是 naive datetime，补上 UTC 以安全比较。"""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _normalize_email(value):
@@ -73,7 +85,7 @@ def _create_email_verification_token(user):
     row = EmailVerificationToken(
         user_id=user.id,
         token_hash=hash_token(raw_token),
-        expires_at=datetime.utcnow() + timedelta(seconds=current_app.config["EMAIL_VERIFICATION_TOKEN_SECONDS"]),
+        expires_at=_utcnow() + timedelta(seconds=current_app.config["EMAIL_VERIFICATION_TOKEN_SECONDS"]),
     )
     db.session.add(row)
     return raw_token
@@ -91,7 +103,7 @@ def _create_password_reset_token(user):
     row = PasswordResetToken(
         user_id=user.id,
         token_hash=hash_token(raw_token),
-        expires_at=datetime.utcnow() + timedelta(seconds=current_app.config["PASSWORD_RESET_TOKEN_SECONDS"]),
+        expires_at=_utcnow() + timedelta(seconds=current_app.config["PASSWORD_RESET_TOKEN_SECONDS"]),
     )
     db.session.add(row)
     return raw_token
@@ -101,7 +113,7 @@ def _find_valid_token(model, raw_token):
     if not raw_token:
         return None
     row = model.query.filter_by(token_hash=hash_token(raw_token)).first()
-    if not row or row.used_at is not None or row.expires_at <= datetime.utcnow():
+    if not row or row.used_at is not None or _ensure_aware(row.expires_at) <= _utcnow():
         return None
     return row
 
@@ -116,10 +128,10 @@ def _latest_email_code(email, purpose):
 
 
 def _enforce_email_code_send_limits(email, purpose):
-    now = datetime.utcnow()
+    now = _utcnow()
     latest = _latest_email_code(email, purpose)
     if latest and latest.created_at:
-        elapsed = (now - latest.created_at).total_seconds()
+        elapsed = (now - _ensure_aware(latest.created_at)).total_seconds()
         wait_seconds = current_app.config["EMAIL_CODE_RESEND_SECONDS"] - int(elapsed)
         if wait_seconds > 0:
             return error_response(
@@ -137,7 +149,7 @@ def _create_email_code(email, purpose):
         email=email,
         purpose=purpose,
         code_hash=hash_token(raw_code),
-        expires_at=datetime.utcnow() + timedelta(seconds=current_app.config["EMAIL_CODE_EXPIRATION_SECONDS"]),
+        expires_at=_utcnow() + timedelta(seconds=current_app.config["EMAIL_CODE_EXPIRATION_SECONDS"]),
     )
     db.session.add(row)
     return raw_code
@@ -145,7 +157,7 @@ def _create_email_code(email, purpose):
 
 def _verify_email_code(email, purpose, code):
     row = _latest_email_code(email, purpose)
-    if not row or row.used_at is not None or row.expires_at <= datetime.utcnow():
+    if not row or row.used_at is not None or _ensure_aware(row.expires_at) <= _utcnow():
         return None, error_response("验证码无效或已过期。", 400, code="invalid_email_code")
 
     if row.attempt_count >= current_app.config["EMAIL_CODE_MAX_ATTEMPTS"]:
@@ -156,7 +168,7 @@ def _verify_email_code(email, purpose, code):
         db.session.commit()
         return None, error_response("验证码错误。", 400, code="incorrect_email_code")
 
-    row.used_at = datetime.utcnow()
+    row.used_at = _utcnow()
     return row, None
 
 
@@ -241,7 +253,7 @@ def register():
         username=username,
         password_hash=generate_password_hash(password),
         email_verified=True,
-        email_verified_at=datetime.utcnow(),
+        email_verified_at=_utcnow(),
     )
     db.session.add(user)
     db.session.commit()
@@ -340,8 +352,8 @@ def verify_email():
 
     user = User.query.get(row.user_id)
     user.email_verified = True
-    user.email_verified_at = datetime.utcnow()
-    row.used_at = datetime.utcnow()
+    user.email_verified_at = _utcnow()
+    row.used_at = _utcnow()
     db.session.commit()
     log_event(current_app.logger, "email_verified", user_id=user.id, email=user.email)
     return jsonify({"message": "邮箱验证成功"})

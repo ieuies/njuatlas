@@ -986,6 +986,50 @@ textarea { resize: vertical; min-height: 100px; }
     min-width: 0;
 }
 
+/* 时间模式选择器 */
+.time-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+.time-mode-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.time-mode-btn {
+    flex: 1;
+    padding: 8px 6px;
+    border: 1.5px solid var(--border, #e0e0e0);
+    border-radius: 20px;
+    background: var(--card-bg, #fff);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+.time-mode-btn.active {
+    background: linear-gradient(135deg, #5B2E8C, #7C3AED);
+    color: #fff;
+    border-color: transparent;
+}
+.time-mode-btn:hover:not(.active) {
+    border-color: #7C3AED;
+    color: #7C3AED;
+}
+.scheduled-time-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.scheduled-time-row input {
+    flex: 1;
+    min-width: 0;
+}
+
 /* ========== 按钮 ========== */
 .primary-btn, .secondary-btn, .small-btn {
     border: none;

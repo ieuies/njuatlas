@@ -144,6 +144,60 @@ export async function getRecommendSlogan(placeId) {
     return request(`/llm/recommend_slogan?place_id=${placeId}`, 'GET', null, false);
 }
 
+// ── 帖子系统（搭子论坛） ──
+export async function createPost({ type, title, content, tags, place_id, event_time, location, location_name } = {}) {
+    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, location, location_name });
+}
+export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size } = {}) {
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
+    if (tags) params.set('tags', Array.isArray(tags) ? tags.join(',') : tags);
+    if (place_id) params.set('place_id', place_id);
+    if (sort) params.set('sort', sort);
+    if (lat) params.set('lat', lat);
+    if (lng) params.set('lng', lng);
+    if (radius) params.set('radius', radius);
+    if (user_id) params.set('user_id', user_id);
+    if (page) params.set('page', page);
+    if (page_size) params.set('page_size', page_size);
+    const qs = params.toString();
+    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, false);
+}
+export async function getPost(postId) {
+    return request(`/posts/${postId}`, 'GET', null, false);
+}
+export async function updatePost(postId, data) {
+    return request(`/posts/${postId}`, 'PUT', data);
+}
+export async function deletePost(postId) {
+    return request(`/posts/${postId}`, 'DELETE');
+}
+export async function togglePostLike(postId) {
+    return request(`/posts/${postId}/like`, 'POST');
+}
+export async function addPostComment(postId, content, parentId = null) {
+    return request(`/posts/${postId}/comments`, 'POST', { content, parent_id: parentId });
+}
+export async function getPostComments(postId, page = 1, pageSize = 20) {
+    return request(`/posts/${postId}/comments?page=${page}&page_size=${pageSize}`, 'GET', null, false);
+}
+export async function participateEvent(postId, status = 'going') {
+    return request(`/posts/${postId}/participate`, 'POST', { status });
+}
+export async function listTags(category = null) {
+    const qs = category ? `?category=${category}` : '';
+    return request(`/tags${qs}`, 'GET', null, false);
+}
+export async function getMyTags() {
+    return request('/me/tags', 'GET');
+}
+export async function setMyTags(tags) {
+    return request('/me/tags', 'PUT', { tags });
+}
+export async function getPlacePosts(placeId, page = 1, pageSize = 10) {
+    return request(`/places/${placeId}/posts?page=${page}&page_size=${pageSize}`, 'GET', null, false);
+}
+
 // ── 个人中心 ──
 export async function getFavorites() {
     return request('/me/favorites', 'GET');

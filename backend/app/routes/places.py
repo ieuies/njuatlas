@@ -72,3 +72,60 @@ def regeocode_route():
         return error_response("高德逆地理编码失败", 502, code="amap_api_error")
 
     return jsonify(result)
+
+
+# ── 高德 POI "吃喝玩乐" 分类预设 ──────────────────────────────────
+# 前端可用此数据构建分类筛选器，无需硬编码高德分类码。
+# 每个分类项的 types 字段可直接传给 /api/places/search?types=xxx
+
+CATEGORY_TREE = [
+    {
+        "key": "food",
+        "label": "美食餐饮",
+        "children": [
+            {"key": "all_food",     "label": "全部美食",     "types": "050000"},
+            {"key": "chinese",      "label": "中餐厅",       "types": "050100"},
+            {"key": "foreign",      "label": "外国餐厅",     "types": "050200"},
+            {"key": "fast_food",    "label": "快餐",         "types": "050300"},
+            {"key": "cafe",         "label": "咖啡厅",       "types": "050500"},
+            {"key": "tea",          "label": "茶艺馆",       "types": "050600"},
+            {"key": "cold_drink",   "label": "饮品冷饮",     "types": "050700"},
+            {"key": "dessert",      "label": "甜品烘焙",     "types": "050900"},
+        ],
+    },
+    {
+        "key": "shopping",
+        "label": "购物逛街",
+        "children": [
+            {"key": "mall",         "label": "商场购物中心", "types": "060100"},
+            {"key": "supermarket",  "label": "大型超市",     "types": "060400"},
+            {"key": "street",       "label": "特色商业街",   "types": "061000"},
+            {"key": "specialty",    "label": "品牌专卖店",   "types": "061200"},
+        ],
+    },
+    {
+        "key": "sports",
+        "label": "运动健身",
+        "children": [
+            {"key": "all_sports",   "label": "全部运动场馆", "types": "080100"},
+        ],
+    },
+    {
+        "key": "entertainment",
+        "label": "休闲娱乐",
+        "children": [
+            {"key": "all_entertainment", "label": "全部娱乐", "types": "080300"},
+            {"key": "leisure",      "label": "度假休闲",     "types": "080500"},
+            {"key": "cinema",       "label": "电影院剧院",   "types": "080600"},
+        ],
+    },
+]
+
+
+@places_bp.route("/categories", methods=["GET"])
+def get_categories():
+    """返回"吃喝玩乐"POI 分类预设，供前端筛选器使用。
+
+    前端可将其渲染为分类选择器，选中某项后把 types 值传给 search 接口。
+    """
+    return jsonify({"categories": CATEGORY_TREE})
