@@ -365,3 +365,42 @@ def place_posts(place_id):
         "category": place.category,
     }
     return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 地点搜索（高德 POI 输入提示代理）
+# ═══════════════════════════════════════════════════════════════
+
+@note_bp.route("/places/suggestions", methods=["GET"])
+def place_suggestions():
+    """高德 POI 输入提示代理 —— 供前端地点搜索自动补全。
+
+    查询参数:
+        ?keyword=大米      搜索关键词
+        ?city=南京         限定城市（可选）
+    """
+    from app.services.amap import inputtips
+
+    keyword = clean_string(request.args.get("keyword"), "keyword", required=True, max_length=50)
+    city = clean_string(request.args.get("city", "南京"), "city", max_length=30)
+
+    try:
+        data = inputtips(keyword, city=city)
+    except Exception:
+        return error_response("地点搜索服务暂时不可用", 502)
+
+    tips = []
+    for t in data.get("tips", []):
+        loc = t.get("location")
+        if not loc:
+            continue
+        if isinstance(loc, dict):
+            loc = f"{loc.get('lng', '')},{loc.get('lat', '')}"
+        tips.append({
+            "name": t.get("name", ""),
+            "address": t.get("address", ""),
+            "district": t.get("district", ""),
+            "location": loc,
+        })
+
+    return jsonify({"tips": tips})

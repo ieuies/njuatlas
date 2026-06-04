@@ -1,8 +1,10 @@
+import json
 from copy import deepcopy
 from threading import Lock
+from urllib.parse import urlencode
 import time
 
-import requests
+import urllib3
 from flask import current_app
 
 from app.logging_utils import log_event
@@ -11,6 +13,10 @@ from app.logging_utils import log_event
 BASE_URL = "https://restapi.amap.com/v3"
 _CACHE = {}
 _CACHE_LOCK = Lock()
+
+# 连接池，跳过系统代理（AMap 直连比走代理快 ~800ms）
+urllib3.disable_warnings()
+_POOL = urllib3.PoolManager()
 
 
 def _normalize_cache_value(value):
@@ -79,20 +85,22 @@ def amap_request(endpoint, params):
         return cached
 
     params["key"] = _get_key()
-    url = f"{BASE_URL}{endpoint}"
+    qs = urlencode(params)
+    url = f"{BASE_URL}{endpoint}?{qs}"
 
     try:
-        response = requests.get(
+        response = _POOL.request(
+            "GET",
             url,
-            params=params,
             timeout=current_app.config["AMAP_REQUEST_TIMEOUT_SECONDS"],
         )
-        response.raise_for_status()
-    except requests.RequestException as exc:
+        if response.status < 200 or response.status >= 300:
+            raise urllib3.exceptions.HTTPError(f"HTTP {response.status}")
+    except Exception as exc:
         log_event(current_app.logger, "amap_request_failed", level="warning", endpoint=endpoint, error=str(exc))
         raise
 
-    data = response.json()
+    data = json.loads(response.data.decode("utf-8"))
     _set_cached(cache_key, data)
     data["_cache"] = {"hit": False}
     log_event(
@@ -138,3 +146,11 @@ def geocode(address, city=None):
 
 def regeocode(location):
     return amap_request("/geocode/regeo", {"location": location, "extensions": "all"})
+
+
+def inputtips(keywords, city=None):
+    """POI 输入提示，用于前端地点搜索自动补全。"""
+    params = {"keywords": keywords}
+    if city:
+        params["city"] = city
+    return amap_request("/assistant/inputtips", params)

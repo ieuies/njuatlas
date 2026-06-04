@@ -1,6 +1,7 @@
 import { showToast, formatDate, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
-import { listPosts, createPost, participateEvent, listTags } from '../api.js';
+import { listPosts, getPost, createPost, togglePostLike, addPostComment, participateEvent, listTags } from '../api.js';
+import { API_BASE } from '../config.js';
 
 // ============================================================
 // 全局状态
@@ -290,14 +291,11 @@ function renderWaterfall() {
         });
     });
 
-    // 卡片点击 → 发 Toast 预览（后续可改为跳详情页）
+    // 卡片点击 → 打开帖子详情
     container.querySelectorAll('.partner-card').forEach(card => {
         card.addEventListener('click', () => {
             const pid = parseInt(card.getAttribute('data-id'));
-            const post = partnersData.find(p => p.id === pid);
-            if (post) {
-                showToast(`「${post.title}」— ${post.publisher} 发布 · ${post.likeCount}赞 ${post.commentCount}评`, 3000);
-            }
+            if (pid) openPostDetail(pid);
         });
     });
 }
@@ -328,6 +326,285 @@ async function handleParticipate(postId) {
     }
 }
 
+// ============================================================
+// 帖子详情模态框
+// ============================================================
+let currentDetailPost = null;  // 当前打开的帖子数据
+
+function initPostDetailModal() {
+    const modal = document.getElementById('postDetailModal');
+    if (!modal) return;
+
+    const closeBtn = document.getElementById('closePostDetailBtn');
+    const likeBtn = document.getElementById('detailLikeBtn');
+    const participateBtn = document.getElementById('detailParticipateBtn');
+    const commentInput = document.getElementById('detailCommentInput');
+    const commentSubmitBtn = document.getElementById('detailCommentSubmitBtn');
+
+    closeBtn?.addEventListener('click', () => {
+        modal.style.display = 'none';
+        currentDetailPost = null;
+    });
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+            currentDetailPost = null;
+        }
+    });
+
+    // 点赞
+    likeBtn?.addEventListener('click', async () => {
+        if (!currentDetailPost) return;
+        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        try {
+            const result = await togglePostLike(currentDetailPost.id);
+            currentDetailPost.is_liked = result.liked;
+            currentDetailPost.like_count = result.like_count;
+            _updateDetailStats();
+            likeBtn.classList.toggle('liked', result.liked);
+            likeBtn.innerHTML = result.liked ? '❤️ 已点赞' : '❤️ 点赞';
+        } catch (err) {
+            showToast('操作失败: ' + err.message);
+        }
+    });
+
+    // 报名
+    participateBtn?.addEventListener('click', async () => {
+        if (!currentDetailPost || currentDetailPost.type !== 'event') return;
+        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        try {
+            const result = await participateEvent(currentDetailPost.id, 'going');
+            currentDetailPost.participation_status = result.status;
+            currentDetailPost.participant_count = result.participant_count;
+            _updateDetailStats();
+            const going = result.status === 'going';
+            participateBtn.textContent = going ? '✅ 已报名 (点击取消)' : '✅ 我要参加';
+            participateBtn.classList.toggle('going', going);
+            // 刷新报名列表
+            await _refreshDetailParticipants(currentDetailPost.id);
+        } catch (err) {
+            showToast('操作失败: ' + err.message);
+        }
+    });
+
+    // 发表评论
+    commentSubmitBtn?.addEventListener('click', async () => {
+        const content = commentInput.value.trim();
+        if (!content) { showToast('请输入评论内容'); return; }
+        if (!currentDetailPost) return;
+        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        try {
+            await addPostComment(currentDetailPost.id, content);
+            commentInput.value = '';
+            showToast('评论发表成功');
+            // 刷新评论列表
+            await _refreshDetailComments(currentDetailPost.id);
+        } catch (err) {
+            showToast('评论失败: ' + err.message);
+        }
+    });
+}
+
+/** 打开帖子详情 */
+async function openPostDetail(postId) {
+    const modal = document.getElementById('postDetailModal');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    // 清空旧数据防止闪烁
+    _resetDetailUI();
+
+    try {
+        const post = await getPost(postId);
+        currentDetailPost = post;
+        _renderPostDetail(post);
+    } catch (err) {
+        showToast('加载帖子详情失败: ' + err.message);
+        modal.style.display = 'none';
+        currentDetailPost = null;
+    }
+}
+
+function _resetDetailUI() {
+    document.getElementById('detailTitle').textContent = '加载中...';
+    document.getElementById('detailBody').textContent = '';
+    document.getElementById('detailTags').innerHTML = '';
+    document.getElementById('detailPublisher').textContent = '';
+    document.getElementById('detailTime').textContent = '';
+    document.getElementById('detailLocation').textContent = '';
+    document.getElementById('detailComments').innerHTML = '';
+    document.getElementById('detailParticipants').innerHTML = '';
+    document.getElementById('detailParticipantsSection').style.display = 'none';
+    document.getElementById('detailParticipateBtn').style.display = 'none';
+    document.getElementById('detailLikeBtn').classList.remove('liked');
+    document.getElementById('detailLikeBtn').innerHTML = '❤️ 点赞';
+    document.getElementById('detailParticipateBtn').textContent = '✅ 我要参加';
+    document.getElementById('detailParticipateBtn').classList.remove('going');
+}
+
+function _renderPostDetail(post) {
+    // 头部
+    document.getElementById('detailTitle').textContent = post.title;
+    document.getElementById('detailBody').textContent = post.content || '';
+
+    // 标签
+    const tags = post.tags || [];
+    document.getElementById('detailTags').innerHTML = tags.map(t =>
+        `<span class="post-detail-tag">📍 ${escapeHtml(t)}</span>`
+    ).join('');
+
+    // 元信息
+    document.getElementById('detailPublisher').innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
+    const timeStr = _formatPostTime(post.event_time, post.urgency);
+    document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
+    if (post.location_name) {
+        document.getElementById('detailLocation').innerHTML = `<i class="fas fa-map-pin"></i> ${escapeHtml(post.location_name)}`;
+    }
+
+    // 统计
+    _updateDetailStats();
+
+    // 操作按钮
+    const likeBtn = document.getElementById('detailLikeBtn');
+    if (post.is_liked) {
+        likeBtn.classList.add('liked');
+        likeBtn.innerHTML = '❤️ 已点赞';
+    }
+
+    // 活动帖显示报名按钮
+    const participateBtn = document.getElementById('detailParticipateBtn');
+    if (post.type === 'event') {
+        participateBtn.style.display = 'block';
+        const going = post.participation_status === 'going';
+        participateBtn.textContent = going ? '✅ 已报名 (点击取消)' : '✅ 我要参加';
+        participateBtn.classList.toggle('going', going);
+    }
+
+    // 报名用户
+    _renderDetailParticipants(post.participants || []);
+
+    // 评论
+    _renderDetailComments(post.comments || { items: [] });
+}
+
+function _updateDetailStats() {
+    const post = currentDetailPost;
+    if (!post) return;
+    document.getElementById('detailViewCount').textContent = post.view_count || 0;
+    document.getElementById('detailLikeCount').textContent = post.like_count || 0;
+    document.getElementById('detailCommentCount').textContent = post.comment_count || 0;
+    document.getElementById('detailParticipantCount').textContent = post.participant_count || 0;
+}
+
+function _renderDetailParticipants(participants) {
+    const section = document.getElementById('detailParticipantsSection');
+    const container = document.getElementById('detailParticipants');
+    if (!participants.length) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    container.innerHTML = participants.map(p => `
+        <span class="participant-chip">
+            ${escapeHtml(p.username || '用户')}
+            <span class="participant-status${p.status === 'interested' ? ' interested' : ''}">${p.status === 'going' ? '确定' : '感兴趣'}</span>
+        </span>
+    `).join('');
+}
+
+function _renderDetailComments(commentsData) {
+    const items = commentsData.items || [];
+    const container = document.getElementById('detailComments');
+    document.getElementById('detailCommentTotal').textContent = commentsData.total || items.length;
+
+    if (!items.length) {
+        container.innerHTML = '<div class="detail-comments-empty">暂无评论，来抢沙发吧~</div>';
+        return;
+    }
+
+    container.innerHTML = items.map(c => `
+        <div class="detail-comment">
+            <div class="detail-comment-header">
+                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}</span>
+                <span class="detail-comment-time">${formatDate(c.created_at)}</span>
+            </div>
+            <div class="detail-comment-body">${escapeHtml(c.content)}</div>
+            <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
+            ${(c.replies && c.replies.length) ? `
+                <div class="detail-comment-replies">
+                    ${c.replies.map(r => `
+                        <div class="detail-comment">
+                            <div class="detail-comment-header">
+                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}</span>
+                                <span class="detail-comment-time">${formatDate(r.created_at)}</span>
+                            </div>
+                            <div class="detail-comment-body">${escapeHtml(r.content)}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+
+    // 回复按钮
+    container.querySelectorAll('.detail-comment-reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const commentId = parseInt(btn.getAttribute('data-comment-id'));
+            _showReplyInput(btn.closest('.detail-comment'), commentId);
+        });
+    });
+}
+
+function _showReplyInput(commentEl, parentId) {
+    // 避免重复
+    if (commentEl.querySelector('.detail-reply-input-row')) return;
+    const row = document.createElement('div');
+    row.className = 'detail-reply-input-row';
+    row.innerHTML = `
+        <input type="text" placeholder="写下回复..." maxlength="300">
+        <button>发送</button>
+    `;
+    commentEl.appendChild(row);
+    const input = row.querySelector('input');
+    const btn = row.querySelector('button');
+    input.focus();
+
+    const doReply = async () => {
+        const content = input.value.trim();
+        if (!content) { showToast('请输入回复内容'); return; }
+        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        try {
+            await addPostComment(currentDetailPost.id, content, parentId);
+            row.remove();
+            showToast('回复成功');
+            await _refreshDetailComments(currentDetailPost.id);
+        } catch (err) {
+            showToast('回复失败: ' + err.message);
+        }
+    };
+    btn.addEventListener('click', doReply);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doReply();
+        if (e.key === 'Escape') row.remove();
+    });
+}
+
+async function _refreshDetailComments(postId) {
+    try {
+        const post = await getPost(postId);
+        currentDetailPost = post;
+        _renderDetailComments(post.comments || { items: [] });
+        _updateDetailStats();
+    } catch (e) { /* ignore */ }
+}
+
+async function _refreshDetailParticipants(postId) {
+    try {
+        const post = await getPost(postId);
+        currentDetailPost = post;
+        _renderDetailParticipants(post.participants || []);
+    } catch (e) { /* ignore */ }
+}
 // ============================================================
 // 分类筛选（动态生成，基于后端标签）
 // ============================================================
@@ -376,10 +653,27 @@ function initPartnerModal() {
 
     if (!modal) return;
 
-    // 时间模式切换
-    let currentUrgency = 'now';
+    // 时长类型 + 时间模式联动
+    let currentDuration = 'short';   // 'short' | 'long'
+    let currentUrgency = 'now';     // 'now' | 'scheduled'
     const scheduledRow = document.getElementById('scheduledTimeRow');
-    const timeModeBtns = modal.querySelectorAll('.time-mode-btn');
+    const timeModeRow = document.getElementById('timeModeRow');
+
+    // 长期/短期切换
+    const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
+    durationBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            durationBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentDuration = btn.getAttribute('data-duration');
+            // 长期 → 隐藏时间行；短期 → 显示时间行
+            timeModeRow.style.display = currentDuration === 'long' ? 'none' : 'flex';
+            scheduledRow.style.display = 'none';  // 切换时长时重置指定时间行
+        });
+    });
+
+    // 短期时间模式切换（立即 / 指定）
+    const timeModeBtns = modal.querySelectorAll('#timeModeRow .time-mode-btn');
     timeModeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             timeModeBtns.forEach(b => b.classList.remove('active'));
@@ -389,6 +683,103 @@ function initPartnerModal() {
         });
     });
 
+    // ── 地点搜索自动补全（后端代理高德 inputtips）──
+    let selectedLocationCoords = null;  // "lng,lat" 字符串
+    let suggestionIndex = -1;
+
+    const locationInput = document.getElementById('partnerLocation');
+    const suggestionsBox = document.getElementById('locationSuggestions');
+
+    const _doSearch = _debounce(async function (keyword) {
+        const kw = keyword.trim();
+        if (!kw) {
+            suggestionsBox.style.display = 'none';
+            suggestionIndex = -1;
+            return;
+        }
+        suggestionsBox.innerHTML = '<li class="suggestion-loading">搜索中...</li>';
+        suggestionsBox.style.display = 'block';
+
+        try {
+            const resp = await fetch(`${API_BASE}/places/suggestions?keyword=${encodeURIComponent(kw)}&city=${encodeURIComponent('南京')}`);
+            const data = await resp.json();
+            if (!data.tips || data.tips.length === 0) {
+                suggestionsBox.innerHTML = '<li class="suggestion-empty">未找到地点，请尝试其他关键词</li>';
+                suggestionsBox.style.display = 'block';
+                suggestionIndex = -1;
+                return;
+            }
+            suggestionsBox.innerHTML = data.tips.map((tip, idx) => {
+                const name = escapeHtml(tip.name || '');
+                const address = escapeHtml(tip.address || tip.district || '');
+                return `<li data-idx="${idx}" data-location="${tip.location}" data-name="${escapeHtml(name)}">
+                    <span class="suggestion-name">${name}</span>
+                    <span class="suggestion-address">${address}</span>
+                </li>`;
+            }).join('');
+            suggestionsBox.style.display = 'block';
+            suggestionIndex = -1;
+        } catch (err) {
+            console.warn('地点搜索失败:', err);
+            suggestionsBox.innerHTML = '<li class="suggestion-empty">搜索失败，请重试</li>';
+            suggestionsBox.style.display = 'block';
+            suggestionIndex = -1;
+        }
+    }, 300);
+
+    // 输入时触发搜索
+    locationInput.addEventListener('input', () => {
+        selectedLocationCoords = null;
+        _doSearch(locationInput.value);
+    });
+
+    // 点击建议项
+    suggestionsBox.addEventListener('click', (e) => {
+        const li = e.target.closest('li');
+        if (!li) return;
+        const loc = li.getAttribute('data-location');
+        const name = li.getAttribute('data-name');
+        if (loc && name) {
+            locationInput.value = name;
+            selectedLocationCoords = loc;
+            suggestionsBox.style.display = 'none';
+            suggestionIndex = -1;
+        }
+    });
+
+    // 键盘导航
+    locationInput.addEventListener('keydown', (e) => {
+        const items = suggestionsBox.querySelectorAll('li[data-location]');
+        if (!items.length || suggestionsBox.style.display === 'none') return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            suggestionIndex = Math.min(suggestionIndex + 1, items.length - 1);
+            items.forEach((it, i) => it.classList.toggle('active', i === suggestionIndex));
+            items[suggestionIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            suggestionIndex = Math.max(suggestionIndex - 1, 0);
+            items.forEach((it, i) => it.classList.toggle('active', i === suggestionIndex));
+            items[suggestionIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (suggestionIndex >= 0 && items[suggestionIndex]) {
+                items[suggestionIndex].click();
+            }
+        } else if (e.key === 'Escape') {
+            suggestionsBox.style.display = 'none';
+            suggestionIndex = -1;
+        }
+    });
+
+    // 点击外部关闭下拉
+    document.addEventListener('click', (e) => {
+        if (!locationInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+            suggestionsBox.style.display = 'none';
+            suggestionIndex = -1;
+        }
+    });
+
     const openModal = () => {
         if (!isLoggedIn()) {
             showToast('请先登录后再发起组局');
@@ -396,18 +787,31 @@ function initPartnerModal() {
             if (authModal) authModal.style.display = 'flex';
             return;
         }
-        // 重置时间模式为默认（立即）
+        // 重置时长类型为短期
+        currentDuration = 'short';
+        durationBtns.forEach(b => b.classList.remove('active'));
+        const defaultDurationBtn = document.querySelector('#durationRow .time-mode-btn[data-duration="short"]');
+        if (defaultDurationBtn) defaultDurationBtn.classList.add('active');
+        if (timeModeRow) timeModeRow.style.display = 'flex';
+        // 重置时间模式为立即
         timeModeBtns.forEach(b => b.classList.remove('active'));
-        const defaultBtn = modal.querySelector('.time-mode-btn[data-mode="now"]');
-        if (defaultBtn) defaultBtn.classList.add('active');
+        const defaultTimeBtn = modal.querySelector('#timeModeRow .time-mode-btn[data-mode="now"]');
+        if (defaultTimeBtn) defaultTimeBtn.classList.add('active');
         currentUrgency = 'now';
         if (scheduledRow) scheduledRow.style.display = 'none';
+        // 重置地点搜索状态
+        selectedLocationCoords = null;
+        suggestionIndex = -1;
+        if (suggestionsBox) suggestionsBox.style.display = 'none';
         modal.style.display = 'flex';
     };
 
     const closeModal = () => {
         modal.style.display = 'none';
         form?.reset();
+        selectedLocationCoords = null;
+        suggestionIndex = -1;
+        if (suggestionsBox) suggestionsBox.style.display = 'none';
     };
 
     closeBtn?.addEventListener('click', closeModal);
@@ -449,11 +853,11 @@ function initPartnerModal() {
 
         try {
             await createPost({
-                type: category.includes('运动') || category.includes('活动') ? 'event' : 'forum',
+                type: currentDuration === 'long' ? 'forum' : 'event',
                 title: title,
                 content: description || title,
                 tags: tags,
-                location: null,
+                location: selectedLocationCoords || null,
                 location_name: location || null,
                 urgency: currentUrgency,
                 event_time: event_time,
@@ -485,10 +889,14 @@ export async function initPartnerPage() {
         await loadPostsFromAPI();
     }
     initPartnerModal();
+    initPostDetailModal();
     await initFilters();
     renderWaterfall();
     initPreviewMap();
 }
+
+// 导出供其他模块使用（地图标记点击等）
+export { openPostDetail };
 
 // ============================================================
 // 工具函数
@@ -501,4 +909,12 @@ function escapeHtml(str) {
         if (m === '>') return '&gt;';
         return m;
     });
+}
+
+function _debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
 }
