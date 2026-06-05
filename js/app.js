@@ -32,7 +32,7 @@ const pageTitles = {
 
 function switchPage(pageId) {
     // 这些页面沿用现有登录模态框；这里不改账号流程，只把入口统一接到已有 authModal。
-    const protectedPages = ['partner', 'guide', 'profile'];
+    const protectedPages = ['profile'];
     if (protectedPages.includes(pageId) && !isLoggedIn()) {
         const modal = document.getElementById('authModal');
         if (modal) modal.style.display = 'flex';
