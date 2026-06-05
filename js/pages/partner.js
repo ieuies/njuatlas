@@ -1,6 +1,6 @@
 import { showToast, formatDate, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
-import { listPosts, getPost, createPost, togglePostLike, addPostComment, participateEvent, listTags } from '../api.js';
+import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, participateEvent, listTags } from '../api.js';
 import { API_BASE } from '../config.js';
 
 // ============================================================
@@ -400,12 +400,53 @@ function initPostDetailModal() {
             await addPostComment(currentDetailPost.id, content);
             commentInput.value = '';
             showToast('评论发表成功');
-            // 刷新评论列表
             await _refreshDetailComments(currentDetailPost.id);
         } catch (err) {
             showToast('评论失败: ' + err.message);
         }
     });
+
+    // 编辑自己的帖子
+    document.getElementById('detailEditBtn')?.addEventListener('click', () => {
+        if (!currentDetailPost) return;
+        _openEditPostModal(currentDetailPost);
+    });
+
+    // 删除自己的帖子
+    document.getElementById('detailDeleteBtn')?.addEventListener('click', async () => {
+        if (!currentDetailPost) return;
+        if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
+        try {
+            const { deletePost } = await import('../api.js');
+            await deletePost(currentDetailPost.id);
+            showToast('已删除');
+            document.getElementById('postDetailModal').style.display = 'none';
+            currentDetailPost = null;
+            // 重新加载列表
+            partnersData = await loadPostsFromAPI();
+            renderWaterfall();
+            refreshMapMarkers();
+        } catch (err) {
+            showToast('删除失败: ' + err.message);
+        }
+    });
+}
+
+/** 打开编辑帖子弹窗（复用发布模态框） */
+function _openEditPostModal(post) {
+    const modal = document.getElementById('partnerModal');
+    if (!modal) return;
+    document.getElementById('postDetailModal').style.display = 'none';
+    // 预填数据
+    document.getElementById('partnerCategory').value = post.category || '';
+    document.getElementById('partnerTitle').value = post.title || '';
+    document.getElementById('partnerDesc').value = post.description || '';
+    document.getElementById('partnerLocation').value = post.location || '';
+    document.getElementById('partnerSlots').value = post.slots || 1;
+    document.getElementById('partnerContact').value = post.contact || '';
+    // 标记为编辑模式
+    modal.setAttribute('data-edit-id', post.id);
+    modal.style.display = 'flex';
 }
 
 /** 打开帖子详情 */
@@ -474,13 +515,20 @@ function _renderPostDetail(post) {
         likeBtn.textContent = '已点赞';
     }
 
-    // 活动帖显示报名按钮
+    // 活动帖显示报名按钮（非自己的帖子才能报名）
     const participateBtn = document.getElementById('detailParticipateBtn');
-    if (post.type === 'event') {
-        participateBtn.style.display = 'block';
-        const going = post.participation_status === 'going';
-        participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
-        participateBtn.classList.toggle('going', going);
+    const ownerActions = document.getElementById('detailOwnerActions');
+    if (post.is_owner) {
+        participateBtn.style.display = 'none';
+        if (ownerActions) ownerActions.style.display = 'flex';
+    } else {
+        if (post.type === 'event') {
+            participateBtn.style.display = 'block';
+            const going = post.participation_status === 'going';
+            participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
+            participateBtn.classList.toggle('going', going);
+        }
+        if (ownerActions) ownerActions.style.display = 'none';
     }
 
     // 报名用户
@@ -829,13 +877,13 @@ function initPartnerModal() {
         const description = document.getElementById('partnerDesc')?.value.trim();
         const location = document.getElementById('partnerLocation')?.value.trim();
         const budget = document.getElementById('partnerBudget')?.value.trim();
+        const editId = modal.getAttribute('data-edit-id');
 
         if (!category || !title) {
             showToast('请至少填写分类和标题');
             return;
         }
 
-        // 构建时间相关字段
         let event_time = null;
         if (currentUrgency === 'scheduled') {
             const dateVal = document.getElementById('partnerDate')?.value;
@@ -847,31 +895,41 @@ function initPartnerModal() {
             event_time = new Date(`${dateVal}T${timeVal}:00`).toISOString();
         }
 
-        // 构建标签
         const tags = [category];
         if (budget) tags.push(budget);
 
+        const btnText = editId ? '更新中...' : '发布中...';
         submitBtn.disabled = true;
-        submitBtn.innerText = '发布中...';
+        submitBtn.innerText = btnText;
 
         try {
-            await createPost({
-                type: currentDuration === 'long' ? 'forum' : 'event',
-                title: title,
-                content: description || title,
-                tags: tags,
-                location: selectedLocationCoords || null,
-                location_name: location || null,
-                urgency: currentUrgency,
-                event_time: event_time,
-            });
-
-            showToast('发布成功');
+            if (editId) {
+                const { updatePost } = await import('../api.js');
+                await updatePost(parseInt(editId), {
+                    type: currentDuration === 'long' ? 'forum' : 'event',
+                    title, content: description || title, tags,
+                    location: selectedLocationCoords || null,
+                    location_name: location || null,
+                    urgency: currentUrgency,
+                    event_time,
+                });
+                modal.removeAttribute('data-edit-id');
+                showToast('组局已更新');
+            } else {
+                await createPost({
+                    type: currentDuration === 'long' ? 'forum' : 'event',
+                    title, content: description || title, tags,
+                    location: selectedLocationCoords || null,
+                    location_name: location || null,
+                    urgency: currentUrgency,
+                    event_time,
+                });
+                showToast('发布成功');
+            }
             closeModal();
-            // 刷新列表
-            await loadPostsFromAPI();
+            partnersData = await loadPostsFromAPI();
             renderWaterfall();
-            refreshPreviewMarkers();
+            refreshMapMarkers();
         } catch (err) {
             showToast('发布失败: ' + err.message);
         } finally {

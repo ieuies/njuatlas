@@ -225,6 +225,22 @@
                 </div>
             </div>
 
+            <!-- 吃喝玩乐详情模态框 -->
+            <div id="guideDetailModal" class="modal">
+                <div class="modal-card guide-detail-card">
+                    <button class="modal-close-btn" id="closeGuideDetailBtn"><i class="fas fa-times"></i></button>
+                    <img id="guideDetailImg" class="guide-detail-img" src="" alt="">
+                    <h2 id="guideDetailName"></h2>
+                    <div class="guide-detail-meta">
+                        <span id="guideDetailRating" class="guide-detail-rating"></span>
+                        <span id="guideDetailPrice"></span>
+                        <span id="guideDetailType"></span>
+                    </div>
+                    <p id="guideDetailDesc"></p>
+                    <p id="guideDetailAddr" style="color:var(--text-tertiary);font-size:0.85rem;"></p>
+                </div>
+            </div>
+
             <!-- 编辑个人资料模态框 -->
             <div id="editProfileModal" class="modal">
                 <div class="modal-card">
@@ -235,7 +251,7 @@
                             <div class="profile-avatar-lg" id="editAvatarPreview">
                                 <i class="fas fa-user"></i>
                             </div>
-                            <span class="avatar-hint">头像通过 Gravatar 自动生成</span>
+                            <span class="avatar-hint">头像根据用户名自动生成</span>
                         </div>
                         <label>用户名</label>
                         <input type="text" id="editUsername" placeholder="输入用户名" maxlength="30">
@@ -436,6 +452,10 @@
         <div class="post-detail-actions" id="detailActions">
             <button class="detail-action-btn" id="detailLikeBtn">点赞</button>
             <button class="detail-action-btn primary" id="detailParticipateBtn" style="display:none;">我要参加</button>
+            <span id="detailOwnerActions" style="display:none;gap:8px;">
+                <button class="detail-action-btn" id="detailEditBtn">✏️ 编辑</button>
+                <button class="detail-action-btn" id="detailDeleteBtn" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button>
+            </span>
         </div>
 
         <!-- 已报名用户 -->

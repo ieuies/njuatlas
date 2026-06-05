@@ -38,26 +38,20 @@ function renderProfileHeader() {
 }
 
 function renderAvatar(user) {
-    const avatarEl = document.getElementById('profileAvatarLarge');
-    if (!avatarEl) return;
-    const email = (user?.email || '').toLowerCase().trim();
-    if (email) {
-        const hash = hashCode(email);
-        const gravatarUrl = `https://www.gravatar.com/avatar/${hash}?s=160&d=identicon`;
-        avatarEl.innerHTML = `<img src="${gravatarUrl}" alt="头像" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-user\\'></i>'">`;
-    } else {
-        avatarEl.innerHTML = '<i class="fas fa-user"></i>';
-    }
-}
+    const avatarEls = [
+        document.getElementById('profileAvatarLarge'),
+        document.getElementById('editAvatarPreview'),
+    ];
+    const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
+    const initial = name.charAt(0).toUpperCase();
+    const hue = [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+    const bg = `hsl(${hue}, 55%, 55%)`;
 
-function hashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const chr = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + chr;
-        hash |= 0;
-    }
-    return Math.abs(hash).toString(16);
+    avatarEls.forEach(el => {
+        if (!el) return;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:2rem;font-weight:800;color:#fff;background:${bg};border-radius:50%;">${initial}</span>`;
+        el.style.background = bg;
+    });
 }
 
 async function loadAndRenderBio() {
@@ -316,13 +310,6 @@ function initEditProfile() {
             document.getElementById('editBio').value = profile.bio || '';
             document.getElementById('editTags').value = (profile.tags || []).join(', ');
         } catch (e) { /* 使用默认值 */ }
-        const user = getUser();
-        const email = (user?.email || '').toLowerCase().trim();
-        const preview = document.getElementById('editAvatarPreview');
-        if (preview && email) {
-            const hash = hashCode(email);
-            preview.innerHTML = `<img src="https://www.gravatar.com/avatar/${hash}?s=160&d=identicon" alt="头像">`;
-        }
         modal.style.display = 'flex';
     });
 

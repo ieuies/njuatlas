@@ -124,8 +124,8 @@ function renderGuideGrid(items) {
         return;
     }
 
-    container.innerHTML = items.map(item => `
-        <div class="guide-card">
+    container.innerHTML = items.map((item, idx) => `
+        <div class="guide-card" data-guide-idx="${idx}">
             <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + Math.random()}" alt="${esc(item.name)}" loading="lazy">
             <div class="guide-info">
                 <div class="guide-title">
@@ -141,6 +141,14 @@ function renderGuideGrid(items) {
             </div>
         </div>
     `).join('');
+
+    // 绑定点击事件
+    container.querySelectorAll('.guide-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const idx = parseInt(card.getAttribute('data-guide-idx'));
+            openGuideDetail(items[idx]);
+        });
+    });
 }
 
 function filterGuideItems(cat) {
@@ -150,6 +158,33 @@ function filterGuideItems(cat) {
     });
     const filtered = cat === 'all' ? allSpots : allSpots.filter(s => s.type === cat);
     renderGuideGrid(filtered);
+}
+
+function openGuideDetail(item) {
+    const modal = document.getElementById('guideDetailModal');
+    if (!modal) return;
+    document.getElementById('guideDetailImg').src = item.image || '';
+    document.getElementById('guideDetailName').textContent = item.name;
+    document.getElementById('guideDetailRating').textContent = item.rating ? `⭐ ${item.rating}` : '';
+    document.getElementById('guideDetailPrice').textContent = item.price || '';
+    document.getElementById('guideDetailPrice').style.cssText = item.price ? 'font-weight:700;color:var(--danger);' : '';
+    document.getElementById('guideDetailType').textContent = item.type || '';
+    document.getElementById('guideDetailType').style.cssText = item.type ? 'padding:3px 10px;border-radius:10px;font-size:0.75rem;background:var(--bg-tertiary);color:var(--text-secondary);' : '';
+    document.getElementById('guideDetailDesc').textContent = item.desc || '';
+    document.getElementById('guideDetailAddr').innerHTML = item.address ? `📍 ${esc(item.address)}` : '';
+    modal.style.display = 'flex';
+}
+
+function initGuideModals() {
+    const modal = document.getElementById('guideDetailModal');
+    if (!modal || modal.dataset.ready) return;
+    modal.dataset.ready = '1';
+    document.getElementById('closeGuideDetailBtn')?.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
 }
 
 function initGuideFilter() {
@@ -165,6 +200,7 @@ function initGuideFilter() {
 }
 
 export async function loadGuideData() {
+    initGuideModals();
     initGuideFilter();
     try {
         const searchResult = await searchPlaces('美食', '南京', null, 1, 8);
