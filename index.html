@@ -37,6 +37,7 @@
                 <nav class="desktop-nav" aria-label="主导航">
                     <button class="desktop-nav-item active" data-page="home" type="button">首页</button>
                     <button class="desktop-nav-item" data-page="partner" type="button">找搭子</button>
+                    <button class="desktop-nav-item" data-page="ai" type="button">AI助手</button>
                     <button class="desktop-nav-item" data-page="guide" type="button">吃喝玩乐</button>
                     <button class="desktop-nav-item" data-page="profile" type="button">个人</button>
                 </nav>
@@ -89,6 +90,19 @@
                         <p>基于高德地图展示附近正在进行的组局活动分布，支持按类型筛选标记点，直观了解周边活动密度，点击标记即可查看活动详情并快速参与。</p>
                     </article>
                 </section>
+            </div>
+
+            <!-- ========== AI 助手页面（仅保留功能结构，暂不新增入口浮层和专属 CSS） ========== -->
+            <div id="aiPage" class="page">
+                <section class="page-header-flex">
+                    <h2><i class="fas fa-robot"></i> AI助手</h2>
+                </section>
+                <div id="quickQuestions"></div>
+                <div id="chatMessages"></div>
+                <div>
+                    <input type="text" id="chatInput" placeholder="输入你的问题...">
+                    <button id="sendChatBtn" class="primary-btn" type="button">发送</button>
+                </div>
             </div>
 
             <!-- ========== 找搭子页面（核心：瀑布流 + 地图） ========== -->
@@ -487,7 +501,6 @@
 <script type="module" src="js/utils.js"></script>
 <script type="module" src="js/api.js"></script>
 <script type="module" src="js/pages/home.js"></script>
-<script type="module" src="js/pages/places.js"></script>
 <script type="module" src="js/pages/profile.js"></script>
 <script type="module" src="js/pages/partner.js"></script>
 <script type="module" src="js/pages/guide.js"></script>

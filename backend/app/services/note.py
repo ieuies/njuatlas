@@ -13,13 +13,10 @@ from app import db
 from app.models import (
     EventPost,
     EventParticipant,
-    MatchRecord,
-    Place,
     PostComment,
     PostLike,
     PostTag,
     Tag,
-    User,
     UserTag,
 )
 from app.services.scoring import compute_hot, filter_active
@@ -505,35 +502,6 @@ class NoteSystem:
         return [{"id": t.id, "name": t.name, "category": t.category,
                  "usage_count": t.usage_count} for t in tags]
 
-    # ── 种子标签 ──────────────────────────────────────────────
-    @classmethod
-    def seed_default_tags(cls):
-        """初始化预置标签（仅当 tags 表为空时写入）。
-
-        在首次部署或数据库重置后调用一次即可。
-        """
-        if Tag.query.first():
-            return  # 已有标签，跳过
-
-        defaults = [
-            # food
-            ("川菜", "food"), ("火锅", "food"), ("日料", "food"), ("韩料", "food"),
-            ("咖啡", "food"), ("奶茶", "food"), ("烧烤", "food"), ("甜品", "food"),
-            ("小吃", "food"), ("食堂", "food"),
-            # activity
-            ("羽毛球", "activity"), ("篮球", "activity"), ("跑步", "activity"),
-            ("健身", "activity"), ("游泳", "activity"), ("桌游", "activity"),
-            ("K歌", "activity"), ("电影", "activity"), ("爬山", "activity"),
-            ("骑行", "activity"), ("看展", "activity"), ("自习", "activity"),
-            # identity
-            ("研一", "identity"), ("大一", "identity"), ("计算机系", "identity"),
-            ("社恐", "identity"), ("二次元", "identity"), ("考研党", "identity"),
-            ("留学党", "identity"), ("吃货", "identity"),
-        ]
-        for name, cat in defaults:
-            db.session.add(Tag(name=name, category=cat, usage_count=0))
-        db.session.commit()
-
     # ── 用户标签 ──────────────────────────────────────────────
     def set_user_tags(self, tag_names):
         """批量设置当前用户的兴趣标签（替换旧标签）。"""
@@ -553,11 +521,3 @@ class NoteSystem:
         rows = UserTag.query.filter_by(user_id=self.user_id).all()
         return [{"id": r.tag.id, "name": r.tag.name, "category": r.tag.category} for r in rows if r.tag]
 
-    # ── 热度维护 ──────────────────────────────────────────────
-    @staticmethod
-    def recalc_all_hot():
-        """批量重算所有帖子的热度分（定时任务或运维脚本使用）。"""
-        posts = EventPost.query.all()
-        for p in posts:
-            compute_hot(p)
-        db.session.commit()

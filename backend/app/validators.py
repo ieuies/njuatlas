@@ -116,40 +116,6 @@ def validate_location(value, field="location"):
     return value
 
 
-def validate_history(value, *, max_items=20, max_content_length=1000):
-    """校验前端回传的大模型对话历史。
-
-    只允许传递 user/assistant 两类历史消息，避免前端覆盖 system prompt。
-    """
-    if value is None:
-        return []
-
-    if not isinstance(value, list):
-        raise ValidationError("history 必须是数组")
-
-    if len(value) > max_items:
-        raise ValidationError(f"history 最多保留 {max_items} 条")
-
-    cleaned = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise ValidationError(f"history[{index}] 必须是对象")
-
-        role = item.get("role")
-        if role not in {"user", "assistant"}:
-            raise ValidationError(f"history[{index}].role 只能是 user 或 assistant")
-
-        content = clean_string(
-            item.get("content"),
-            f"history[{index}].content",
-            required=True,
-            max_length=max_content_length,
-        )
-        cleaned.append({"role": role, "content": content})
-
-    return cleaned
-
-
 def validate_session_id(value):
     """校验对话 session_id。
 

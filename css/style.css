@@ -44,9 +44,6 @@
     --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 额外覆盖：确保在大屏（>=481px）底栏与悬浮控件位置正确，不受其他规则干扰 */
-
-
 /* 强制关键容器在移动端占满视口宽度，桌面端由各自布局控制 */
 @media (max-width: 768px) {
     .app-layout.mobile-layout,
@@ -282,11 +279,6 @@ textarea { resize: vertical; min-height: 100px; }
 
 .page.active-page { display: block; }
 
-/* 桌面/平板适配：取消 480px 限制，使应用占满页面，同时调整悬浮/底部元素到视口边缘 */
-
-/* 更强制的覆盖：针对更大设备（平板/桌面）确保没有左右留白 */
-
-
 /* ========== 找搭子页面：分类筛选 ========== */
 .partner-filter {
     display: flex;
@@ -480,31 +472,6 @@ textarea { resize: vertical; min-height: 100px; }
     margin-bottom: 8px;
 }
 
-.member-avatars {
-    display: flex;
-}
-
-.member-avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--gray-200);
-    border: 2px solid white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.6rem;
-    color: var(--text-secondary);
-    margin-left: -6px;
-}
-
-.member-avatar:first-child { margin-left: 0; }
-
-.member-count {
-    font-size: 0.7rem;
-    color: var(--text-tertiary);
-}
-
 .partner-card-meta {
     display: flex;
     flex-wrap: wrap;
@@ -546,18 +513,6 @@ textarea { resize: vertical; min-height: 100px; }
 }
 
 .join-btn:active { transform: scale(0.96); }
-
-/* 附近推荐小行 */
-.card-nearby {
-    font-size: 0.68rem;
-    color: var(--accent);
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--gray-100);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
 
 /* ========== 发起组局 FAB 按钮 ========== */
 .fab-create-group {
@@ -1041,52 +996,6 @@ textarea { resize: vertical; min-height: 100px; }
 
 .profile-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
 
-.profile-section-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.profile-section-title i { color: var(--primary); }
-
-.profile-section-title h3 { margin: 0; font-size: 1rem; font-weight: 700; }
-
-.profile-list { display: flex; flex-direction: column; gap: 8px; }
-
-.profile-list-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 10px;
-    border: 1px solid var(--gray-200);
-    border-radius: 10px;
-    background: var(--bg-tertiary);
-    font-size: 0.85rem;
-}
-
-.profile-empty {
-    padding: 20px;
-    border: 1px dashed var(--gray-300);
-    border-radius: 12px;
-    color: var(--text-tertiary);
-    text-align: center;
-}
-
-.password-form {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 8px;
-}
-
-.password-form input {
-    width: 100%;
-    padding: 10px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--gray-300);
-    font-size: 0.85rem;
-}
-
 /* ========== Toast ========== */
 .toast {
     position: fixed;
@@ -1165,17 +1074,7 @@ button {
 @media (max-width: 380px) {
     .partner-waterfall { column-count: 1; }
     .guide-grid { column-count: 1; }
-    .profile-stats { grid-template-columns: repeat(2, 1fr); }
-    .password-form { grid-template-columns: 1fr; }
 }
-/* =====================================================================
-   桌面端响应式适配（>= 768px）
-   ===================================================================== */
-
-
-/* 大屏进一步放宽 */
-
-
 /* ========== 帖子详情模态框 ========== */
 .post-detail-card {
     max-width: 560px;
@@ -1735,24 +1634,6 @@ body,
     display: grid;
     place-items: center;
     overflow: hidden;
-    background: linear-gradient(135deg, #160b22 0%, #30124d 58%, #f3eff8 100%) !important;
-}
-
-/* 首页背景覆盖整个首页，而不是只覆盖 Hero 上半部分。 */
-#homePage {
-    min-height: calc(100vh - var(--atlas-topbar));
-    background: linear-gradient(135deg, #160b22 0%, #30124d 58%, #f3eff8 100%) !important;
-}
-
-.atlas-hero::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-        linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 42px 42px,
-        linear-gradient(0deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 42px 42px,
-        linear-gradient(135deg, rgba(12, 6, 20, 0.72), rgba(70, 26, 104, 0.34) 58%, rgba(244, 239, 250, 0.1));
-    pointer-events: none;
 }
 
 .pixel-field {
@@ -2390,57 +2271,6 @@ body,
     opacity: 0.5;
 }
 
-/* 账号设置卡片 */
-.profile-settings {
-    background: var(--atlas-card) !important;
-    border-radius: 18px;
-    padding: 18px 20px;
-    box-shadow: var(--atlas-shadow);
-    transition: background-color 0.3s;
-}
-
-.profile-settings .profile-section-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 14px;
-}
-
-.profile-settings .profile-section-title i {
-    color: var(--atlas-purple);
-}
-
-.profile-settings .profile-section-title h3 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--atlas-ink);
-}
-
-.password-form {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 10px;
-    align-items: end;
-}
-
-.password-form input {
-    width: 100%;
-    padding: 10px 14px;
-    border-radius: 12px;
-    border: 1.5px solid var(--gray-300);
-    background: var(--bg-secondary);
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    transition: border-color 0.2s, background-color 0.3s;
-}
-
-.password-form input:focus {
-    border-color: var(--atlas-purple);
-    outline: none;
-    background: var(--bg-primary);
-}
-
 /* 编辑资料模态框 */
 .avatar-edit-row {
     display: flex;
@@ -2539,14 +2369,6 @@ body,
 .danger-btn:hover {
     background: var(--danger);
     color: #fff;
-}
-
-/* 旧的 profile stats 取消显示（已被新 stats row 替代） */
-.profile-stats,
-.profile-grid,
-.profile-settings,
-.password-form {
-    display: none !important;
 }
 
 @keyframes pixelFloat {
@@ -2671,10 +2493,6 @@ body,
         color: var(--atlas-purple);
     }
 
-    .tab-item.active {
-        color: var(--atlas-purple);
-    }
-
     .partner-waterfall,
     .guide-grid {
         grid-template-columns: 1fr;
@@ -2716,10 +2534,6 @@ body,
 
     .profile-tab i {
         font-size: 0.8rem;
-    }
-
-    .password-form {
-        grid-template-columns: 1fr;
     }
 }
 
@@ -2820,48 +2634,6 @@ body,
     background: rgba(255, 255, 255, 0.16) !important;
     color: #fff !important;
     border-color: rgba(255, 255, 255, 0.28) !important;
-}
-
-/* 顶部栏固定在页面上沿；桌面端滚动时导航不再被内容顶走。 */
-.top-bar {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    height: var(--atlas-topbar) !important;
-    align-items: center !important;
-}
-
-/* 顶部按钮和汉字统一用 inline-flex 居中，避免图标、中文基线错位。 */
-.top-bar-left,
-.top-bar-right,
-.desktop-nav,
-.topbar-guest,
-.topbar-user {
-    height: 100%;
-    align-items: center !important;
-}
-
-.brand-mark,
-.theme-toggle-btn,
-.desktop-nav-item,
-.login-round-btn,
-.logout-btn,
-.topbar-username {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    line-height: 1 !important;
-    vertical-align: middle !important;
-}
-
-/* 桌面端绝不显示底部导航；底部 Tab 只属于移动端。 */
-@media (min-width: 769px) {
-    .bottom-tab-bar {
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-    }
 }
 
 /* 找搭子桌面布局 */
@@ -3161,40 +2933,6 @@ body,
     color: #fff !important;
 }
 
-/* 卡片所有者操作按钮 */
-.card-owner-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-}
-.card-action-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 1px solid var(--atlas-line);
-    background: var(--atlas-card);
-    cursor: pointer;
-    font-size: 0.9rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-.card-action-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-.card-edit-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-    background: var(--bg-tertiary);
-}
-.card-delete-btn:hover {
-    border-color: var(--danger);
-    color: var(--danger);
-    background: rgba(239, 68, 68, 0.08);
-}
-
 @media (max-width: 768px) {
     .partner-card-footer {
         flex-wrap: wrap;
@@ -3203,8 +2941,95 @@ body,
     .partner-brief-card .join-btn {
         width: 100% !important;
     }
+}
 
-    .card-owner-actions {
-        justify-content: flex-end;
+/* 顶部导航最终对齐：新增 AI 助手后，所有按钮固定同一高度并按中文基线居中。 */
+.desktop-nav {
+    align-items: center !important;
+}
+
+.desktop-nav-item {
+    height: 38px !important;
+    min-height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 13px !important;
+    line-height: 1 !important;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.brand-mark,
+.theme-toggle-btn,
+.login-round-btn,
+.logout-btn {
+    line-height: 1 !important;
+}
+
+/* 对齐修正：搭子分类按钮文字要在胶囊中垂直居中，不能贴着上沿。 */
+.partner-filter .filter-chip {
+    height: 52px !important;
+    min-height: 52px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 24px !important;
+    line-height: 1 !important;
+    vertical-align: middle !important;
+}
+
+/* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致。 */
+.profile-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+.profile-tab {
+    width: 100% !important;
+    min-height: 58px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 0 12px !important;
+    line-height: 1 !important;
+    white-space: nowrap;
+}
+
+/* 退出按钮只做紧凑图标按钮，避免被全局按钮规则撑成大白圆。 */
+.topbar-user {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 4px 6px 4px 14px !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+.topbar-username {
+    height: 32px !important;
+    line-height: 32px !important;
+}
+
+.logout-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    flex: 0 0 30px !important;
+    font-size: 0.85rem !important;
+}
+
+@media (max-width: 768px) {
+    .profile-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .profile-tab {
+        min-height: 48px !important;
     }
 }

@@ -69,7 +69,9 @@ function renderQuickQuestions() {
         btn.className = 'quick-q-btn';
         btn.textContent = q;
         btn.addEventListener('click', () => {
-            document.getElementById('chatInput').value = q;
+            const input = document.getElementById('chatInput');
+            if (!input) return;
+            input.value = q;
             sendMessage();
         });
         container.appendChild(btn);
@@ -78,13 +80,14 @@ function renderQuickQuestions() {
 
 async function sendMessage() {
     const input = document.getElementById('chatInput');
+    const chatDiv = document.getElementById('chatMessages');
+    if (!input || !chatDiv) return;
     const msg = input.value.trim();
     if (!msg) return;
     if (!isLoggedIn()) {
         showToast('请先登录使用AI助手');
         return;
     }
-    const chatDiv = document.getElementById('chatMessages');
     const userMsgDiv = document.createElement('div');
     userMsgDiv.className = 'chat-message chat-user';
     userMsgDiv.textContent = msg;
@@ -115,10 +118,18 @@ async function sendMessage() {
 }
 
 export function initAIPage() {
-    document.getElementById('sendChatBtn').onclick = sendMessage;
-    document.getElementById('chatInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
+    const sendBtn = document.getElementById('sendChatBtn');
+    const input = document.getElementById('chatInput');
+    if (!sendBtn || !input) return;
+    sendBtn.onclick = sendMessage;
+    if (input.dataset.aiReady !== 'true') {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        input.dataset.aiReady = 'true';
+    }
     // 首次渲染快捷提问按钮
     renderQuickQuestions();
 }
+
+window.initAIPage = initAIPage;

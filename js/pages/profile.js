@@ -1,4 +1,4 @@
-import { getFavorites, getLikes, getReviews, getMyPostComments, getConversations, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
+import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.js';
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 

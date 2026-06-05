@@ -1,4 +1,4 @@
-import { showToast, formatDate, wgs84ToGcj02 } from '../utils.js';
+import { showToast, formatDate, escapeHtml, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
 import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent, listTags } from '../api.js';
 import { API_BASE } from '../config.js';
@@ -49,6 +49,14 @@ function _typeLabel(post) {
     return `${emoji} 长期招募`;
 }
 
+function _isCurrentUserOwner(item) {
+    const user = getUser();
+    if (!item || !user) return Boolean(item?.is_owner);
+    const currentId = user.id ?? user.user_id;
+    const ownerId = item.user_id ?? item.author_id ?? item.owner_id ?? item.user?.id;
+    return Boolean(item.is_owner || (currentId != null && ownerId != null && String(currentId) === String(ownerId)));
+}
+
 // ============================================================
 // 数据加载：从后端 API 获取帖子列表
 // ============================================================
@@ -89,7 +97,7 @@ function _mapPost(p) {
         commentCount: p.comment_count || 0,
         hotScore: p.hot_score || 0,
         isLiked: p.is_liked || false,
-        isOwner: p.is_owner || false,
+        isOwner: _isCurrentUserOwner(p),
         participationStatus: p.participation_status,
         createdAt: formatDate(p.created_at),
         nearby: '',  // 预留：后续可关联场所推荐
@@ -351,17 +359,37 @@ async function handleParticipate(postId) {
     }
     try {
         const result = await participateEvent(postId, 'going');
+        _applyParticipationResult(postId, result);
         if (result.status === 'going') {
             showToast('报名成功');
         } else if (result.status === null) {
             showToast('已取消报名');
         }
-        // 刷新本地数据
+        renderWaterfall();
+        // 刷新本地数据；若后端未返回用户态字段，保留刚才的按钮状态，避免刷新后误回到“我要参加”。
+        const latestStatus = result.status ?? null;
         await loadPostsFromAPI();
+        const updated = partnersData.find(p => p.id === postId);
+        if (updated && latestStatus === 'going' && updated.participationStatus !== 'going') {
+            updated.participationStatus = latestStatus;
+        }
         renderWaterfall();
         refreshPreviewMarkers();
     } catch (err) {
         showToast('操作失败: ' + err.message);
+    }
+}
+
+function _applyParticipationResult(postId, result) {
+    const post = partnersData.find(p => p.id === postId);
+    if (!post) return;
+    post.participationStatus = result.status ?? null;
+    if (typeof result.participant_count === 'number') {
+        post.members = result.participant_count;
+    } else if (result.status === 'going') {
+        post.members += 1;
+    } else if (result.status === null && post.members > 0) {
+        post.members -= 1;
     }
 }
 
@@ -429,12 +457,15 @@ function initPostDetailModal() {
             const result = await participateEvent(currentDetailPost.id, 'going');
             currentDetailPost.participation_status = result.status;
             currentDetailPost.participant_count = result.participant_count;
+            _applyParticipationResult(currentDetailPost.id, result);
             _updateDetailStats();
             const going = result.status === 'going';
             participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
             participateBtn.classList.toggle('going', going);
             // 刷新报名列表
             await _refreshDetailParticipants(currentDetailPost.id);
+            renderWaterfall();
+            refreshPreviewMarkers();
         } catch (err) {
             showToast('操作失败: ' + err.message);
         }
@@ -467,7 +498,6 @@ function initPostDetailModal() {
         if (!currentDetailPost) return;
         if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
         try {
-            const { deletePost } = await import('../api.js');
             await deletePost(currentDetailPost.id);
             showToast('已删除');
             document.getElementById('postDetailModal').style.display = 'none';
@@ -624,35 +654,39 @@ function _renderDetailComments(commentsData) {
         return;
     }
 
-    container.innerHTML = items.map(c => `
+    container.innerHTML = items.map(c => {
+        const canDeleteComment = _isCurrentUserOwner(c);
+        return `
         <div class="detail-comment" data-comment-id="${c.id}">
             <div class="detail-comment-header">
-                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${c.is_owner ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${canDeleteComment ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                 <span class="detail-comment-time">${formatDate(c.created_at)}</span>
             </div>
             <div class="detail-comment-body">${escapeHtml(c.content)}</div>
             <div class="detail-comment-actions">
                 <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
-                ${c.is_owner ? `<button class="detail-comment-delete-btn" data-comment-id="${c.id}" title="删除评论">🗑️</button>` : ''}
+                ${canDeleteComment ? `<button class="detail-comment-delete-btn" data-comment-id="${c.id}" title="删除评论">删除</button>` : ''}
             </div>
             ${(c.replies && c.replies.length) ? `
                 <div class="detail-comment-replies">
-                    ${c.replies.map(r => `
+                    ${c.replies.map(r => {
+                        const canDeleteReply = _isCurrentUserOwner(r);
+                        return `
                         <div class="detail-comment" data-comment-id="${r.id}">
                             <div class="detail-comment-header">
-                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${r.is_owner ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${canDeleteReply ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                                 <span class="detail-comment-time">${formatDate(r.created_at)}</span>
                             </div>
                             <div class="detail-comment-body">${escapeHtml(r.content)}</div>
                             <div class="detail-comment-actions">
-                                ${r.is_owner ? `<button class="detail-comment-delete-btn" data-comment-id="${r.id}" title="删除回复">🗑️</button>` : ''}
+                                ${canDeleteReply ? `<button class="detail-comment-delete-btn" data-comment-id="${r.id}" title="删除回复">删除</button>` : ''}
                             </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             ` : ''}
         </div>
-    `).join('');
+    `}).join('');
 
     // 回复按钮
     container.querySelectorAll('.detail-comment-reply-btn').forEach(btn => {
@@ -987,7 +1021,6 @@ function initPartnerModal() {
 
         try {
             if (editId) {
-                const { updatePost } = await import('../api.js');
                 await updatePost(parseInt(editId), {
                     type: currentDuration === 'long' ? 'forum' : 'event',
                     title, content: description || title, tags,
@@ -1072,16 +1105,6 @@ export { openPostDetail };
 // ============================================================
 // 工具函数
 // ============================================================
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}
-
 /** 安全渲染文本为 HTML：保留 emoji 和所有 Unicode，转换换行为 <br> */
 function safeHtmlWithBreaks(str) {
     if (!str) return '';

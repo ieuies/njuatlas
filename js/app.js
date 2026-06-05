@@ -5,6 +5,7 @@ import { showToast } from './utils.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
 import { loadAmapScript } from './config.js';
+import { initAIPage } from './pages/ai.js';
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
@@ -25,6 +26,7 @@ let currentPage = 'home';
 const pageTitles = {
     home: '首页',
     partner: '找搭子',
+    ai: 'AI助手',
     guide: '吃喝玩乐',
     profile: '个人',
     fullMap: '组局地图',
@@ -48,6 +50,7 @@ function switchPage(pageId) {
     const pageMap = {
         home: 'homePage',
         partner: 'partnerPage',
+        ai: 'aiPage',
         guide: 'guidePage',
         profile: 'profilePage',
         fullMap: 'fullMapPage',
@@ -77,6 +80,7 @@ function switchPage(pageId) {
 
     // 页面切换时的初始化
     if (pageId === 'guide') initGuidePage();
+    else if (pageId === 'ai') initAIPage();
     else if (pageId === 'profile') refreshProfile();
     else if (pageId === 'fullMap') {
         // 全屏地图：等浏览器完成布局后再初始化，避免容器尺寸为 0

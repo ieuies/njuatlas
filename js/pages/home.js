@@ -113,8 +113,6 @@ async function sendForgotCode() {
 
 export function showHomePage() {
     // 绑定主页按钮事件
-    const getStarted = document.getElementById('getStartedBtn');
-    if (getStarted) getStarted.onclick = () => showModal('login');
     document.getElementById('showLoginBtn').onclick = () => showModal('login');
     // 注册按钮在新布局的模态框内，不需要额外绑定
     document.getElementById('switchToRegister').onclick = (e) => { e.preventDefault(); showModal('register'); };
@@ -127,5 +125,3 @@ export function showHomePage() {
     document.getElementById('sendRegCodeBtn').onclick = sendRegisterCode;
     document.getElementById('sendForgotCodeBtn').onclick = sendForgotCode;
 }
-
-export function hideHomePage() {}

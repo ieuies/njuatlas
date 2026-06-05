@@ -11,7 +11,7 @@ from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.rate_limit import limiter
 from app.services.note import NoteSystem, SingleNote
-from app.validators import clean_string, get_json_body, int_range, optional_rating
+from app.validators import clean_string, get_json_body, int_range
 
 
 note_bp = Blueprint("note", __name__, url_prefix="/api")
