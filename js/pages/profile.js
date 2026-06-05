@@ -1,4 +1,4 @@
-import { getFavorites, getLikes, getReviews, getConversations, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
+import { getFavorites, getLikes, getReviews, getMyPostComments, getConversations, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.js';
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 
@@ -164,13 +164,26 @@ async function renderMyPosts(container) {
    ================================================================ */
 async function renderMyComments(container) {
     try {
-        // 从 reviews API 获取场所评论
-        const [reviewsData, conversationsData] = await Promise.all([
+        // 拉取场所评论 + 帖子评论
+        const [reviewsData, postCommentsData] = await Promise.all([
             getReviews().catch(() => ({ items: [] })),
-            getConversations().catch(() => ({ items: [] })),
+            getMyPostComments().catch(() => ({ items: [] })),
         ]);
         const reviews = reviewsData.items || [];
+        const postComments = postCommentsData.items || [];
+
         const comments = [];
+
+        // 帖子评论
+        postComments.forEach(c => {
+            comments.push({
+                type: 'post',
+                content: c.content || '',
+                postTitle: c.post_title || '未知帖子',
+                postId: c.post_id,
+                time: c.created_at,
+            });
+        });
 
         // 场所评论
         reviews.forEach(r => {
@@ -183,23 +196,53 @@ async function renderMyComments(container) {
             });
         });
 
+        // 按时间倒序
+        comments.sort((a, b) => new Date(b.time) - new Date(a.time));
+
         document.getElementById('commentMadeCount').innerText = comments.length;
         if (!comments.length) {
             container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-comment"></i>还没有发表过评论</div>';
             return;
         }
-        container.innerHTML = comments.map(c => `
-            <article class="profile-content-card">
-                <div class="profile-content-card-title">
-                    <i class="fas fa-map-marker-alt"></i> ${escapeHtml(c.placeName)}
-                </div>
-                <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
-                <div class="profile-content-card-meta">
-                    <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
-                    ${c.rating ? `<span><i class="fas fa-star"></i> ${c.rating} 分</span>` : ''}
-                </div>
-            </article>
-        `).join('');
+        container.innerHTML = comments.map(c => {
+            if (c.type === 'post') {
+                return `
+                    <article class="profile-content-card" data-post-id="${c.postId}">
+                        <div class="profile-content-card-title">
+                            💬 回复：${escapeHtml(c.postTitle)}
+                        </div>
+                        <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
+                        <div class="profile-content-card-meta">
+                            <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
+                            <span class="profile-tag">帖子评论</span>
+                        </div>
+                    </article>
+                `;
+            }
+            return `
+                <article class="profile-content-card">
+                    <div class="profile-content-card-title">
+                        <i class="fas fa-map-marker-alt"></i> ${escapeHtml(c.placeName)}
+                    </div>
+                    <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
+                    <div class="profile-content-card-meta">
+                        <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
+                        ${c.rating ? `<span><i class="fas fa-star"></i> ${c.rating} 分</span>` : ''}
+                    </div>
+                </article>
+            `;
+        }).join('');
+
+        // 帖子评论卡片可点击跳转
+        container.querySelectorAll('.profile-content-card[data-post-id]').forEach(card => {
+            card.addEventListener('click', () => {
+                const postId = parseInt(card.getAttribute('data-post-id'));
+                if (postId && typeof window.openPostDetail === 'function') {
+                    window.openPostDetail(postId);
+                }
+            });
+            card.style.cursor = 'pointer';
+        });
     } catch (e) {
         container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
     }

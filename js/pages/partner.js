@@ -29,6 +29,26 @@ function _categoryStyle(cat) {
     return categoryColorCache[cat];
 }
 
+// 搭子类型 → emoji 映射
+const TYPE_EMOJI = {
+    '饭搭子': '🍚',
+    '运动搭子': '⚽',
+    '学习搭子': '📚',
+    '游戏搭子': '🎮',
+    '电影搭子': '🎬',
+    '旅游搭子': '✈️',
+    '音乐搭子': '🎵',
+    '摄影搭子': '📷',
+};
+function _typeEmoji(category) {
+    return TYPE_EMOJI[category] || '👥';
+}
+function _typeLabel(post) {
+    const emoji = _typeEmoji(post.category);
+    if (post.type === 'event') return `${emoji} 活动组局`;
+    return `${emoji} 长期招募`;
+}
+
 // ============================================================
 // 数据加载：从后端 API 获取帖子列表
 // ============================================================
@@ -262,16 +282,16 @@ function renderWaterfall() {
             <div class="partner-card-content">
                 <div class="partner-card-head">
                     <div class="partner-card-tags">
-                        ${p.tags.slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
+                        ${p.tags.filter(t => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t)).slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
-                    <span class="partner-card-type">${p.type === 'event' ? '活动组局' : '长期招募'}</span>
+                    <span class="partner-card-type">${_typeLabel(p)}</span>
                 </div>
                 <h3 class="partner-card-title">${escapeHtml(p.title)}</h3>
                 <p class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</p>
                 <div class="partner-card-meta" aria-label="组局信息">
                     ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
                     ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
-                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-crown" style="color:#F59E0B;font-size:0.7rem;" title="我发起的"></i>' : ''}</em></span>
+                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' 👑' : ''}</em></span>
                 </div>
                 <div class="partner-card-footer">
                     <div class="partner-card-stats">
@@ -280,13 +300,12 @@ function renderWaterfall() {
                         <span>👥 ${p.members}</span>
                     </div>
                     ${p.isOwner ? `
-                        <div class="card-owner-actions" data-id="${p.id}">
-                            <button class="card-action-btn card-edit-btn" data-id="${p.id}" title="编辑">✏️</button>
-                            <button class="card-action-btn card-delete-btn" data-id="${p.id}" title="删除">🗑️</button>
-                        </div>
+                        <button class="join-btn owner-delete-btn" data-id="${p.id}">
+                            🗑️ 删除活动
+                        </button>
                     ` : `
-                        <button class="join-btn" data-id="${p.id}" data-pstatus="${p.participationStatus || ''}">
-                            ${p.type === 'event' ? (p.participationStatus === 'going' ? '已报名' : '我要参加') : '感兴趣'}
+                        <button class="join-btn" data-id="${p.id}">
+                            ${p.type === 'event' ? (p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加') : (p.participationStatus === 'going' ? '✅ 已关注·点此取消' : '感兴趣')}
                         </button>
                     `}
                 </div>
@@ -294,35 +313,25 @@ function renderWaterfall() {
         </article>
     `).join('');
 
-    // 「参加」按钮
-    container.querySelectorAll('.join-btn').forEach(btn => {
+    // 发起者「删除活动」按钮
+    container.querySelectorAll('.owner-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _deletePostCard(parseInt(btn.getAttribute('data-id')));
+        });
+    });
+
+    // 「参加」按钮（非发起者）
+    container.querySelectorAll('.join-btn:not(.owner-delete-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             handleParticipate(parseInt(btn.getAttribute('data-id')));
         });
     });
 
-    // 卡片所有者操作按钮
-    container.querySelectorAll('.card-edit-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const pid = parseInt(btn.getAttribute('data-id'));
-            const post = partnersData.find(p => p.id === pid);
-            if (post) _openEditPostCard(post);
-        });
-    });
-    container.querySelectorAll('.card-delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const pid = parseInt(btn.getAttribute('data-id'));
-            _deletePostCard(pid);
-        });
-    });
-
-    // 卡片点击 → 打开帖子详情（但所有者操作按钮区域除外）
+    // 卡片点击 → 打开帖子详情
     container.querySelectorAll('.partner-card').forEach(card => {
         card.addEventListener('click', (e) => {
-            // 如果点击的是按钮或按钮内部元素，不打开详情
             if (e.target.closest('button')) return;
             const pid = parseInt(card.getAttribute('data-id'));
             if (pid) openPostDetail(pid);
@@ -356,32 +365,9 @@ async function handleParticipate(postId) {
     }
 }
 
-/** 从卡片直接编辑帖子 */
-function _openEditPostCard(post) {
-    const modal = document.getElementById('partnerModal');
-    if (!modal) return;
-    document.getElementById('partnerCategory').value = post.category || '';
-    document.getElementById('partnerTitle').value = post.title || '';
-    document.getElementById('partnerDesc').value = post.description || '';
-    document.getElementById('partnerLocation').value = post.location || '';
-    document.getElementById('partnerSlots').value = post.slots || 1;
-    document.getElementById('partnerBudget').value = '';
-    modal.setAttribute('data-edit-id', post.id);
-    // 设置时长类型
-    const isLong = post.type === 'forum';
-    const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
-    durationBtns.forEach(b => {
-        b.classList.remove('active');
-        if (b.getAttribute('data-duration') === (isLong ? 'long' : 'short')) b.classList.add('active');
-    });
-    const timeModeRow = document.getElementById('timeModeRow');
-    if (timeModeRow) timeModeRow.style.display = isLong ? 'none' : 'flex';
-    modal.style.display = 'flex';
-}
-
-/** 从卡片直接删除帖子 */
+/** 从卡片直接删除帖子（仅发起者可见此操作） */
 async function _deletePostCard(postId) {
-    if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
+    if (!confirm('⚠️ 确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
     try {
         await deletePost(postId);
         showToast('已删除');
@@ -750,10 +736,17 @@ async function initFilters() {
     const container = document.getElementById('partnerFilter');
     if (!container) return;
 
-    // 先从后端拉取标签列表
+    // 先从后端拉取标签列表（仅 activity 类别，排除 food / identity / 价格标签）
     try {
         const result = await listTags();
-        allTags = result.items || [];
+        allTags = (result.items || []).filter(t => {
+            // 排除价格/数字标签
+            if (/^[\d¥￥]/.test(t.name) || ['AA', '免费', '自费'].includes(t.name)) return false;
+            // 排除 food 和 identity 类别
+            if (t.category === 'food' || t.category === 'identity') return false;
+            // 保留 activity 类别 + 搭子类型（category 可能为 unknown）
+            return true;
+        });
     } catch (e) {
         allTags = [];
     }

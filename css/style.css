@@ -3111,10 +3111,11 @@ body,
 }
 
 .partner-card-footer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
     align-items: center;
+    gap: 10px;
 }
 
 .partner-brief-card .partner-card-stats {
@@ -3122,6 +3123,7 @@ body,
     flex-wrap: wrap;
     gap: 7px;
     margin: 0 !important;
+    align-items: center;
 }
 
 .partner-brief-card .partner-card-stats span {
@@ -3131,6 +3133,9 @@ body,
     color: var(--text-secondary) !important;
     font-size: 0.74rem !important;
     font-weight: 850 !important;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
 }
 
 .partner-brief-card .join-btn {
@@ -3140,6 +3145,20 @@ body,
     padding: 0 16px !important;
     border-radius: 999px !important;
     font-weight: 900 !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* 发起者删除按钮（红色边框） */
+.partner-brief-card .owner-delete-btn {
+    background: transparent !important;
+    color: var(--danger) !important;
+    border: 2px solid var(--danger) !important;
+    box-shadow: none !important;
+}
+.partner-brief-card .owner-delete-btn:hover {
+    background: var(--danger) !important;
+    color: #fff !important;
 }
 
 /* 卡片所有者操作按钮 */
@@ -3178,7 +3197,7 @@ body,
 
 @media (max-width: 768px) {
     .partner-card-footer {
-        grid-template-columns: 1fr;
+        flex-wrap: wrap;
     }
 
     .partner-brief-card .join-btn {

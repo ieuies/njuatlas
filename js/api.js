@@ -214,6 +214,9 @@ export async function getLikes() {
 export async function getReviews() {
     return request('/me/reviews', 'GET');
 }
+export async function getMyPostComments() {
+    return request('/me/post-comments', 'GET');
+}
 export async function getConversations() {
     return request('/me/conversations', 'GET');
 }

@@ -359,6 +359,33 @@ def set_my_tags():
     return jsonify({"items": _ns().get_user_tags()})
 
 
+@note_bp.route("/me/post-comments", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def my_post_comments():
+    """获取当前用户发表的所有帖子评论（含所属帖子信息）。"""
+    from app.models import PostComment, EventPost
+    comments = (
+        PostComment.query
+        .filter_by(user_id=g.current_user_id)
+        .order_by(PostComment.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    items = []
+    for c in comments:
+        post = EventPost.query.get(c.post_id)
+        items.append({
+            "id": c.id,
+            "content": c.content,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "post_id": c.post_id,
+            "post_title": post.title if post else "(已删除)",
+            "parent_id": c.parent_id,
+        })
+    return jsonify({"items": items})
+
+
 # ═══════════════════════════════════════════════════════════════
 # 场所关联帖子
 # ═══════════════════════════════════════════════════════════════
