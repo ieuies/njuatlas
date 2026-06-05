@@ -448,7 +448,7 @@ function _resetDetailUI() {
 function _renderPostDetail(post) {
     // 头部
     document.getElementById('detailTitle').textContent = post.title;
-    document.getElementById('detailBody').textContent = post.content || '';
+    document.getElementById('detailBody').innerHTML = safeHtmlWithBreaks(post.content || '');
 
     // 标签
     const tags = post.tags || [];
@@ -919,6 +919,16 @@ function escapeHtml(str) {
         if (m === '>') return '&gt;';
         return m;
     });
+}
+
+/** 安全渲染文本为 HTML：保留 emoji 和所有 Unicode，转换换行为 <br> */
+function safeHtmlWithBreaks(str) {
+    if (!str) return '';
+    // 先转义 HTML 特殊字符（保留 emoji 等多字节 Unicode）
+    let safe = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // 换行转 <br>，保留连续空白
+    safe = safe.replace(/\n/g, '<br>');
+    return safe;
 }
 
 function _debounce(fn, delay) {

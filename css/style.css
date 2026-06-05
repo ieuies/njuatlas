@@ -1407,6 +1407,7 @@ button:active { transform: scale(0.96); }
 }
 
 :root[data-theme="dark"] {
+    /* System B (atlas) overrides */
     --atlas-ink: #f2eeff;
     --atlas-muted: #b9b0cc;
     --atlas-bg: #10101a;
@@ -1414,6 +1415,34 @@ button:active { transform: scale(0.96); }
     --atlas-line: rgba(168, 85, 247, 0.22);
     --atlas-shadow: 0 20px 52px rgba(0, 0, 0, 0.36);
     --atlas-shadow-strong: 0 28px 76px rgba(0, 0, 0, 0.48);
+
+    /* System A (legacy) dark mode overrides */
+    --primary: #a855f7;
+    --primary-dark: #9333ea;
+    --primary-light: #c084fc;
+    --accent: #f472b6;
+    --accent-light: #f9a8d4;
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16162a;
+    --bg-tertiary: #222240;
+    --text-primary: #e8e4f0;
+    --text-secondary: #b0a8c0;
+    --text-tertiary: #7a7088;
+    --gray-50: #1a1a2e;
+    --gray-100: #222240;
+    --gray-200: #2e2e4a;
+    --gray-300: #3d3d5a;
+    --gray-400: #6b6080;
+    --gray-500: #8a7f9a;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --info: #60a5fa;
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.20);
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.25), 0 1px 2px 0 rgba(0, 0, 0, 0.20);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.30), 0 2px 4px -1px rgba(0, 0, 0, 0.18);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -2px rgba(0, 0, 0, 0.20);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.40), 0 10px 10px -5px rgba(0, 0, 0, 0.20);
 }
 
 html,
@@ -1573,7 +1602,13 @@ body,
     transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
-.login-round-btn,
+.login-round-btn {
+    border: none;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
+    color: #fff;
+    box-shadow: var(--shadow-md);
+}
+
 .logout-btn,
 .map-expand-btn,
 .secondary-btn,
@@ -1829,7 +1864,7 @@ body,
     margin: 0 0 14px;
     border: 0;
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.84);
+    background: var(--atlas-card);
     box-shadow: var(--atlas-shadow);
 }
 
@@ -1838,9 +1873,10 @@ body,
     padding: 0 15px;
     border: 0;
     border-radius: 999px;
-    background: rgba(107, 33, 165, 0.08);
+    background: var(--bg-tertiary);
     color: var(--atlas-ink);
     font-weight: 900;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 .filter-chip.active {
@@ -1856,7 +1892,7 @@ body,
 .map-preview-header {
     min-height: 44px;
     padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.62);
+    background: var(--atlas-card);
 }
 
 .partner-waterfall {
@@ -1877,8 +1913,9 @@ body,
     min-height: 168px;
     padding: 18px;
     background:
-        linear-gradient(90deg, rgba(107, 33, 165, 0.14) 0 5px, transparent 5px),
+        linear-gradient(90deg, var(--atlas-line) 0 5px, transparent 5px),
         var(--atlas-card) !important;
+    transition: background-color 0.3s;
 }
 
 .guide-img {
@@ -1888,31 +1925,344 @@ body,
     filter: saturate(0.92) contrast(0.96);
 }
 
+/* ====== 个人中心新布局 ====== */
 .profile-shell {
     display: grid;
     gap: 16px;
 }
 
-.profile-summary {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+/* 个人信息头部卡片 */
+.profile-header-card {
+    background: var(--atlas-card) !important;
+    border-radius: 18px;
+    padding: 24px 20px 16px;
+    box-shadow: var(--atlas-shadow);
+    backdrop-filter: blur(16px);
+    transition: background-color 0.3s;
+}
+
+.profile-header-top {
+    display: flex;
+    align-items: flex-start;
     gap: 18px;
+    margin-bottom: 20px;
+}
+
+.profile-avatar-lg {
+    width: 80px;
+    height: 80px;
+    min-width: 80px;
+    border-radius: 50%;
+    display: flex;
     align-items: center;
-    padding: 22px;
-}
-
-.profile-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: 22px;
+    justify-content: center;
     background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    font-size: 2rem;
     box-shadow: 0 16px 36px rgba(107, 33, 165, 0.22);
+    overflow: hidden;
 }
 
-.profile-stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+.profile-avatar-lg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.profile-header-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.profile-name-row h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--atlas-ink);
+}
+
+.profile-edit-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    color: var(--atlas-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.profile-edit-btn:hover {
+    color: var(--atlas-purple);
+    border-color: var(--atlas-purple);
+    transform: scale(1.05);
+}
+
+.profile-bio {
+    margin: 4px 0;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.profile-email-line {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+.profile-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+/* 数据统计行 */
+.profile-stats-row {
+    display: flex;
+    justify-content: space-around;
+    padding-top: 16px;
+    border-top: 1px solid var(--atlas-line);
+}
+
+.profile-stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.profile-stat-num {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--atlas-ink);
+}
+
+.profile-stat-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+/* Tab 导航 */
+.profile-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--atlas-card);
+    border-radius: 16px;
+    box-shadow: var(--atlas-shadow);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    transition: background-color 0.3s;
+}
+.profile-tabs::-webkit-scrollbar { display: none; }
+
+.profile-tab {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 13px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.profile-tab i {
+    font-size: 0.9rem;
+}
+
+.profile-tab:hover {
+    color: var(--atlas-purple);
+    background: var(--bg-tertiary);
+}
+
+.profile-tab.active {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(107, 33, 165, 0.25);
+}
+
+/* Tab 内容区 */
+.profile-tab-content {
+    min-height: 200px;
+}
+
+.profile-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-tertiary);
+}
+
+/* 内容卡片（用于 Tab 内） */
+.profile-content-card {
+    background: var(--atlas-card);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    box-shadow: var(--atlas-shadow);
+    transition: background-color 0.3s, transform 0.2s;
+}
+
+.profile-content-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--atlas-shadow-strong);
+}
+
+.profile-content-card-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--atlas-ink);
+    margin-bottom: 4px;
+}
+
+.profile-content-card-meta {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    display: flex;
     gap: 12px;
+    flex-wrap: wrap;
+}
+
+.profile-content-card-body {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.profile-empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-tertiary);
+    font-size: 0.9rem;
+}
+
+.profile-empty-state i {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+/* 账号设置卡片 */
+.profile-settings {
+    background: var(--atlas-card) !important;
+    border-radius: 18px;
+    padding: 18px 20px;
+    box-shadow: var(--atlas-shadow);
+    transition: background-color 0.3s;
+}
+
+.profile-settings .profile-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.profile-settings .profile-section-title i {
+    color: var(--atlas-purple);
+}
+
+.profile-settings .profile-section-title h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--atlas-ink);
+}
+
+.password-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.password-form input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--gray-300);
+    background: var(--bg-secondary);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    transition: border-color 0.2s, background-color 0.3s;
+}
+
+.password-form input:focus {
+    border-color: var(--atlas-purple);
+    outline: none;
+    background: var(--bg-primary);
+}
+
+/* 编辑资料模态框 */
+.avatar-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.avatar-hint {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+#editProfileForm label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    margin-top: 12px;
+}
+
+#editProfileForm input,
+#editProfileForm textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--gray-300);
+    background: var(--bg-secondary);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    transition: border-color 0.2s, background-color 0.3s;
+    font-family: inherit;
+}
+
+#editProfileForm input:focus,
+#editProfileForm textarea:focus {
+    border-color: var(--atlas-purple);
+    outline: none;
+    background: var(--bg-primary);
+}
+
+/* 旧的 profile stats 取消显示（已被新 stats row 替代） */
+.profile-stats,
+.profile-grid {
+    display: none !important;
 }
 
 @keyframes pixelFloat {
@@ -1996,25 +2346,47 @@ body,
 
     .bottom-tab-bar {
         display: flex !important;
+        justify-content: space-around;
+        align-items: center;
         position: fixed !important;
         left: 50% !important;
         right: auto !important;
         bottom: 0 !important;
         width: min(100%, 520px) !important;
         height: 66px;
+        padding: 4px 8px;
         transform: translateX(-50%) !important;
         z-index: 2800;
         border-top: 1px solid var(--atlas-line);
-        background: rgba(255, 255, 255, 0.9);
+        background: var(--atlas-card);
         backdrop-filter: blur(18px);
+        transition: background-color 0.3s;
     }
 
     .tab-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
         min-width: 44px;
         min-height: 44px;
+        padding: 4px 10px;
+        border: none;
+        background: transparent;
         color: var(--atlas-muted);
-        font-size: 0.72rem;
-        font-weight: 900;
+        font-size: 0.68rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .tab-item i {
+        font-size: 1.15rem;
+    }
+
+    .tab-item.active {
+        color: var(--atlas-purple);
     }
 
     .tab-item.active {
@@ -2029,6 +2401,44 @@ body,
     .profile-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    /* 移动端个人中心 */
+    .profile-header-top {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .profile-avatar-lg {
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+    }
+
+    .profile-name-row {
+        justify-content: center;
+    }
+
+    .profile-stats-row {
+        justify-content: space-around;
+    }
+
+    .profile-tabs {
+        gap: 2px;
+    }
+
+    .profile-tab {
+        padding: 8px 12px;
+        font-size: 0.78rem;
+    }
+
+    .profile-tab i {
+        font-size: 0.8rem;
+    }
+
+    .password-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* =====================================================================
@@ -2037,24 +2447,39 @@ body,
    styles without scattering overrides through the file.
    ===================================================================== */
 
-/* 首页回到干净首屏：去掉图片、幻色背景和装饰气泡，只保留品牌与功能入口。 */
+/* ====== 首页背景：日间带柔光白，夜间深色 ====== */
 #homePage,
 #homePage.active-page,
 .atlas-hero {
+    position: relative;
     min-height: calc(100vh - var(--atlas-topbar));
-    background: #fff !important;
+    background: linear-gradient(180deg, #fefdfe 0%, #f8f6fa 30%, #f3eff8 100%) !important;
     background-image: none !important;
+}
+
+/* 柔光光效层 */
+#homePage::before {
+    content: "" !important;
+    display: block !important;
+    position: absolute;
+    top: -180px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(900px, 100vw);
+    height: 500px;
+    background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.10) 0%, rgba(168, 85, 247, 0.04) 40%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 .atlas-hero::before,
 .atlas-hero::after,
-#homePage::before,
 #homePage::after {
     display: none !important;
     content: none !important;
 }
 
-/* 首页保留 NJUATLAS 背后的方块阵列和下方图泡，但去掉页面级背景。 */
+/* 首页保留 NJUATLAS 背后的方块阵列和下方图泡 */
 .pixel-field {
     display: grid !important;
 }
@@ -2063,11 +2488,60 @@ body,
     display: grid !important;
 }
 
-body.dark-mode #homePage,
-body.dark-mode #homePage.active-page,
-body.dark-mode .atlas-hero {
-    background: #0f0f16 !important;
+/* 夜间模式 */
+:root[data-theme="dark"] #homePage,
+:root[data-theme="dark"] #homePage.active-page,
+:root[data-theme="dark"] .atlas-hero {
+    background: linear-gradient(180deg, #14101e 0%, #1a1528 50%, #0f0f18 100%) !important;
     background-image: none !important;
+}
+
+:root[data-theme="dark"] #homePage::before {
+    background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.14) 0%, rgba(107, 33, 165, 0.06) 40%, transparent 70%);
+}
+
+/* ====== Hero 文字颜色：日间黑，夜间白 ====== */
+.hero-kicker {
+    color: #4a3f5c !important;
+}
+.hero-subtitle {
+    color: #5e5270 !important;
+}
+.hero-content h1 {
+    color: #1a1228 !important;
+    text-shadow: none !important;
+}
+
+:root[data-theme="dark"] .hero-kicker {
+    color: rgba(255, 255, 255, 0.78) !important;
+}
+:root[data-theme="dark"] .hero-subtitle {
+    color: rgba(255, 255, 255, 0.78) !important;
+}
+:root[data-theme="dark"] .hero-content h1 {
+    color: #fff !important;
+    text-shadow: 0 18px 50px rgba(20, 8, 36, 0.28) !important;
+}
+
+/* 日间 Hero Primary 按钮 */
+.hero-primary-btn {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft)) !important;
+    color: #fff !important;
+}
+.hero-secondary-btn {
+    background: var(--atlas-card) !important;
+    color: var(--atlas-ink) !important;
+    border: 1px solid var(--atlas-line) !important;
+}
+
+:root[data-theme="dark"] .hero-primary-btn {
+    background: linear-gradient(135deg, #fff, #ead7ff) !important;
+    color: #3a155b !important;
+}
+:root[data-theme="dark"] .hero-secondary-btn {
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
 }
 
 /* 顶部栏固定在页面上沿；桌面端滚动时导航不再被内容顶走。 */
@@ -2123,7 +2597,7 @@ body.dark-mode .atlas-hero {
             "map list";
         gap: 18px;
         width: calc(100% - 36px) !important;
-        max-width: none !important;
+        max-width: 1400px !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
         margin: 0 auto !important;
         padding: 18px 0 30px !important;
@@ -2133,6 +2607,7 @@ body.dark-mode .atlas-hero {
         grid-area: filter;
         margin: 0 !important;
         align-self: start;
+        overflow: hidden;
     }
 
     #partnerPage > .map-preview-card {
@@ -2141,10 +2616,12 @@ body.dark-mode .atlas-hero {
         top: calc(var(--atlas-topbar) + 18px);
         height: calc(100vh - var(--atlas-topbar) - 36px);
         min-height: 520px;
+        max-height: calc(100vh - var(--atlas-topbar) - 36px);
         margin: 0 !important;
         align-self: start;
         display: grid;
         grid-template-rows: auto 1fr auto;
+        overflow: hidden;
     }
 
     #partnerPage > .partner-waterfall {
@@ -2156,6 +2633,16 @@ body.dark-mode .atlas-hero {
     .map-preview-body {
         height: auto !important;
         min-height: 0 !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .map-preview-body .map-container,
+    .map-preview-body #previewMap {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
     }
 }
 
@@ -2204,18 +2691,16 @@ body.dark-mode .atlas-hero {
     }
 }
 
-/* 搭子卡片改为信息卡：去掉网格纸和旋转，优先让用户一眼读懂地点、时间、发起人。 */
+/* 搭子卡片改为信息卡：使用 CSS 变量，日夜间自动适配 */
 .partner-brief-card {
     display: block !important;
     min-height: 0 !important;
     border-radius: 18px !important;
     transform: none !important;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 246, 255, 0.98)) !important;
-    border: 1px solid rgba(106, 44, 142, 0.11) !important;
-    box-shadow:
-        0 14px 30px rgba(40, 24, 57, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+    background: var(--atlas-card) !important;
+    border: 1px solid var(--atlas-line) !important;
+    box-shadow: var(--atlas-shadow);
+    transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
 }
 
 .partner-brief-card .partner-card-content {
@@ -2251,13 +2736,13 @@ body.dark-mode .atlas-hero {
 
 .partner-card-type {
     flex: 0 0 auto;
-    background: rgba(35, 22, 46, 0.06) !important;
-    color: #4b3b55 !important;
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
 }
 
 .partner-brief-card .partner-card-title {
     margin: 0 0 8px !important;
-    color: #21152a !important;
+    color: var(--text-primary) !important;
     font-size: 1.06rem !important;
     line-height: 1.42 !important;
     font-weight: 900 !important;
@@ -2266,7 +2751,7 @@ body.dark-mode .atlas-hero {
 .partner-brief-card .partner-card-desc {
     min-height: 0 !important;
     margin: 0 0 14px !important;
-    color: #66586f !important;
+    color: var(--text-secondary) !important;
     font-size: 0.88rem !important;
     line-height: 1.68 !important;
 }
@@ -2276,8 +2761,8 @@ body.dark-mode .atlas-hero {
     gap: 8px !important;
     margin: 0 0 14px !important;
     padding: 12px 0 !important;
-    border-top: 1px solid rgba(106, 44, 142, 0.09);
-    border-bottom: 1px solid rgba(106, 44, 142, 0.09);
+    border-top: 1px solid var(--atlas-line);
+    border-bottom: 1px solid var(--atlas-line);
 }
 
 .partner-brief-card .partner-card-meta span {
@@ -2290,13 +2775,13 @@ body.dark-mode .atlas-hero {
 }
 
 .partner-brief-card .partner-card-meta b {
-    color: rgba(106, 44, 142, 0.78) !important;
+    color: var(--primary) !important;
     font-weight: 900 !important;
 }
 
 .partner-brief-card .partner-card-meta em {
     min-width: 0;
-    color: #31263a;
+    color: var(--text-primary);
     font-style: normal;
     overflow-wrap: anywhere;
 }
@@ -2318,8 +2803,8 @@ body.dark-mode .atlas-hero {
 .partner-brief-card .partner-card-stats span {
     padding: 5px 9px !important;
     border-radius: 999px !important;
-    background: rgba(106, 44, 142, 0.075) !important;
-    color: #675276 !important;
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
     font-size: 0.74rem !important;
     font-weight: 850 !important;
 }
@@ -2331,21 +2816,6 @@ body.dark-mode .atlas-hero {
     padding: 0 16px !important;
     border-radius: 999px !important;
     font-weight: 900 !important;
-}
-
-body.dark-mode .partner-brief-card {
-    background:
-        linear-gradient(180deg, rgba(36, 31, 46, 0.96), rgba(28, 24, 36, 0.98)) !important;
-    border-color: rgba(168, 85, 247, 0.18) !important;
-}
-
-body.dark-mode .partner-brief-card .partner-card-title,
-body.dark-mode .partner-brief-card .partner-card-meta em {
-    color: #f2edf8 !important;
-}
-
-body.dark-mode .partner-brief-card .partner-card-desc {
-    color: #c9bed2 !important;
 }
 
 @media (max-width: 768px) {

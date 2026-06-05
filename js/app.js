@@ -6,6 +6,21 @@ import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
 import { loadAmapScript } from './config.js';
 
+// 延迟导入 openPostDetail，避免循环依赖
+let openPostDetailFn = null;
+async function getOpenPostDetail() {
+    if (!openPostDetailFn) {
+        const mod = await import('./pages/partner.js');
+        openPostDetailFn = mod.openPostDetail;
+    }
+    return openPostDetailFn;
+}
+// 暴露给 profile 等模块使用
+window.openPostDetail = async (postId) => {
+    const fn = await getOpenPostDetail();
+    fn(postId);
+};
+
 let currentPage = 'home';
 const pageTitles = {
     home: '首页',
@@ -105,7 +120,7 @@ function updateNavBar() {
         }
     } else {
         if (guestNav) guestNav.style.display = 'flex';
-        if (userNav) userNav.style.display = 'flex';
+        if (userNav) userNav.style.display = 'none';
         document.body.classList.remove('logged-in');
     }
 

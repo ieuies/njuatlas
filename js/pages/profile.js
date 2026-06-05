@@ -1,107 +1,302 @@
-import { getFavorites, getLikes, getReviews, getConversations, changePassword } from '../api.js';
+import { getFavorites, getLikes, getReviews, getConversations, changePassword, getMyProfile, updateMyProfile, listPosts } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.js';
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 
-const sections = {
-    favorites: { listId: 'favoritesList', countId: 'favoriteCount', empty: '还没有收藏餐厅' },
-    likes: { listId: 'likesList', countId: 'likeCount', empty: '还没有点赞餐厅' },
-    reviews: { listId: 'reviewsList', countId: 'reviewCount', empty: '还没有发表评价' },
-    conversations: { listId: 'conversationsList', countId: 'conversationCount', empty: '还没有 AI 对话' },
-};
+let currentProfileTab = 'posts';
 
-function setLoading(sectionKey) {
-    const section = sections[sectionKey];
-    const container = document.getElementById(section.listId);
-    if (container) container.innerHTML = '<div class="profile-empty">加载中...</div>';
-}
+/* ================================================================
+   个人中心头部渲染
+   ================================================================ */
+function renderProfileHeader() {
+    const user = getUser();
+    const email = user?.email || '';
+    const username = user?.username || (email ? email.split('@')[0] : '同学');
 
-function setCount(sectionKey, count) {
-    const el = document.getElementById(sections[sectionKey].countId);
-    if (el) el.innerText = String(count);
-}
+    // 用户名
+    const usernameEl = document.getElementById('profileUsername');
+    if (usernameEl) usernameEl.innerText = username;
 
-function renderEmpty(sectionKey) {
-    return `<div class="profile-empty">${sections[sectionKey].empty}</div>`;
-}
+    // 邮箱
+    const emailLine = document.getElementById('profileEmailLine');
+    if (emailLine) emailLine.innerText = email ? `📧 ${email}` : '';
 
-function placeLine(place) {
-    if (!place) return '<span class="profile-muted">场所信息已不可用</span>';
-    const address = place.address ? `<p>${escapeHtml(place.address)}</p>` : '';
-    return `
-        <strong>${escapeHtml(place.name || '未命名场所')}</strong>
-        ${address}
-    `;
-}
+    // 头像
+    renderAvatar(user);
 
-function renderPlaceItems(sectionKey, items) {
-    const container = document.getElementById(sections[sectionKey].listId);
-    setCount(sectionKey, items.length);
-    if (!items.length) {
-        container.innerHTML = renderEmpty(sectionKey);
-        return;
+    // 个人简介
+    loadAndRenderBio();
+
+    // 邮箱验证状态
+    const statusEl = document.getElementById('profileEmailVerified');
+    const resendBtn = document.getElementById('sendVerifyEmailBtn');
+    const verified = Boolean(user?.email_verified);
+    if (statusEl) {
+        statusEl.innerText = verified ? '✓ 邮箱已验证' : '⚠ 邮箱未验证';
+        statusEl.className = `profile-status ${verified ? 'is-verified' : 'is-unverified'}`;
     }
-
-    container.innerHTML = items.map(item => `
-        <article class="profile-list-item">
-            <div>${placeLine(item.place)}</div>
-            <time>${formatDate(item.created_at)}</time>
-        </article>
-    `).join('');
+    if (resendBtn) resendBtn.style.display = verified ? 'none' : 'inline-flex';
 }
 
-function renderReviews(items) {
-    const container = document.getElementById(sections.reviews.listId);
-    setCount('reviews', items.length);
-    if (!items.length) {
-        container.innerHTML = renderEmpty('reviews');
-        return;
+function renderAvatar(user) {
+    const avatarEl = document.getElementById('profileAvatarLarge');
+    if (!avatarEl) return;
+    const email = (user?.email || '').toLowerCase().trim();
+    if (email) {
+        const hash = hashCode(email);
+        const gravatarUrl = `https://www.gravatar.com/avatar/${hash}?s=160&d=identicon`;
+        avatarEl.innerHTML = `<img src="${gravatarUrl}" alt="头像" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-user\\'></i>'">`;
+    } else {
+        avatarEl.innerHTML = '<i class="fas fa-user"></i>';
     }
-
-    container.innerHTML = items.map(item => `
-        <article class="profile-list-item">
-            <div>
-                <strong>${escapeHtml(item.place?.name || '未命名场所')}</strong>
-                <p>${escapeHtml(item.content)}</p>
-                ${item.rating ? `<span class="profile-tag">${item.rating} 分</span>` : ''}
-            </div>
-            <time>${formatDate(item.created_at)}</time>
-        </article>
-    `).join('');
 }
 
-function renderConversations(items) {
-    const container = document.getElementById(sections.conversations.listId);
-    setCount('conversations', items.length);
-    if (!items.length) {
-        container.innerHTML = renderEmpty('conversations');
-        return;
+function hashCode(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const chr = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + chr;
+        hash |= 0;
     }
-
-    container.innerHTML = items.map(session => `
-        <article class="profile-list-item">
-            <div>
-                <strong>会话 ${escapeHtml(session.session_id.slice(0, 8))}</strong>
-                <p>${escapeHtml(session.last_message || '')}</p>
-                <span class="profile-tag">${session.message_count || 0} 条消息</span>
-            </div>
-            <time>${formatDate(session.last_at)}</time>
-        </article>
-    `).join('');
+    return Math.abs(hash).toString(16);
 }
 
-async function loadSection(sectionKey, loader, renderer) {
-    const container = document.getElementById(sections[sectionKey].listId);
-    if (!container) return;
-    setLoading(sectionKey);
+async function loadAndRenderBio() {
+    const bioEl = document.getElementById('profileBio');
+    if (!bioEl) return;
     try {
-        const data = await loader();
-        renderer(data.items || []);
-    } catch(e) {
-        setCount(sectionKey, 0);
-        container.innerHTML = '<div class="profile-empty">加载失败，请稍后重试</div>';
+        const profile = await getMyProfile();
+        if (profile.bio) {
+            bioEl.innerText = profile.bio;
+        }
+        // 预填编辑表单
+        const editUsername = document.getElementById('editUsername');
+        const editBio = document.getElementById('editBio');
+        const editTags = document.getElementById('editTags');
+        if (editUsername) editUsername.value = profile.username || '';
+        if (editBio) editBio.value = profile.bio || '';
+        if (editTags) editTags.value = (profile.tags || []).join(', ');
+    } catch (e) {
+        // 静默失败，保留默认 bio
     }
 }
 
+/* ================================================================
+   Tab 切换
+   ================================================================ */
+function initProfileTabs() {
+    const tabs = document.querySelectorAll('.profile-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabId = tab.getAttribute('data-profile-tab');
+            switchProfileTab(tabId);
+        });
+    });
+}
+
+function switchProfileTab(tabId) {
+    currentProfileTab = tabId;
+    document.querySelectorAll('.profile-tab').forEach(t => {
+        t.classList.toggle('active', t.getAttribute('data-profile-tab') === tabId);
+    });
+    loadProfileTabContent(tabId);
+}
+
+async function loadProfileTabContent(tabId) {
+    const container = document.getElementById('profileTabContent');
+    if (!container) return;
+    container.innerHTML = '<div class="profile-loading">加载中...</div>';
+
+    try {
+        switch (tabId) {
+            case 'posts': await renderMyPosts(container); break;
+            case 'comments': await renderMyComments(container); break;
+            case 'favorites': await renderMyFavorites(container); break;
+            case 'activities': await renderMyActivities(container); break;
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+/* ================================================================
+   我发布的
+   ================================================================ */
+async function renderMyPosts(container) {
+    const user = getUser();
+    if (!user?.id) {
+        container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-file-alt"></i>请先登录</div>';
+        return;
+    }
+    try {
+        const data = await listPosts({ user_id: user.id, page_size: 50 });
+        const posts = data.items || [];
+        document.getElementById('postCount').innerText = posts.length;
+        if (!posts.length) {
+            container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-file-alt"></i>还没有发布过组局</div>';
+            return;
+        }
+        container.innerHTML = posts.map(p => `
+            <article class="profile-content-card" data-post-id="${p.id}">
+                <div class="profile-content-card-title">${escapeHtml(p.title || '无标题')}</div>
+                <div class="profile-content-card-body">${escapeHtml((p.content || p.description || '').substring(0, 150))}</div>
+                <div class="profile-content-card-meta">
+                    <span><i class="fas fa-tag"></i> ${escapeHtml(p.category || p.type || '')}</span>
+                    <span><i class="fas fa-clock"></i> ${formatDate(p.created_at)}</span>
+                    <span><i class="fas fa-heart"></i> ${p.like_count || 0} 赞</span>
+                    <span><i class="fas fa-comment"></i> ${p.comment_count || 0} 评</span>
+                </div>
+            </article>
+        `).join('');
+        // 点击卡片打开详情
+        container.querySelectorAll('.profile-content-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const postId = parseInt(card.getAttribute('data-post-id'));
+                if (postId && typeof window.openPostDetail === 'function') {
+                    window.openPostDetail(postId);
+                }
+            });
+            card.style.cursor = 'pointer';
+        });
+        // 更新获赞数统计
+        const totalLikes = posts.reduce((sum, p) => sum + (p.like_count || 0), 0);
+        document.getElementById('likeReceivedCount').innerText = totalLikes;
+    } catch (e) {
+        container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+/* ================================================================
+   我的评论
+   ================================================================ */
+async function renderMyComments(container) {
+    try {
+        // 从 reviews API 获取场所评论
+        const [reviewsData, conversationsData] = await Promise.all([
+            getReviews().catch(() => ({ items: [] })),
+            getConversations().catch(() => ({ items: [] })),
+        ]);
+        const reviews = reviewsData.items || [];
+        const comments = [];
+
+        // 场所评论
+        reviews.forEach(r => {
+            comments.push({
+                type: 'place',
+                content: r.content || '',
+                placeName: r.place?.name || '未知场所',
+                time: r.created_at,
+                rating: r.rating,
+            });
+        });
+
+        document.getElementById('commentMadeCount').innerText = comments.length;
+        if (!comments.length) {
+            container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-comment"></i>还没有发表过评论</div>';
+            return;
+        }
+        container.innerHTML = comments.map(c => `
+            <article class="profile-content-card">
+                <div class="profile-content-card-title">
+                    <i class="fas fa-map-marker-alt"></i> ${escapeHtml(c.placeName)}
+                </div>
+                <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
+                <div class="profile-content-card-meta">
+                    <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
+                    ${c.rating ? `<span><i class="fas fa-star"></i> ${c.rating} 分</span>` : ''}
+                </div>
+            </article>
+        `).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+/* ================================================================
+   我的收藏
+   ================================================================ */
+async function renderMyFavorites(container) {
+    try {
+        const [favData, likeData] = await Promise.all([
+            getFavorites().catch(() => ({ items: [] })),
+            getLikes().catch(() => ({ items: [] })),
+        ]);
+        const items = [
+            ...(favData.items || []).map(i => ({ ...i, favType: '收藏' })),
+            ...(likeData.items || []).map(i => ({ ...i, favType: '点赞' })),
+        ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        document.getElementById('favoriteCount2').innerText = items.length;
+        if (!items.length) {
+            container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-heart"></i>还没有收藏或点赞</div>';
+            return;
+        }
+        container.innerHTML = items.map(item => `
+            <article class="profile-content-card">
+                <div class="profile-content-card-title">
+                    ${escapeHtml(item.place?.name || '未知场所')}
+                </div>
+                <div class="profile-content-card-body">
+                    ${item.place?.address ? escapeHtml(item.place.address) : ''}
+                </div>
+                <div class="profile-content-card-meta">
+                    <span class="profile-tag">${item.favType}</span>
+                    <span><i class="fas fa-clock"></i> ${formatDate(item.created_at)}</span>
+                </div>
+            </article>
+        `).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+/* ================================================================
+   我的活动（参加的组局）
+   ================================================================ */
+async function renderMyActivities(container) {
+    try {
+        // 尝试获取用户参与的帖子（通过 listPosts API 获取所有帖子并筛选参与者）
+        const data = await listPosts({ page_size: 100 });
+        const user = getUser();
+        const allPosts = data.items || [];
+        // 客户端筛选：找到用户参与的活动
+        const myActivities = allPosts.filter(p =>
+            (p.participants || []).some(part =>
+                part.user_id === user?.id || part.username === user?.username
+            )
+        );
+
+        if (!myActivities.length) {
+            container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-calendar"></i>还没有参加过组局活动</div>';
+            return;
+        }
+        container.innerHTML = myActivities.map(p => `
+            <article class="profile-content-card" data-post-id="${p.id}">
+                <div class="profile-content-card-title">${escapeHtml(p.title || '无标题')}</div>
+                <div class="profile-content-card-body">${escapeHtml((p.content || p.description || '').substring(0, 120))}</div>
+                <div class="profile-content-card-meta">
+                    <span><i class="fas fa-tag"></i> ${escapeHtml(p.category || p.type || '')}</span>
+                    <span><i class="fas fa-clock"></i> ${formatDate(p.created_at)}</span>
+                    <span><i class="fas fa-users"></i> ${p.participant_count || 0} 人参与</span>
+                </div>
+            </article>
+        `).join('');
+        container.querySelectorAll('.profile-content-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const postId = parseInt(card.getAttribute('data-post-id'));
+                if (postId && typeof window.openPostDetail === 'function') {
+                    window.openPostDetail(postId);
+                }
+            });
+            card.style.cursor = 'pointer';
+        });
+    } catch (e) {
+        container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
+    }
+}
+
+/* ================================================================
+   修改密码
+   ================================================================ */
 async function handleChangePassword() {
     const oldPwd = document.getElementById('oldPassword').value;
     const newPwd = document.getElementById('newPassword').value;
@@ -117,7 +312,7 @@ async function handleChangePassword() {
         showToast('密码已修改，请重新登录');
         await doLogout();
         window.updateNavBar();
-    } catch(e) {
+    } catch (e) {
         showToast(e.message);
     } finally {
         button.disabled = false;
@@ -125,51 +320,109 @@ async function handleChangePassword() {
     }
 }
 
-function renderUser() {
-    const user = getUser();
-    const usernameEl = document.getElementById('profileUsername');
-    const emailEl = document.getElementById('profileEmail');
-    const statusEl = document.getElementById('profileEmailVerified');
-    const resendBtn = document.getElementById('sendVerifyEmailBtn');
+/* ================================================================
+   编辑个人资料
+   ================================================================ */
+function initEditProfile() {
+    const modal = document.getElementById('editProfileModal');
+    const openBtn = document.getElementById('editProfileBtn');
+    const closeBtn = document.getElementById('closeEditProfileBtn');
+    const cancelBtn = document.getElementById('cancelEditProfileBtn');
+    const form = document.getElementById('editProfileForm');
 
-    const email = user?.email || '';
-    const username = user?.username || (email ? email.split('@')[0] : '个人中心');
-    usernameEl.innerText = username;
-    emailEl.innerText = email || '未读取到邮箱信息';
+    openBtn?.addEventListener('click', async () => {
+        // 预填当前值
+        try {
+            const profile = await getMyProfile();
+            document.getElementById('editUsername').value = profile.username || '';
+            document.getElementById('editBio').value = profile.bio || '';
+            document.getElementById('editTags').value = (profile.tags || []).join(', ');
+        } catch (e) { /* 使用默认值 */ }
+        // 更新编辑框中的头像预览
+        const user = getUser();
+        const email = (user?.email || '').toLowerCase().trim();
+        const preview = document.getElementById('editAvatarPreview');
+        if (preview && email) {
+            const hash = hashCode(email);
+            preview.innerHTML = `<img src="https://www.gravatar.com/avatar/${hash}?s=160&d=identicon" alt="头像">`;
+        }
+        modal.style.display = 'flex';
+    });
 
-    const verified = Boolean(user?.email_verified);
-    statusEl.innerText = verified ? '邮箱已验证' : '邮箱未验证';
-    statusEl.className = `profile-status ${verified ? 'is-verified' : 'is-unverified'}`;
-    resendBtn.style.display = verified ? 'none' : 'inline-flex';
+    closeBtn?.addEventListener('click', () => { modal.style.display = 'none'; });
+    cancelBtn?.addEventListener('click', () => { modal.style.display = 'none'; });
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+
+    form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('editUsername').value.trim();
+        const bio = document.getElementById('editBio').value.trim();
+        const tagsStr = document.getElementById('editTags').value.trim();
+        const tags = tagsStr ? tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean) : [];
+
+        const saveBtn = document.getElementById('saveProfileBtn');
+        const originalText = saveBtn.innerText;
+        saveBtn.disabled = true;
+        saveBtn.innerText = '保存中...';
+        try {
+            await updateMyProfile({ username, bio, tags });
+            showToast('资料已更新');
+            modal.style.display = 'none';
+            // 刷新显示
+            if (username) {
+                document.getElementById('profileUsername').innerText = username;
+            }
+            if (bio) {
+                document.getElementById('profileBio').innerText = bio;
+            }
+        } catch (err) {
+            showToast(err.message || '保存失败');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerText = originalText;
+        }
+    });
 }
 
+/* ================================================================
+   初始化 & 刷新
+   ================================================================ */
 export async function refreshProfile() {
     if (!isLoggedIn()) return;
-    renderUser();
-    await Promise.all([
-        loadSection('favorites', getFavorites, items => renderPlaceItems('favorites', items)),
-        loadSection('likes', getLikes, items => renderPlaceItems('likes', items)),
-        loadSection('reviews', getReviews, renderReviews),
-        loadSection('conversations', getConversations, renderConversations),
-    ]);
+    renderProfileHeader();
+    loadProfileTabContent(currentProfileTab);
 }
 
 export function initProfilePage() {
-    document.getElementById('changePasswordBtn').onclick = handleChangePassword;
-    document.getElementById('sendVerifyEmailBtn').onclick = async () => {
-        if (!isLoggedIn()) return;
-        const button = document.getElementById('sendVerifyEmailBtn');
-        const originalText = button.innerText;
-        button.disabled = true;
-        button.innerText = '发送中...';
-        try {
-            await resendVerificationEmail();
-        } catch(e) {
-            showToast(e.message);
-        } finally {
-            button.disabled = false;
-            button.innerText = originalText;
-        }
-    };
+    initProfileTabs();
+    initEditProfile();
+
+    // 修改密码
+    const cpBtn = document.getElementById('changePasswordBtn');
+    if (cpBtn) cpBtn.onclick = handleChangePassword;
+
+    // 重新发送验证邮件
+    const verifyBtn = document.getElementById('sendVerifyEmailBtn');
+    if (verifyBtn) {
+        verifyBtn.onclick = async () => {
+            if (!isLoggedIn()) return;
+            const btn = verifyBtn;
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = '发送中...';
+            try {
+                await resendVerificationEmail();
+                showToast('验证邮件已发送，请查收');
+            } catch (e) {
+                showToast(e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        };
+    }
+
     refreshProfile();
 }
