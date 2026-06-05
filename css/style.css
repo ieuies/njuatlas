@@ -2646,7 +2646,7 @@ body,
         width: calc(100% - 36px) !important;
         max-width: 1280px !important;
         margin: 0 auto !important;
-        padding: 18px 0 30px !important;
+        padding: 24px 0 30px !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
         align-items: start;
     }
@@ -2656,10 +2656,10 @@ body,
         grid-column: 1;
         grid-row: 1 / 3;
         position: sticky;
-        top: calc(var(--atlas-topbar) + 18px);
-        height: calc(100vh - var(--atlas-topbar) - 36px);
+        top: calc(var(--atlas-topbar) + 24px);
+        height: calc(100vh - var(--atlas-topbar) - 48px);
         min-height: 480px;
-        max-height: calc(100vh - var(--atlas-topbar) - 36px);
+        max-height: calc(100vh - var(--atlas-topbar) - 48px);
         margin: 0 !important;
         display: flex;
         flex-direction: column;
@@ -3476,12 +3476,102 @@ body,
     }
 }
 
-/* ---- 桌面端 AI 页面：撑满可用高度 ---- */
+/* ========== 最终解决方案：桌面端地图顶部严格对齐 + 恢复正确高度 ========== */
+
+/* 桌面端（≥769px） */
 @media (min-width: 769px) {
-    #aiPage.active-page {
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: calc(100vh - var(--atlas-topbar)) !important;
-        overflow: hidden !important;
+    #partnerPage.active-page {
+        display: grid !important;
+        grid-template-columns: 380px 1fr !important;
+        gap: 16px !important;
+        align-items: start !important;
+        width: 100% !important;
+        max-width: 1280px !important;
+        margin: 0 auto !important;
+        padding: 24px 0 30px !important;
+    }
+
+    /* 地图卡片：恢复原有高度，去除sticky偏移，但保留固定高度 */
+    #partnerPage .map-preview-card {
+        grid-column: 1 / 2 !important;
+        grid-row: 1 / 3 !important;
+        position: relative !important;
+        top: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        min-height: 480px !important;
+        max-height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        display: flex;
+        flex-direction: column;
+        align-self: start !important;
+    }
+
+    /* 地图主体占满卡片剩余高度 */
+    .map-preview-card .map-preview-body {
+        flex: 1;
+        position: relative;
+        min-height: 0;
+    }
+
+    .map-preview-card .map-container,
+    .map-preview-card #previewMap {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* 右侧筛选栏顶部对齐 */
+    #partnerPage .partner-filter {
+        grid-column: 2 / 3 !important;
+        grid-row: 1 / 2 !important;
+        margin: 0 !important;
+        padding: 10px !important;
+        align-self: start !important;
+    }
+
+    /* 右侧瀑布流 */
+    #partnerPage .partner-waterfall {
+        grid-column: 2 / 3 !important;
+        grid-row: 2 / 3 !important;
+        margin: 0 !important;
+        align-self: start !important;
+    }
+}
+
+/* 移动端（≤768px）：保持高度和贴边 */
+@media (max-width: 768px) {
+    .content-area {
+        padding: 0 !important;
+    }
+    #partnerPage.active-page {
+        padding: 0 !important;
+        width: 100% !important;
+        gap: 0 !important;
+    }
+    .map-preview-card {
+        margin: 0 !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        box-shadow: none !important;
+        height: auto !important;
+    }
+    .map-preview-body {
+        height: calc(50vh - var(--atlas-topbar) - 20px) !important;
+        min-height: 220px !important;
+        width: 100% !important;
+    }
+    .map-preview-body .map-container,
+    .map-preview-body #previewMap {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    .map-preview-card .map-preview-header,
+    .map-preview-card .map-legend {
+        padding-left: 14px !important;
+        padding-right: 14px !important;
     }
 }
