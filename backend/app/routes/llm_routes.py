@@ -169,3 +169,60 @@ def chat_recommend():
         db.session.rollback()
         log_event(current_app.logger, "chat_recommend_failed", level="error", user_id=user_id, error=str(exc))
         return error_response("AI 回复失败", 502, code="llm_error")
+
+
+@llm_bp.route("/conversation/<session_id>/messages", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def get_conversation_messages(session_id):
+    """获取指定会话的所有历史消息。
+    
+    只有当前登录用户有权访问自己的会话消息。
+    """
+    from app.models import ConversationMessage
+    
+    user_id = g.current_user_id
+    
+    # 验证会话属于当前用户
+    messages = (
+        ConversationMessage.query
+        .filter_by(user_id=user_id, session_id=session_id)
+        .order_by(ConversationMessage.created_at.asc())
+        .all()
+    )
+    
+    return jsonify({
+        "session_id": session_id,
+        "messages": [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in messages
+        ]
+    })
+
+
+@llm_bp.route("/conversation/<session_id>", methods=["DELETE"])
+@jwt_required
+@limiter.limit("30 per minute")
+def delete_conversation(session_id):
+    """删除整个会话及其所有消息。"""
+    from app.models import ConversationMessage
+    
+    user_id = g.current_user_id
+    deleted_count = ConversationMessage.query.filter_by(
+        user_id=user_id, session_id=session_id
+    ).delete()
+    db.session.commit()
+    
+    log_event(
+        current_app.logger,
+        "conversation_deleted",
+        user_id=user_id,
+        session_id=session_id,
+        message_count=deleted_count,
+    )
+    return jsonify({"message": "会话已删除", "deleted_count": deleted_count})

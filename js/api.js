@@ -166,3 +166,15 @@ export async function getReviews() {
 export async function getMyPostComments() {
     return request('/me/post-comments', 'GET');
 }
+
+export async function getConversationList() {
+    return request('/me/conversations', 'GET');
+}
+
+export async function getConversationMessages(sessionId) {
+    return request(`/llm/conversation/${sessionId}/messages`, 'GET');
+}
+
+export async function deleteConversation(sessionId) {
+    return request(`/llm/conversation/${sessionId}`, 'DELETE');
+}
