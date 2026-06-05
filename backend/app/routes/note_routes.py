@@ -115,7 +115,7 @@ def list_posts():
     radius = int_range(request.args.get("radius", 5000), "radius", min_value=100, max_value=50000)
 
     page = int_range(request.args.get("page", 1), "page", min_value=1)
-    page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=50)
+    page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=100)
 
     notes = NoteSystem(user_id=g.current_user_id if hasattr(g, "current_user_id") else None)
     result = notes.search(
@@ -270,7 +270,7 @@ def get_comments(post_id):
         return error_response("帖子不存在", 404, code="post_not_found")
 
     page = int_range(request.args.get("page", 1), "page", min_value=1)
-    page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=50)
+    page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=100)
     return jsonify(note.get_comments(page=page, page_size=page_size))
 
 
@@ -352,7 +352,7 @@ def place_posts(place_id):
         return error_response("场所不存在", 404, code="place_not_found")
 
     page = int_range(request.args.get("page", 1), "page", min_value=1)
-    page_size = int_range(request.args.get("page_size", 10), "page_size", min_value=1, max_value=50)
+    page_size = int_range(request.args.get("page_size", 10), "page_size", min_value=1, max_value=100)
 
     notes = NoteSystem(user_id=g.current_user_id if hasattr(g, "current_user_id") else None)
     result = notes.posts_for_place(place_id, page=page, page_size=page_size)
