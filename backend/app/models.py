@@ -217,6 +217,9 @@ class EventPost(db.Model):
     urgency = db.Column(db.String(20))                               # 'now' / 'long_term' / 'scheduled' / None
     location = db.Column(db.String(50))                              # "lng,lat"
     location_name = db.Column(db.String(200))                        # 人类可读的地点名
+    max_participants = db.Column(db.Integer, default=1)              # 招募人数上限
+    budget = db.Column(db.String(50))                                # 预算（独立于标签）
+    contact = db.Column(db.String(100))                              # 联系方式（微信/QQ/手机）
     is_official = db.Column(db.Boolean, default=False, nullable=False)
     # 计数缓存（避免每次列表查询都 JOIN 三张表）
     view_count = db.Column(db.Integer, default=0, nullable=False)
@@ -251,6 +254,7 @@ class PostTag(db.Model):
     )
 
     tag = db.relationship("Tag", lazy="joined")
+    post = db.relationship("EventPost")  # 允许 PostTag(post=event_post) 延迟解析 FK
 
 
 class PostComment(db.Model):

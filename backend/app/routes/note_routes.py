@@ -74,9 +74,12 @@ def create_post():
 
     location = clean_string(data.get("location"), "location", max_length=50)
     location_name = clean_string(data.get("location_name"), "location_name", max_length=200)
+    max_participants = int_range(data.get("slots", 1), "slots", min_value=1, max_value=100)
+    budget = clean_string(data.get("budget"), "budget", max_length=50)
+    contact = clean_string(data.get("contact"), "contact", max_length=100)
 
     note = _ns().create_post(
-        type=post_type,
+        post_type=post_type,
         title=title,
         content=content,
         tags=tags,
@@ -85,6 +88,9 @@ def create_post():
         urgency=urgency,
         location=location,
         location_name=location_name,
+        max_participants=max_participants,
+        budget=budget,
+        contact=contact,
     )
     return jsonify(note.to_dict(current_user_id=g.current_user_id)), 201
 
@@ -165,6 +171,9 @@ def update_post(post_id):
         return error_response("无权编辑", 403, code="forbidden")
 
     data = get_json_body(request)
+    post_type = clean_string(data.get("type"), "type", max_length=20)
+    if post_type and post_type not in ("event", "forum"):
+        return error_response("type 必须是 event 或 forum", 400)
     title = clean_string(data.get("title"), "title", max_length=100)
     content = clean_string(data.get("content"), "content", max_length=2000)
     urgency = clean_string(data.get("urgency"), "urgency", max_length=20)
@@ -186,8 +195,13 @@ def update_post(post_id):
     if urgency == "scheduled" and not event_time and not note.event_time:
         return error_response("指定时间模式下必须提供 event_time", 400)
 
+    max_participants = int_range(data.get("slots"), "slots", min_value=1, max_value=100) if data.get("slots") else None
+    budget = clean_string(data.get("budget"), "budget", max_length=50)
+    contact = clean_string(data.get("contact"), "contact", max_length=100)
+
     updated = notes.update_post(
         post_id,
+        post_type=post_type,
         title=title,
         content=content,
         tags=tags,
@@ -195,6 +209,9 @@ def update_post(post_id):
         urgency=urgency,
         location=clean_string(data.get("location"), "location", max_length=50),
         location_name=clean_string(data.get("location_name"), "location_name", max_length=200),
+        max_participants=max_participants,
+        budget=budget,
+        contact=contact,
     )
     return jsonify(updated.to_dict(current_user_id=g.current_user_id))
 

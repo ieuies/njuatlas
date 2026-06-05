@@ -1,4 +1,4 @@
-import { initPartnerPage } from './pages/partner.js';
+import { initPartnerPage, loadPartnerData } from './pages/partner.js';
 import { initGuidePage } from './pages/guide.js';
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
@@ -81,6 +81,7 @@ function switchPage(pageId) {
     // 页面切换时的初始化
     if (pageId === 'guide') initGuidePage();
     else if (pageId === 'ai') initAIPage();
+    else if (pageId === 'partner') loadPartnerData();
     else if (pageId === 'profile') refreshProfile();
     else if (pageId === 'fullMap') {
         // 全屏地图：等浏览器完成布局后再初始化，避免容器尺寸为 0

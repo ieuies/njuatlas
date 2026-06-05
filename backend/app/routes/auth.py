@@ -285,7 +285,6 @@ def login():
     password_valid = bool(user.password_hash and check_password_hash(user.password_hash, password))
 
     if password_valid and not user.email_verified:
-        db.session.commit()
         log_event(
             current_app.logger,
             "user_login_blocked_unverified_email",
@@ -300,7 +299,6 @@ def login():
         )
 
     if password_valid:
-        db.session.commit()
         log_event(current_app.logger, "user_logged_in", user_id=user.id, email=user.email)
         return jsonify(_user_payload(user))
 

@@ -108,8 +108,8 @@ export async function chatRecommend(message, sessionId = null, city = '南京') 
 }
 
 // ── 帖子系统（搭子论坛） ──
-export async function createPost({ type, title, content, tags, place_id, event_time, location, location_name } = {}) {
-    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, location, location_name });
+export async function createPost({ type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact } = {}) {
+    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact });
 }
 export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size } = {}) {
     const params = new URLSearchParams();
