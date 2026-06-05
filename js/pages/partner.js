@@ -34,7 +34,7 @@ function _categoryStyle(cat) {
 // ============================================================
 async function loadPostsFromAPI() {
     try {
-        const params = { sort: 'hot', page_size: 50 };
+        const params = { sort: 'hot', page_size: 100 };
         if (currentCategory !== 'all') {
             params.tags = currentCategory;  // 后端 AND 匹配
         }
@@ -117,11 +117,11 @@ function createMapInstance(containerId) {
     if (!container) return null;
     container.innerHTML = '';
 
-    // 默认中心：仙林大学城
-    const center = wgs84ToGcj02(118.945, 32.112);
+    // 默认中心：南京大学鼓楼校区
+    const center = wgs84ToGcj02(118.780, 32.058);
 
     return new window.AMap.Map(containerId, {
-        zoom: 14,
+        zoom: 15,
         center: center,
         mapStyle: 'amap://styles/light',
         resizeEnable: true,
@@ -425,7 +425,7 @@ function initPostDetailModal() {
             // 重新加载列表
             partnersData = await loadPostsFromAPI();
             renderWaterfall();
-            refreshMapMarkers();
+            refreshPreviewMarkers();
         } catch (err) {
             showToast('删除失败: ' + err.message);
         }
@@ -838,6 +838,9 @@ function initPartnerModal() {
             if (authModal) authModal.style.display = 'flex';
             return;
         }
+        // 清除编辑模式
+        modal.removeAttribute('data-edit-id');
+        form?.reset();
         // 重置时长类型为短期
         currentDuration = 'short';
         durationBtns.forEach(b => b.classList.remove('active'));
@@ -929,7 +932,7 @@ function initPartnerModal() {
             closeModal();
             partnersData = await loadPostsFromAPI();
             renderWaterfall();
-            refreshMapMarkers();
+            refreshPreviewMarkers();
         } catch (err) {
             showToast('发布失败: ' + err.message);
         } finally {
