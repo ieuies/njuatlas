@@ -187,6 +187,9 @@ function initParticles() {
     for (let i = 0; i < count; i++) {
         const p = document.createElement('div');
         p.className = 'ai-particle';
+        // 粒子初始垂直位置设在容器上方外，配合 overflow:hidden 做到从顶部外掉落
+        const startTop = -(5 + Math.random() * 20) + 'vh';
+        p.style.top = startTop;
         p.style.left = Math.random() * 100 + '%';
         p.style.width = (3 + Math.random() * 6) + 'px';
         p.style.height = (3 + Math.random() * 6) + 'px';
