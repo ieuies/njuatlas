@@ -2,13 +2,11 @@ import { initPartnerPage } from './pages/partner.js';
 import { initGuidePage } from './pages/guide.js';
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
-import { chatRecommend } from './api.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
 import { loadAmapScript } from './config.js';
 
 let currentPage = 'home';
-let aiSessionId = null;
 const pageTitles = {
     home: '首页',
     partner: '找搭子',
@@ -72,12 +70,10 @@ function switchPage(pageId) {
         });
     }
 
-    // 发起组局按钮只属于找搭子页；AI 悬浮球在全屏地图页隐藏，避免遮挡地图操作。
+    // 发起组局按钮只属于找搭子页，离开该页时隐藏。
     const fab = document.getElementById('fabCreateGroup');
-    const aiBall = document.getElementById('aiFloatBall');
-    if (fab && aiBall) {
+    if (fab) {
         fab.style.display = pageId === 'partner' ? 'flex' : 'none';
-        aiBall.style.display = pageId === 'fullMap' ? 'none' : 'flex';
     }
 }
 
@@ -119,101 +115,6 @@ function updateNavBar() {
     }
 }
 
-// ========== AI 浮层逻辑 ==========
-function initAIFloat() {
-    const aiBall = document.getElementById('aiFloatBall');
-    const aiOverlay = document.getElementById('aiChatOverlay');
-    const aiClose = document.getElementById('aiChatClose');
-    const aiEntryBtn = document.getElementById('aiEntryBtn');
-    const aiSendBtn = document.getElementById('aiChatSendBtn');
-    const aiInput = document.getElementById('aiChatInput');
-    const aiMessages = document.getElementById('aiChatMessages');
-    const aiQuickBtns = document.getElementById('aiQuickBtns');
-
-    const openAI = () => {
-        if (aiOverlay) aiOverlay.classList.add('open');
-        if (aiBall) aiBall.style.display = 'none';
-    };
-
-    const closeAI = () => {
-        if (aiOverlay) aiOverlay.classList.remove('open');
-        if (aiBall) aiBall.style.display = 'flex';
-    };
-
-    aiBall?.addEventListener('click', openAI);
-    aiEntryBtn?.addEventListener('click', openAI);
-    aiClose?.addEventListener('click', closeAI);
-
-    // 点击遮罩外部关闭（在浮层内部点空白处）
-    aiOverlay?.addEventListener('click', (e) => {
-        if (e.target === aiOverlay) closeAI();
-    });
-
-
-
-    // 发送消息
-    const sendMessage = async () => {
-        const text = aiInput?.value.trim();
-        if (!text) return;
-
-        // 添加用户消息
-        const userMsg = document.createElement('div');
-        userMsg.className = 'chat-message chat-user';
-        userMsg.textContent = text;
-        aiMessages?.appendChild(userMsg);
-
-        if (aiInput) aiInput.value = '';
-        aiMessages.scrollTop = aiMessages.scrollHeight;
-
-        // 显示打字中
-        const typingMsg = document.createElement('div');
-        typingMsg.className = 'chat-message chat-bot typing';
-        typingMsg.innerHTML = '<i class="fas fa-robot"></i> 思考中...';
-        aiMessages?.appendChild(typingMsg);
-        aiMessages.scrollTop = aiMessages.scrollHeight;
-
-        try {
-            const response = await chatRecommend(text, aiSessionId, '南京');
-            // 移除打字提示
-            typingMsg.remove();
-
-            if (response.session_id) aiSessionId = response.session_id;
-
-            const botMsg = document.createElement('div');
-            botMsg.className = 'chat-message chat-bot';
-            botMsg.innerHTML = `<i class="fas fa-robot"></i> ${escapeHtmlAI(response.reply || '抱歉，我暂时无法回答这个问题，请稍后再试～')}`;
-            aiMessages?.appendChild(botMsg);
-        } catch (err) {
-            typingMsg.remove();
-            const errMsg = document.createElement('div');
-            errMsg.className = 'chat-message chat-bot';
-            errMsg.innerHTML = '<i class="fas fa-robot"></i> 网络出小差了，请稍后再试～';
-            aiMessages?.appendChild(errMsg);
-        }
-        aiMessages.scrollTop = aiMessages.scrollHeight;
-    };
-
-    aiSendBtn?.addEventListener('click', sendMessage);
-    aiInput?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-
-    // 快捷提问按钮
-    aiQuickBtns?.querySelectorAll('.ai-quick-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (aiInput) {
-                aiInput.value = btn.textContent;
-                sendMessage();
-            }
-        });
-    });
-}
-
-function escapeHtmlAI(str) {
-    if (!str) return '';
-    return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[m]);
-}
-// ========== 全屏地图返回 ==========
 function initFullMapPage() {
     const backBtn = document.getElementById('backFromMapBtn');
     backBtn?.addEventListener('click', () => {
@@ -305,7 +206,6 @@ function init() {
     initNavigation();
     initThemeToggle();
     initPixelField();
-    initAIFloat();
     initFabButton();
     initMapExpand();
     initFullMapPage();

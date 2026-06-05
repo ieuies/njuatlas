@@ -175,29 +175,6 @@ textarea { resize: vertical; min-height: 100px; }
     gap: 8px;
 }
 
-/* AI 入口按钮 */
-.ai-entry-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: linear-gradient(135deg, rgba(91, 46, 140, 0.06), rgba(236, 72, 153, 0.06));
-    border: 1px solid var(--gray-200);
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--primary);
-    cursor: pointer;
-    transition: var(--transition-fast);
-}
-
-.ai-entry-btn:hover {
-    background: linear-gradient(135deg, rgba(91, 46, 140, 0.12), rgba(236, 72, 153, 0.12));
-    transform: translateY(-1px);
-}
-
-.ai-entry-btn i { font-size: 0.9rem; }
-
 /* 登录按钮 */
 .login-round-btn {
     width: 36px;
@@ -270,202 +247,10 @@ textarea { resize: vertical; min-height: 100px; }
 
 .page.active-page { display: block; }
 
-/* ========== AI 悬浮球 ========== */
-.ai-float-ball {
-    position: fixed;
-    bottom: calc(var(--bottom-tab-height) + 24px);
-    right: calc(50% - 240px + 16px);
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    color: white;
-    border: none;
-    font-size: 1.4rem;
-    cursor: pointer;
-    z-index: 180;
-    box-shadow: var(--shadow-xl);
-    transition: var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.ai-float-ball:hover {
-    transform: scale(1.08);
-    box-shadow: 0 8px 30px rgba(236, 72, 153, 0.3);
-}
-
-.ai-float-ball:active { transform: scale(0.94); }
-
-
-
 /* 桌面/平板适配：取消 480px 限制，使应用占满页面，同时调整悬浮/底部元素到视口边缘 */
 
 /* 更强制的覆盖：针对更大设备（平板/桌面）确保没有左右留白 */
 
-
-/* ========== AI 对话浮层 ========== */
-.ai-chat-overlay {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    transform: none;
-    width: 100vw;
-    max-width: 100vw;
-    z-index: 300;
-    display: none;
-}
-
-.ai-chat-overlay.open {
-    display: block;
-    animation: slideUp 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
-}
-
-@keyframes slideUp {
-    from { transform: translateX(-50%) translateY(100%); }
-    to { transform: translateX(-50%) translateY(0); }
-}
-
-.ai-chat-panel {
-    background: var(--bg-primary);
-    border-radius: 20px 20px 0 0;
-    height: 65vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: var(--shadow-xl);
-    border: 1px solid var(--gray-200);
-    border-bottom: none;
-}
-
-.ai-chat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--gray-200);
-    font-weight: 700;
-    font-size: 0.95rem;
-    color: var(--primary);
-    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-primary));
-    border-radius: 20px 20px 0 0;
-}
-
-.ai-chat-header i { margin-right: 6px; color: var(--accent); }
-
-.ai-chat-close {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: var(--gray-200);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: var(--transition-fast);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.ai-chat-close:hover { background: var(--danger); color: white; }
-
-.ai-chat-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.ai-quick-btns {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 16px;
-    border-top: 1px solid var(--gray-200);
-}
-
-.ai-quick-btn {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--gray-200);
-    padding: 8px 14px;
-    border-radius: 20px;
-    font-size: 0.78rem;
-    color: var(--primary);
-    cursor: pointer;
-    transition: var(--transition-fast);
-    font-weight: 500;
-}
-
-.ai-quick-btn:hover {
-    background: linear-gradient(135deg, rgba(91, 46, 140, 0.08), rgba(236, 72, 153, 0.08));
-    border-color: var(--primary-light);
-}
-
-.ai-chat-input-row {
-    display: flex;
-    gap: 10px;
-    padding: 12px 16px;
-    border-top: 1px solid var(--gray-200);
-    background: var(--bg-primary);
-    border-radius: 0 0 20px 20px;
-}
-
-.ai-chat-input-row input {
-    flex: 1;
-    padding: 10px 16px;
-    border-radius: 24px;
-    border: 1px solid var(--gray-300);
-    background: var(--bg-secondary);
-    font-size: 0.9rem;
-    transition: var(--transition-fast);
-    color: var(--text-primary);
-}
-
-.ai-chat-input-row input:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(91, 46, 140, 0.08);
-}
-
-.ai-chat-input-row .primary-btn {
-    padding: 10px 16px;
-    border-radius: 24px;
-    white-space: nowrap;
-}
-
-/* 聊天消息（复用） */
-.chat-message {
-    margin: 4px 0;
-    padding: 10px 14px;
-    border-radius: 16px;
-    max-width: 88%;
-    word-wrap: break-word;
-    line-height: 1.5;
-    font-size: 0.88rem;
-}
-
-.chat-user {
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-    margin-left: auto;
-    border-bottom-right-radius: 4px;
-    color: white;
-    align-self: flex-end;
-}
-
-.chat-bot {
-    background: var(--bg-tertiary);
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--gray-200);
-    color: var(--text-primary);
-    align-self: flex-start;
-}
-
-.chat-bot ul { padding-left: 16px; }
-.chat-bot li { margin: 3px 0; color: var(--text-secondary); }
 
 /* ========== 找搭子页面：分类筛选 ========== */
 .partner-filter {
@@ -1774,7 +1559,6 @@ body,
     box-shadow: 0 10px 24px rgba(107, 33, 165, 0.24);
 }
 
-.ai-entry-btn,
 .login-round-btn,
 .logout-btn,
 .map-expand-btn,
@@ -1789,7 +1573,6 @@ body,
     transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
-.ai-entry-btn,
 .login-round-btn,
 .logout-btn,
 .map-expand-btn,
@@ -1812,7 +1595,6 @@ body,
 
 .desktop-nav-item:hover,
 .theme-toggle-btn:hover,
-.ai-entry-btn:hover,
 .login-round-btn:hover,
 .hero-primary-btn:hover,
 .hero-secondary-btn:hover,
@@ -1993,7 +1775,6 @@ body,
 .profile-card,
 .profile-stat,
 .modal-card,
-.ai-chat-panel,
 .map-preview-card,
 .full-map-container {
     border: 0 !important;
@@ -2085,111 +1866,6 @@ body,
     column-count: auto !important;
 }
 
-.partner-paper-card {
-    display: grid;
-    grid-template-columns: 52px minmax(0, 1fr);
-    min-height: 236px;
-    border-radius: 20px;
-    background:
-        repeating-linear-gradient(180deg, rgba(107, 33, 165, 0.055) 0 1px, transparent 1px 31px),
-        linear-gradient(135deg, #fffdf7, #f8f1ff 72%, #fff) !important;
-    transform: rotate(var(--paper-tilt, -0.25deg));
-}
-
-.partner-paper-card:nth-child(2n) {
-    --paper-tilt: 0.22deg;
-}
-
-.partner-paper-pin {
-    display: grid;
-    place-items: start center;
-    padding-top: 18px;
-    color: rgba(107, 33, 165, 0.75);
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 1.06rem;
-    font-weight: 950;
-    background: rgba(107, 33, 165, 0.07);
-    border-right: 1px dashed rgba(107, 33, 165, 0.22);
-}
-
-.partner-card-content {
-    padding: 16px 16px 14px;
-}
-
-.partner-paper-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.partner-card-tag,
-.post-detail-tag,
-.partner-card-type {
-    padding: 4px 8px;
-    border-radius: 10px;
-    background: rgba(107, 33, 165, 0.1);
-    color: var(--atlas-purple);
-    font-size: 0.72rem;
-    font-weight: 900;
-}
-
-.partner-card-title {
-    margin-bottom: 8px;
-    color: #23162e;
-    font-size: 1.08rem;
-    line-height: 1.35;
-}
-
-.partner-card-desc {
-    min-height: 48px;
-    color: #67556f;
-    font-size: 0.88rem;
-    line-height: 1.72;
-}
-
-.partner-card-meta {
-    display: grid;
-    gap: 7px;
-    margin: 12px 0;
-}
-
-.partner-card-meta span {
-    display: grid;
-    grid-template-columns: 70px minmax(0, 1fr);
-    gap: 8px;
-    font-size: 0.78rem;
-    line-height: 1.45;
-}
-
-.partner-card-meta b {
-    color: rgba(107, 33, 165, 0.82);
-}
-
-.partner-card-stats {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin: 10px 0 12px;
-}
-
-.partner-card-stats span {
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.74);
-    color: #7b6a83;
-    font-size: 0.72rem;
-    font-weight: 800;
-}
-
-.partner-paper-card .join-btn {
-    width: 100%;
-    min-height: 40px;
-    border-radius: 12px;
-    font-weight: 950;
-}
-
 .guide-grid {
     display: grid !important;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -2270,8 +1946,6 @@ body,
     }
 
     .desktop-nav,
-    .ai-entry-btn .fas,
-    .ai-entry-btn span,
     .topbar-username,
     .page-title {
         display: none !important;
@@ -2352,11 +2026,335 @@ body,
         grid-template-columns: 1fr;
     }
 
-    .partner-paper-card {
-        grid-template-columns: 44px minmax(0, 1fr);
-    }
-
     .profile-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* =====================================================================
+   Final layout correction pass.
+   This block intentionally sits at the end so it wins over earlier legacy
+   styles without scattering overrides through the file.
+   ===================================================================== */
+
+/* 首页回到干净首屏：去掉图片、幻色背景和装饰气泡，只保留品牌与功能入口。 */
+#homePage,
+#homePage.active-page,
+.atlas-hero {
+    min-height: calc(100vh - var(--atlas-topbar));
+    background: #fff !important;
+    background-image: none !important;
+}
+
+.atlas-hero::before,
+.atlas-hero::after,
+#homePage::before,
+#homePage::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* 首页保留 NJUATLAS 背后的方块阵列和下方图泡，但去掉页面级背景。 */
+.pixel-field {
+    display: grid !important;
+}
+
+.campus-bubbles {
+    display: grid !important;
+}
+
+body.dark-mode #homePage,
+body.dark-mode #homePage.active-page,
+body.dark-mode .atlas-hero {
+    background: #0f0f16 !important;
+    background-image: none !important;
+}
+
+/* 顶部栏固定在页面上沿；桌面端滚动时导航不再被内容顶走。 */
+.top-bar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: var(--atlas-topbar) !important;
+    align-items: center !important;
+}
+
+/* 顶部按钮和汉字统一用 inline-flex 居中，避免图标、中文基线错位。 */
+.top-bar-left,
+.top-bar-right,
+.desktop-nav,
+.topbar-guest,
+.topbar-user {
+    height: 100%;
+    align-items: center !important;
+}
+
+.brand-mark,
+.theme-toggle-btn,
+.desktop-nav-item,
+.login-round-btn,
+.logout-btn,
+.topbar-username {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    vertical-align: middle !important;
+}
+
+/* 桌面端绝不显示底部导航；底部 Tab 只属于移动端。 */
+@media (min-width: 769px) {
+    .bottom-tab-bar {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+}
+
+/* 找搭子桌面布局：地图占左侧整栏，筛选与卡片在右侧，避免地图挤在内容上方。 */
+@media (min-width: 769px) {
+    #partnerPage.active-page {
+        display: grid !important;
+        grid-template-columns: minmax(360px, 42vw) minmax(0, 1fr);
+        grid-template-areas:
+            "map filter"
+            "map list";
+        gap: 18px;
+        width: min(1440px, calc(100% - 36px)) !important;
+        max-width: none !important;
+        min-height: calc(100vh - var(--atlas-topbar) - 24px);
+        margin: 0 auto !important;
+        padding: 18px 0 30px !important;
+    }
+
+    #partnerPage > .partner-filter {
+        grid-area: filter;
+        margin: 0 !important;
+        align-self: start;
+    }
+
+    #partnerPage > .map-preview-card {
+        grid-area: map;
+        position: sticky;
+        top: calc(var(--atlas-topbar) + 18px);
+        height: calc(100vh - var(--atlas-topbar) - 36px);
+        min-height: 520px;
+        margin: 0 !important;
+        align-self: start;
+    }
+
+    #partnerPage > .partner-waterfall {
+        grid-area: list;
+        margin: 0 !important;
+        align-self: start;
+    }
+
+    .map-preview-card {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .map-preview-body {
+        height: auto !important;
+        min-height: 0 !important;
+    }
+}
+
+/* 移动端地图放在上侧，底部导航恢复为手机专用入口。 */
+@media (max-width: 768px) {
+    #partnerPage.active-page {
+        display: grid !important;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "filter"
+            "map"
+            "list";
+        gap: 14px;
+        width: calc(100% - 24px) !important;
+        padding-bottom: 92px !important;
+    }
+
+    #partnerPage > .partner-filter {
+        grid-area: filter;
+        margin: 0 !important;
+    }
+
+    #partnerPage > .map-preview-card {
+        grid-area: map;
+        position: relative !important;
+        top: auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+    }
+
+    #partnerPage > .partner-waterfall {
+        grid-area: list;
+        margin: 0 !important;
+    }
+
+    .map-preview-body {
+        height: 260px !important;
+    }
+
+    .bottom-tab-bar {
+        display: flex !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
+}
+
+/* 搭子卡片改为信息卡：去掉网格纸和旋转，优先让用户一眼读懂地点、时间、发起人。 */
+.partner-brief-card {
+    display: block !important;
+    min-height: 0 !important;
+    border-radius: 18px !important;
+    transform: none !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 246, 255, 0.98)) !important;
+    border: 1px solid rgba(106, 44, 142, 0.11) !important;
+    box-shadow:
+        0 14px 30px rgba(40, 24, 57, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+}
+
+.partner-brief-card .partner-card-content {
+    padding: 18px !important;
+}
+
+.partner-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.partner-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    min-width: 0;
+}
+
+.partner-card-tag,
+.partner-card-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px !important;
+    border-radius: 999px !important;
+    font-size: 0.76rem !important;
+    font-weight: 850 !important;
+    line-height: 1 !important;
+}
+
+.partner-card-type {
+    flex: 0 0 auto;
+    background: rgba(35, 22, 46, 0.06) !important;
+    color: #4b3b55 !important;
+}
+
+.partner-brief-card .partner-card-title {
+    margin: 0 0 8px !important;
+    color: #21152a !important;
+    font-size: 1.06rem !important;
+    line-height: 1.42 !important;
+    font-weight: 900 !important;
+}
+
+.partner-brief-card .partner-card-desc {
+    min-height: 0 !important;
+    margin: 0 0 14px !important;
+    color: #66586f !important;
+    font-size: 0.88rem !important;
+    line-height: 1.68 !important;
+}
+
+.partner-brief-card .partner-card-meta {
+    display: grid !important;
+    gap: 8px !important;
+    margin: 0 0 14px !important;
+    padding: 12px 0 !important;
+    border-top: 1px solid rgba(106, 44, 142, 0.09);
+    border-bottom: 1px solid rgba(106, 44, 142, 0.09);
+}
+
+.partner-brief-card .partner-card-meta span {
+    display: grid !important;
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: baseline !important;
+    font-size: 0.82rem !important;
+    line-height: 1.45 !important;
+}
+
+.partner-brief-card .partner-card-meta b {
+    color: rgba(106, 44, 142, 0.78) !important;
+    font-weight: 900 !important;
+}
+
+.partner-brief-card .partner-card-meta em {
+    min-width: 0;
+    color: #31263a;
+    font-style: normal;
+    overflow-wrap: anywhere;
+}
+
+.partner-card-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+}
+
+.partner-brief-card .partner-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 0 !important;
+}
+
+.partner-brief-card .partner-card-stats span {
+    padding: 5px 9px !important;
+    border-radius: 999px !important;
+    background: rgba(106, 44, 142, 0.075) !important;
+    color: #675276 !important;
+    font-size: 0.74rem !important;
+    font-weight: 850 !important;
+}
+
+.partner-brief-card .join-btn {
+    width: auto !important;
+    min-width: 92px;
+    min-height: 38px !important;
+    padding: 0 16px !important;
+    border-radius: 999px !important;
+    font-weight: 900 !important;
+}
+
+body.dark-mode .partner-brief-card {
+    background:
+        linear-gradient(180deg, rgba(36, 31, 46, 0.96), rgba(28, 24, 36, 0.98)) !important;
+    border-color: rgba(168, 85, 247, 0.18) !important;
+}
+
+body.dark-mode .partner-brief-card .partner-card-title,
+body.dark-mode .partner-brief-card .partner-card-meta em {
+    color: #f2edf8 !important;
+}
+
+body.dark-mode .partner-brief-card .partner-card-desc {
+    color: #c9bed2 !important;
+}
+
+@media (max-width: 768px) {
+    .partner-card-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .partner-brief-card .join-btn {
+        width: 100% !important;
     }
 }

@@ -40,11 +40,6 @@
                     <button class="desktop-nav-item" data-page="guide" type="button">吃喝玩乐</button>
                     <button class="desktop-nav-item" data-page="profile" type="button">个人</button>
                 </nav>
-                <!-- AI 助手入口 -->
-                <button class="ai-entry-btn" id="aiEntryBtn" title="问问AI">
-                    <i class="fas fa-robot"></i>
-                    <span>问问AI</span>
-                </button>
                 <div id="navGuestTop" class="topbar-guest">
                     <button id="showLoginBtn" class="login-round-btn">登录</button>
                 </div>
@@ -92,15 +87,10 @@
                         <h3>个人空间</h3>
                         <p>集中查看收藏、点赞、评论和对话记录，保留自己的校园轨迹。</p>
                     </article>
-                    <article class="feature-card">
-                        <span class="feature-index">04</span>
-                        <h3>AI 助手</h3>
-                        <p>用自然语言描述需求，让系统帮你缩小选择范围。</p>
-                    </article>
                 </section>
             </div>
 
-            <!-- ========== 找搭子页面（核心：瀑布流+地图+AI） ========== -->
+            <!-- ========== 找搭子页面（核心：瀑布流 + 地图） ========== -->
             <div id="partnerPage" class="page">
 
                 <!-- 分类筛选条（横向滚动） -->
@@ -240,36 +230,6 @@
         </button>
     </nav>
 
-    <!-- ====== AI 助手悬浮球 + 对话浮层 ====== -->
-    <button class="ai-float-ball" id="aiFloatBall" title="AI助手">
-        <i class="fas fa-robot"></i>
-    </button>
-
-    <div class="ai-chat-overlay" id="aiChatOverlay">
-        <div class="ai-chat-panel">
-            <div class="ai-chat-header">
-                <span><i class="fas fa-robot"></i> 搭子AI助手</span>
-                <button class="ai-chat-close" id="aiChatClose"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="ai-chat-body" id="aiChatMessages">
-                <div class="chat-message chat-bot">
-                    <i class="fas fa-robot"></i> 你好，我是搭子助手，可以帮你找搭子、推荐附近好吃好玩的地方。
-                </div>
-            </div>
-            <div class="ai-quick-btns" id="aiQuickBtns">
-                <button class="ai-quick-btn">帮我找一个今天下午的羽毛球搭子</button>
-                <button class="ai-quick-btn">仙林有哪些组局离我近？</button>
-                <button class="ai-quick-btn">推荐剧本杀组局附近的好餐厅</button>
-                <button class="ai-quick-btn ai-quick-food">仙林有什么好吃的火锅？</button>
-                <button class="ai-quick-btn ai-quick-food">南大周边晚上去哪玩？</button>
-                <button class="ai-quick-btn ai-quick-food">推荐一家适合约会的咖啡店</button>
-            </div>
-            <div class="ai-chat-input-row">
-                <input type="text" id="aiChatInput" placeholder="输入你的问题...">
-                <button id="aiChatSendBtn" class="primary-btn"><i class="fas fa-paper-plane"></i></button>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- 登录/注册模态框 -->
@@ -440,7 +400,6 @@
 <script type="module" src="js/api.js"></script>
 <script type="module" src="js/pages/home.js"></script>
 <script type="module" src="js/pages/places.js"></script>
-<script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/pages/profile.js"></script>
 <script type="module" src="js/pages/partner.js"></script>
 <script type="module" src="js/pages/guide.js"></script>

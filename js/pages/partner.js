@@ -256,31 +256,32 @@ function renderWaterfall() {
         return;
     }
 
-    container.innerHTML = filtered.map((p, index) => `
-        <article class="partner-card partner-paper-card" data-id="${p.id}">
-            <div class="partner-paper-pin">${String(index + 1).padStart(2, '0')}</div>
+    container.innerHTML = filtered.map((p) => `
+        <article class="partner-card partner-brief-card" data-id="${p.id}">
             <div class="partner-card-content">
-                <div class="partner-paper-head">
+                <div class="partner-card-head">
                     <div class="partner-card-tags">
                         ${p.tags.slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
-                    <span class="partner-card-type">${p.type === 'event' ? '🎟️ 活动' : '📝 招募'}</span>
+                    <span class="partner-card-type">${p.type === 'event' ? '活动组局' : '长期招募'}</span>
                 </div>
-                <div class="partner-card-title">${escapeHtml(p.title)}</div>
-                <div class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</div>
-                <div class="partner-card-meta">
-                    ${p.location ? `<span><b>📍 地点</b>${escapeHtml(p.location)}</span>` : ''}
-                    ${p.time ? `<span><b>🕒 时间</b>${escapeHtml(p.time)}</span>` : ''}
-                    <span><b>👤 发起</b>${escapeHtml(p.publisher)}</span>
+                <h3 class="partner-card-title">${escapeHtml(p.title)}</h3>
+                <p class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</p>
+                <div class="partner-card-meta" aria-label="组局信息">
+                    ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
+                    ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
+                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}</em></span>
                 </div>
-                <div class="partner-card-stats">
-                    <span>❤️ ${p.likeCount}</span>
-                    <span>💬 ${p.commentCount}</span>
-                    <span>👥 ${p.members}</span>
+                <div class="partner-card-footer">
+                    <div class="partner-card-stats">
+                        <span>点赞 ${p.likeCount}</span>
+                        <span>评论 ${p.commentCount}</span>
+                        <span>人数 ${p.members}</span>
+                    </div>
+                    <button class="join-btn" data-id="${p.id}">
+                        ${p.type === 'event' ? '我要参加' : '感兴趣'}
+                    </button>
                 </div>
-                <button class="join-btn" data-id="${p.id}">
-                    ${p.type === 'event' ? '我要参加' : '感兴趣'}
-                </button>
             </div>
         </article>
     `).join('');
