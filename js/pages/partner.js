@@ -884,20 +884,27 @@ function initPartnerModal() {
 // 页面入口
 // ============================================================
 export async function initPartnerPage() {
-    // 首次加载从 API 获取真实数据
-    if (!partnersData.length) {
-        await loadPostsFromAPI();
-    }
+    // 纯事件绑定，不依赖任何数据，立即执行
     initPartnerModal();
     initPostDetailModal();
-    await initFilters();
+
+    // 数据加载 + 筛选栏初始化 → 并行发起
+    const dataPromise = partnersData.length ? Promise.resolve(partnersData) : loadPostsFromAPI();
+    const filtersPromise = initFilters();
+
+    // 瀑布流渲染：等数据回来就立刻画（不等筛选栏）
+    const posts = await dataPromise;
     renderWaterfall();
+
+    // 筛选栏独立完成
+    await filtersPromise;
+
+    // 地图延迟初始化：等数据 + AMap SDK 都就绪
     initPreviewMap();
 }
 
 // 导出供其他模块使用（地图标记点击等）
 export { openPostDetail };
-
 // ============================================================
 // 工具函数
 // ============================================================

@@ -1,7 +1,7 @@
 """add_urgency_to_event_posts
 
 Revision ID: a0ca2765ee43
-Revises: 85dde7863aac
+Revises: 9c2b4e7d1f9a
 Create Date: 2026-06-04 20:25:12.807393
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = 'a0ca2765ee43'
-down_revision = '85dde7863aac'
+down_revision = '9c2b4e7d1f9a'
 branch_labels = None
 depends_on = None
 

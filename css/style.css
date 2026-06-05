@@ -42,7 +42,81 @@
 
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+<<<<<<< HEAD
 }
+
+/* ========== 全局重置 ========== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; width: 100%; }
+=======
+}
+
+/* 额外覆盖：确保在大屏（>=481px）底栏与悬浮控件位置正确，不受其他规则干扰 */
+@media (min-width: 481px) {
+    .bottom-tab-bar {
+        left: 0 !important;
+        right: 0 !important;
+        transform: none !important;
+        width: 100% !important;
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    .tab-item { padding: 8px 12px !important; }
+
+    .ai-float-ball {
+        right: 24px !important;
+        left: auto !important;
+        transform: none !important;
+    }
+
+    /* 发起组局按钮在各尺寸上保持居中，不偏右 */
+    .fab-create-group {
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+        max-width: 380px;
+        width: calc(100% - 48px) !important;
+    }
+
+    .ai-chat-overlay { left: auto !important; right: 24px !important; transform: none !important; }
+}
+
+/* 强制关键容器在默认情况下占满视口宽度，防止左偏 */
+.app-layout.mobile-layout,
+.main-content,
+.content-area,
+.page,
+.map-preview-card,
+.map-preview-body,
+.map-container,
+#previewMap,
+#fullMap,
+.bottom-tab-bar,
+.top-bar {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    left: 0;
+    right: 0;
+    width: 100vw;
+}
+
+/* 确保地图容器内部元素也填充 */
+.map-container, #previewMap, #fullMap { width: 100% !important; height: 100% !important; display: block; }
+
+/* 保持手机端视觉上居中与窄屏限制 */
+@media (max-width: 480px) {
+    .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
+        max-width: 480px;
+        margin: 0 auto;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    .bottom-tab-bar { left: 50%; transform: translateX(-50%); max-width: 480px; }
+}
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
 
 /* ========== 全局重置 ========== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -77,8 +151,15 @@ textarea { resize: vertical; min-height: 100px; }
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+<<<<<<< HEAD
     max-width: 480px;
     margin: 0 auto;
+=======
+    /* 使用视口宽度，避免两侧留白 */
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
     background: var(--bg-secondary);
     position: relative;
 }
@@ -236,10 +317,18 @@ textarea { resize: vertical; min-height: 100px; }
 .bottom-tab-bar {
     position: fixed;
     bottom: 0;
+<<<<<<< HEAD
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
     max-width: 480px;
+=======
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    max-width: none;
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
     height: var(--bottom-tab-height);
     background: rgba(255, 255, 255, 0.97);
     backdrop-filter: blur(12px);
@@ -252,13 +341,43 @@ textarea { resize: vertical; min-height: 100px; }
     padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
+<<<<<<< HEAD
+=======
+/* 小屏设备（<=480px）仍保持窄屏居中样式 */
+/* 小屏设备（<=480px）在视觉上把内部内容限制为窄屏并居中，但容器仍为全宽，保证上下栏与地图铺满屏 */
+@media (max-width: 480px) {
+    .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
+        max-width: 480px;
+        margin: 0 auto;
+        padding-left: 12px;
+        padding-right: 12px;
+        box-sizing: border-box;
+    }
+
+    .bottom-tab-bar {
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 480px;
+        width: 100%;
+    }
+
+    .ai-float-ball {
+        right: calc(50% - 240px + 16px);
+    }
+}
+
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
 .tab-item {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
+<<<<<<< HEAD
     padding: 8px 0;
+=======
+    padding: 8px 12px;
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
     background: none;
     border: none;
     color: var(--text-tertiary);
@@ -266,6 +385,11 @@ textarea { resize: vertical; min-height: 100px; }
     transition: var(--transition-fast);
     font-size: 0.7rem;
     font-weight: 500;
+<<<<<<< HEAD
+=======
+    min-width: 0;
+    text-align: center;
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
 }
 
 .tab-item i { font-size: 1.3rem; }
@@ -314,7 +438,110 @@ textarea { resize: vertical; min-height: 100px; }
 
 @media (min-width: 481px) {
     .ai-float-ball {
-        right: calc(50% - 240px + 16px);
+        right: 24px !important;
+        left: auto !important;
+    }
+}
+
+/* 桌面/平板适配：取消 480px 限制，使应用占满页面，同时调整悬浮/底部元素到视口边缘 */
+@media (min-width: 481px) {
+    /* 在较大屏幕上使应用占满整个视口宽度，去除两侧留白 */
+    .app-layout.mobile-layout {
+        max-width: none;
+        width: 100%;
+        margin: 0;
+    }
+    /* 确保在固定底部 Tab 的大屏场景下，内容区域底部留出足够空间，保持移动端样式不变 */
+    .content-area {
+        padding-bottom: calc(var(--bottom-tab-height) + 16px);
+    }
+
+    /* 底部 TAB 贴合视口宽度，取消居中容器的限制 */
+    .bottom-tab-bar {
+        left: 0;
+        right: 0;
+        transform: none;
+        max-width: none;
+        width: 100vw;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    /* 在大屏上让顶部栏固定并占满全屏宽度，避免左右留白 */
+    .top-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100vw;
+        z-index: 1100;
+        border-bottom: 1px solid var(--gray-200);
+        background: rgba(255,255,255,0.96);
+        backdrop-filter: blur(12px);
+    }
+
+    /* main-content 顶部增加内边距，防止被固定的 top-bar 遮挡 */
+    .main-content {
+        padding-top: calc(var(--topbar-height) + 8px);
+    }
+
+    /* 在大屏上让主要内容区域占满宽度，移除可能的居中空白 */
+    .app-layout.mobile-layout, .content-area, .page {
+        max-width: none;
+        width: 100vw;
+        margin: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    /* 地图卡片和瀑布流在大屏上尽量占满可用宽度 */
+    .map-preview-card, .partner-waterfall, .guide-grid {
+        width: 100%;
+        max-width: none;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    /* 悬浮控件贴近右侧边距 */
+    .ai-float-ball,
+    .ai-chat-overlay,
+    .fab-create-group {
+        right: 24px;
+        left: auto;
+        transform: none;
+    }
+
+    .fab-create-group { max-width: 380px; }
+}
+/* 更强制的覆盖：针对更大设备（平板/桌面）确保没有左右留白 */
+@media (min-width: 768px) {
+    .app-layout.mobile-layout {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    .top-bar, .bottom-tab-bar {
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        transform: none !important;
+    }
+
+    .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        box-sizing: border-box !important;
+    }
+
+    .map-container {
+        width: calc(100% - 32px) !important;
+        margin: 0 16px !important;
+        max-width: none !important;
     }
 }
 
@@ -322,10 +549,11 @@ textarea { resize: vertical; min-height: 100px; }
 .ai-chat-overlay {
     position: fixed;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 480px;
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100vw;
+    max-width: 100vw;
     z-index: 300;
     display: none;
 }
@@ -1692,4 +1920,8 @@ button:active { transform: scale(0.96); }
     font-size: 0.78rem;
     cursor: pointer;
     white-space: nowrap;
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 9bc576077d2175f4d772cccf7116d5cf2144b709
