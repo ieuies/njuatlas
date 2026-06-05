@@ -142,10 +142,19 @@
                 </button>
             </div>
 
-            <!-- ========== 指南页面（瀑布流） ========== -->
+            <!-- ========== 指南页面 ========== -->
             <div id="guidePage" class="page">
-                <div class="page-header-flex">
-                    <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐指南</h2>
+                <div class="guide-header">
+                    <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
+                    <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
+                </div>
+                <!-- 分类筛选 -->
+                <div class="guide-filter" id="guideFilter">
+                    <button data-guide-cat="all" class="guide-chip active">全部</button>
+                    <button data-guide-cat="美食" class="guide-chip">🍜 美食</button>
+                    <button data-guide-cat="咖啡" class="guide-chip">☕ 咖啡饮品</button>
+                    <button data-guide-cat="玩乐" class="guide-chip">🎯 休闲玩乐</button>
+                    <button data-guide-cat="校园" class="guide-chip">🏫 校园风光</button>
                 </div>
                 <div id="guideGrid" class="guide-grid">
                     <div class="guide-loading">加载精彩推荐中...</div>

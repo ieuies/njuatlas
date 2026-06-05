@@ -891,6 +891,9 @@ export async function initPartnerPage() {
     initPartnerModal();
     initPostDetailModal();
 
+    // 桌面端：将 filter 和 waterfall 包在右侧面板中，配合 flexbox 布局
+    _ensureRightPanel();
+
     // 数据加载 + 筛选栏初始化 → 并行发起
     const dataPromise = partnersData.length ? Promise.resolve(partnersData) : loadPostsFromAPI();
     const filtersPromise = initFilters();
@@ -904,6 +907,24 @@ export async function initPartnerPage() {
 
     // 地图延迟初始化：等数据 + AMap SDK 都就绪
     initPreviewMap();
+}
+
+/** 桌面端用右侧面板包裹 filter + waterfall，配合 flex 布局 */
+function _ensureRightPanel() {
+    const page = document.getElementById('partnerPage');
+    if (!page) return;
+    let panel = page.querySelector('.partner-right-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.className = 'partner-right-panel';
+        const filter = page.querySelector('.partner-filter');
+        const waterfall = page.querySelector('.partner-waterfall');
+        if (filter && waterfall) {
+            filter.parentNode.insertBefore(panel, filter);
+            panel.appendChild(filter);
+            panel.appendChild(waterfall);
+        }
+    }
 }
 
 // 导出供其他模块使用（地图标记点击等）

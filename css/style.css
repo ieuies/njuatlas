@@ -1914,27 +1914,161 @@ body,
     column-count: auto !important;
 }
 
+/* ====== 吃喝玩乐指南（大众点评/美团风格） ====== */
+.guide-header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+.guide-header h2 {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--atlas-ink);
+    margin: 0 0 6px;
+}
+.guide-header h2 i { color: var(--atlas-purple); }
+.guide-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    margin: 0;
+}
+
+.guide-filter {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    padding: 8px 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.guide-filter::-webkit-scrollbar { display: none; }
+
+.guide-chip {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--gray-200);
+    background: var(--atlas-card);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+.guide-chip:hover {
+    border-color: var(--atlas-purple);
+    color: var(--atlas-purple);
+}
+.guide-chip.active {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    border-color: transparent;
+}
+
 .guide-grid {
     display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 18px;
     column-count: auto !important;
 }
 
 .guide-card {
-    min-height: 168px;
-    padding: 18px;
-    background:
-        linear-gradient(90deg, var(--atlas-line) 0 5px, transparent 5px),
-        var(--atlas-card) !important;
-    transition: background-color 0.3s;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--atlas-card) !important;
+    box-shadow: var(--atlas-shadow);
+    transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+    cursor: pointer;
+}
+.guide-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--atlas-shadow-strong);
 }
 
 .guide-img {
-    height: 120px;
-    border-radius: 14px;
+    width: 100%;
+    height: 170px;
     object-fit: cover;
-    filter: saturate(0.92) contrast(0.96);
+    display: block;
+}
+
+.guide-info {
+    padding: 14px 16px;
+}
+
+.guide-title {
+    font-weight: 800;
+    font-size: 1rem;
+    color: var(--atlas-ink);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.guide-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #FFF7ED;
+    color: #F59E0B;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.guide-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.guide-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.guide-type {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.guide-price {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--danger);
+    margin-left: auto;
+}
+
+.guide-loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-tertiary);
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+    .guide-grid {
+        grid-template-columns: 1fr;
+    }
+    .guide-img {
+        height: 150px;
+    }
 }
 
 /* ====== 个人中心新布局 ====== */
@@ -2666,53 +2800,45 @@ body,
     }
 }
 
-/* 找搭子桌面布局：左侧紧凑地图，右侧找搭子卡片 */
+/* 找搭子桌面布局：左侧地图（固定宽度），右侧筛选+卡片 */
 @media (min-width: 769px) {
     #partnerPage.active-page {
-        display: grid !important;
-        grid-template-columns: minmax(300px, 440px) minmax(0, 1fr);
-        grid-template-rows: auto 1fr;
-        grid-template-areas:
-            "map filter"
-            "map list";
+        display: flex !important;
         gap: 18px;
         width: calc(100% - 36px) !important;
         max-width: 1280px !important;
-        min-height: calc(100vh - var(--atlas-topbar) - 24px);
         margin: 0 auto !important;
         padding: 18px 0 30px !important;
+        min-height: calc(100vh - var(--atlas-topbar) - 24px);
     }
 
-    #partnerPage > .partner-filter {
-        grid-area: filter;
-        margin: 0 !important;
-        align-self: start;
-        overflow: hidden;
-    }
-
+    /* 左侧地图面板 */
     #partnerPage > .map-preview-card {
-        grid-area: map;
+        flex: 0 0 400px;
+        width: 400px;
         position: sticky;
         top: calc(var(--atlas-topbar) + 18px);
+        align-self: flex-start;
         height: calc(100vh - var(--atlas-topbar) - 36px);
         min-height: 480px;
         max-height: calc(100vh - var(--atlas-topbar) - 36px);
         margin: 0 !important;
-        align-self: start;
-        display: grid;
-        grid-template-rows: auto 1fr auto;
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
     }
 
-    #partnerPage > .partner-waterfall {
-        grid-area: list;
-        margin: 0 !important;
-        align-self: start;
+    .partner-right-panel {
+        flex: 1;
+        min-width: 0;
+        display: flex !important;
+        flex-direction: column;
+        gap: 18px;
     }
 
     .map-preview-body {
-        height: auto !important;
-        min-height: 0 !important;
+        flex: 1;
+        min-height: 0;
         position: relative;
         overflow: hidden;
     }
@@ -2726,42 +2852,56 @@ body,
     }
 }
 
-/* 移动端：上半区地图，下半区找搭子卡片 */
+/* 移动端：筛选 → 地图 → 卡片，纵向排列 */
 @media (max-width: 768px) {
     #partnerPage.active-page {
-        display: grid !important;
-        grid-template-columns: 1fr;
-        grid-template-areas:
-            "filter"
-            "map"
-            "list";
+        display: flex !important;
+        flex-direction: column;
         gap: 14px;
         width: calc(100% - 24px) !important;
         padding-bottom: 92px !important;
     }
 
-    #partnerPage > .partner-filter {
-        grid-area: filter;
+    .partner-right-panel {
+        display: contents !important;
+    }
+
+    #partnerPage > .partner-filter,
+    .partner-right-panel > .partner-filter {
         margin: 0 !important;
+        flex-shrink: 0;
     }
 
     #partnerPage > .map-preview-card {
-        grid-area: map;
         position: relative !important;
         top: auto !important;
         height: auto !important;
         min-height: 0 !important;
+        width: 100% !important;
+        flex: none !important;
         margin: 0 !important;
+        display: flex;
+        flex-direction: column;
     }
 
-    #partnerPage > .partner-waterfall {
-        grid-area: list;
+    #partnerPage > .partner-waterfall,
+    .partner-right-panel > .partner-waterfall {
         margin: 0 !important;
     }
 
     .map-preview-body {
         height: calc(50vh - var(--atlas-topbar) - 60px) !important;
         min-height: 220px !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .map-preview-body .map-container,
+    .map-preview-body #previewMap {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
     }
 
     .bottom-tab-bar {

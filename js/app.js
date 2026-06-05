@@ -224,6 +224,7 @@ function init() {
     initFabButton();
     initMapExpand();
     initFullMapPage();
+    initProfilePage();       // 绑定个人中心编辑资料等按钮事件
 
     // 默认加载首页，同时预加载找搭子数据，用户登录后进入页面不需要再等首屏初始化。
     switchPage('home');
