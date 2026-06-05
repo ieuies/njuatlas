@@ -57,6 +57,7 @@ def _user_payload(user):
         "email": user.email,
         "username": user.username,
         "email_verified": bool(user.email_verified),
+        "campus": user.campus or "",
         "access_token": access_token,
         "token_type": "Bearer",
         "expires_in": expires_in,

@@ -175,13 +175,23 @@
                     <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
                     <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
                 </div>
+                <!-- 校区筛选 -->
+                <div class="guide-filter" id="guideCampusFilter">
+                    <button data-guide-campus="all" class="guide-chip active">全部</button>
+                    <button data-guide-campus="鼓楼" class="guide-chip">🏫 鼓楼</button>
+                    <button data-guide-campus="仙林" class="guide-chip">🌳 仙林</button>
+                    <button data-guide-campus="浦口" class="guide-chip">🔬 浦口</button>
+                    <button data-guide-campus="苏州" class="guide-chip">🌊 苏州</button>
+                </div>
                 <!-- 分类筛选 -->
                 <div class="guide-filter" id="guideFilter">
                     <button data-guide-cat="all" class="guide-chip active">全部</button>
                     <button data-guide-cat="美食" class="guide-chip">🍜 美食</button>
-                    <button data-guide-cat="咖啡" class="guide-chip">☕ 咖啡饮品</button>
-                    <button data-guide-cat="玩乐" class="guide-chip">🎯 休闲玩乐</button>
-                    <button data-guide-cat="校园" class="guide-chip">🏫 校园风光</button>
+                    <button data-guide-cat="咖啡饮品" class="guide-chip">☕ 咖啡饮品</button>
+                    <button data-guide-cat="休闲娱乐" class="guide-chip">🎬 休闲娱乐</button>
+                    <button data-guide-cat="运动健身" class="guide-chip">🏃 运动健身</button>
+                    <button data-guide-cat="购物商圈" class="guide-chip">🛍 购物商圈</button>
+                    <button data-guide-cat="景点公园" class="guide-chip">🌳 景点公园</button>
                 </div>
                 <div id="guideGrid" class="guide-grid">
                     <div class="guide-loading">加载精彩推荐中...</div>
@@ -204,6 +214,7 @@
                                         <i class="fas fa-pen"></i>
                                     </button>
                                 </div>
+                                <p class="profile-campus" id="profileCampus"></p>
                                 <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
                                 <p class="profile-email-line" id="profileEmailLine"></p>
                                 <div class="profile-status-row">
@@ -286,6 +297,14 @@
                         </div>
                         <label>用户名</label>
                         <input type="text" id="editUsername" placeholder="输入用户名" maxlength="30">
+                        <label>校区</label>
+                        <select id="editCampus">
+                            <option value="">请选择校区</option>
+                            <option value="鼓楼">鼓楼校区</option>
+                            <option value="仙林">仙林校区</option>
+                            <option value="浦口">浦口校区</option>
+                            <option value="苏州">苏州校区</option>
+                        </select>
                         <label>个人简介</label>
                         <textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea>
                         <label>兴趣标签（用逗号分隔）</label>

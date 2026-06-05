@@ -86,8 +86,8 @@ export async function deleteAccount(password) {
 export async function getMyProfile() {
     return request('/me/profile', 'GET');
 }
-export async function updateMyProfile({ username, bio, tags } = {}) {
-    return request('/me/profile', 'PUT', { username, bio, tags });
+export async function updateMyProfile({ username, bio, campus, tags } = {}) {
+    return request('/me/profile', 'PUT', { username, bio, campus, tags });
 }
 
 // ── 地图搜索 ──

@@ -1973,6 +1973,16 @@ body,
     color: var(--text-secondary);
 }
 
+.guide-campus-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--atlas-primary, #6B21A5);
+    color: #fff;
+}
+
 .guide-price {
     font-size: 0.82rem;
     font-weight: 700;
@@ -2122,6 +2132,12 @@ body,
     line-height: 1.5;
 }
 
+.profile-campus {
+    margin: 0 0 2px 0;
+    font-size: 0.85rem;
+    color: var(--atlas-primary, #6B21A5);
+    font-weight: 500;
+}
 .profile-email-line {
     margin: 0;
     font-size: 0.8rem;

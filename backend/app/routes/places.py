@@ -29,7 +29,7 @@ def search():
     types 参数直接透传给高德 API，前端按高德官方 POI 分类编码传入即可。
     参见：https://lbs.amap.com/api/webservice/download （下载 POI 分类编码表）
     """
-    keyword = clean_string(request.args.get("keyword"), "keyword", required=True, max_length=80)
+    keyword = clean_string(request.args.get("keyword"), "keyword", max_length=80)
     city = clean_string(request.args.get("city", "南京"), "city", max_length=50)
     location = clean_string(request.args.get("location"), "location", max_length=50)
     location = validate_location(location)

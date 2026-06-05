@@ -19,6 +19,22 @@ let _modalLocationCoords = null;     // "lng,lat" 字符串
 let previewMap = null;
 let fullMapInstance = null;
 
+// 校区坐标映射（WGS-84 → 高德 GCJ-02 转换前）
+const CAMPUS_COORDS = {
+    '鼓楼': [118.780, 32.058],
+    '仙林': [118.954, 32.114],
+    '浦口': [118.652, 32.157],
+    '苏州': [120.385, 31.355],
+};
+function _getMapCenter() {
+    const user = getUser();
+    const campus = user?.campus || '';
+    const coords = CAMPUS_COORDS[campus];
+    if (coords) return wgs84ToGcj02(coords[0], coords[1]);
+    // 默认：鼓楼校区
+    return wgs84ToGcj02(118.780, 32.058);
+}
+
 // 动态分类颜色（根据标签名生成 HSL 色相）
 const categoryColorCache = {};
 function _categoryStyle(cat) {
@@ -154,8 +170,8 @@ function createMapInstance(containerId) {
     if (!container) return null;
     container.innerHTML = '';
 
-    // 默认中心：南京大学鼓楼校区
-    const center = wgs84ToGcj02(118.780, 32.058);
+    // 以用户校区为原点，未设置则默认鼓楼
+    const center = _getMapCenter();
 
     return new window.AMap.Map(containerId, {
         zoom: 15,

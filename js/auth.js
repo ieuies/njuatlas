@@ -16,7 +16,8 @@ function readStoredUser() {
             id: Number(payload.sub) || null,
             email: payload.email || '',
             username: payload.email ? payload.email.split('@')[0] : '',
-            email_verified: false
+            email_verified: false,
+            campus: ''
         };
     } catch(e) {
         localStorage.removeItem('current_user');
@@ -35,7 +36,8 @@ function userFromAuthPayload(data, fallback = {}) {
         id: data.id ?? fallback.id ?? null,
         email: data.email ?? fallback.email ?? '',
         username: data.username ?? fallback.username ?? '',
-        email_verified: Boolean(data.email_verified ?? fallback.email_verified)
+        email_verified: Boolean(data.email_verified ?? fallback.email_verified),
+        campus: data.campus ?? fallback.campus ?? ''
     };
 }
 

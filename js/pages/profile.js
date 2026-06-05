@@ -62,13 +62,18 @@ async function loadAndRenderBio() {
         if (profile.bio) {
             bioEl.innerText = profile.bio;
         }
+        // 显示校区
+        const campusEl = document.getElementById('profileCampus');
+        if (campusEl) campusEl.innerText = profile.campus ? `📍 ${profile.campus}校区` : '';
         // 预填编辑表单
         const editUsername = document.getElementById('editUsername');
         const editBio = document.getElementById('editBio');
         const editTags = document.getElementById('editTags');
+        const editCampus = document.getElementById('editCampus');
         if (editUsername) editUsername.value = profile.username || '';
         if (editBio) editBio.value = profile.bio || '';
         if (editTags) editTags.value = (profile.tags || []).join(', ');
+        if (editCampus) editCampus.value = profile.campus || '';
     } catch (e) {
         // 静默失败，保留默认 bio
     }
@@ -367,6 +372,7 @@ function initEditProfile() {
         e.preventDefault();
         const username = document.getElementById('editUsername').value.trim();
         const bio = document.getElementById('editBio').value.trim();
+        const campus = document.getElementById('editCampus')?.value || '';
         const tagsStr = document.getElementById('editTags').value.trim();
         const tags = tagsStr ? tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean) : [];
         const oldPwd = document.getElementById('editOldPassword').value;
@@ -378,7 +384,7 @@ function initEditProfile() {
         saveBtn.innerText = '保存中...';
         try {
             // 更新个人资料
-            await updateMyProfile({ username, bio, tags });
+            await updateMyProfile({ username, bio, campus, tags });
             // 如果填了新密码，则同时修改密码
             if (newPwd) {
                 if (!oldPwd) { showToast('请输入当前密码以修改密码'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
@@ -391,6 +397,14 @@ function initEditProfile() {
             modal.style.display = 'none';
             if (username) document.getElementById('profileUsername').innerText = username;
             if (bio) document.getElementById('profileBio').innerText = bio;
+            // 同步 campus 到 currentUser
+            if (campus !== undefined) {
+                const user = getUser();
+                if (user) {
+                    user.campus = campus;
+                    localStorage.setItem('current_user', JSON.stringify(user));
+                }
+            }
         } catch (err) {
             showToast(err.message || '保存失败');
         } finally {

@@ -143,6 +143,7 @@ def _profile_payload(user):
         "username": user.username,
         "email_verified": bool(user.email_verified),
         "bio": user.bio or "",
+        "campus": user.campus or "",
         "tags": tags,
         "avatar_url": user.avatar_url or "",
         "created_at": _dt(user.created_at),
@@ -166,6 +167,9 @@ def update_profile():
     import json
     data = get_json_body(request)
 
+    campus = clean_string(data.get("campus"), "campus", max_length=20)
+    if campus and campus not in ("鼓楼", "仙林", "浦口", "苏州"):
+        return error_response("campus 必须是 鼓楼/仙林/浦口/苏州 之一", 400, code="invalid_campus")
     username = clean_string(data.get("username"), "username", max_length=50)
     bio = clean_string(data.get("bio"), "bio", max_length=300)
     tags_raw = data.get("tags")
@@ -180,6 +184,9 @@ def update_profile():
 
     if bio is not None:
         user.bio = bio
+
+    if campus is not None:
+        user.campus = campus
 
     if tags_raw is not None:
         if not isinstance(tags_raw, list):

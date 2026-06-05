@@ -22,6 +22,7 @@ class User(db.Model):
 
     # 用户画像（阶段二新增）
     bio = db.Column(db.String(300))            # 个人简介
+    campus = db.Column(db.String(20))           # 校区：鼓楼/仙林/浦口/苏州
     tags = db.Column(db.String(500))           # JSON 数组: '["川菜","羽毛球","王者"]'
     avatar_url = db.Column(db.String(500))     # 头像链接（预留）
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
