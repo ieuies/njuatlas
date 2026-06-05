@@ -7,18 +7,20 @@ import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
 import { loadAmapScript } from './config.js';
 
-let currentPage = 'partner';
+let currentPage = 'home';
 let aiSessionId = null;
 const pageTitles = {
+    home: '首页',
     partner: '找搭子',
-    guide: '指南',
-    profile: '我的',
+    guide: '吃喝玩乐',
+    profile: '个人',
     fullMap: '组局地图',
 };
 
 function switchPage(pageId) {
-    // 「我的」页面需要登录
-    if (pageId === 'profile' && !isLoggedIn()) {
+    // 这些页面沿用现有登录模态框；这里不改账号流程，只把入口统一接到已有 authModal。
+    const protectedPages = ['partner', 'guide', 'profile'];
+    if (protectedPages.includes(pageId) && !isLoggedIn()) {
         const modal = document.getElementById('authModal');
         if (modal) modal.style.display = 'flex';
         return;
@@ -31,6 +33,7 @@ function switchPage(pageId) {
 
     // 显示目标页面
     const pageMap = {
+        home: 'homePage',
         partner: 'partnerPage',
         guide: 'guidePage',
         profile: 'profilePage',
@@ -53,6 +56,11 @@ function switchPage(pageId) {
         const tabPage = item.getAttribute('data-page');
         item.classList.toggle('active', tabPage === pageId);
     });
+    // 桌面导航和底部导航共用同一个 active 状态，避免两个导航看起来不同步。
+    document.querySelectorAll('.desktop-nav .desktop-nav-item').forEach(item => {
+        const tabPage = item.getAttribute('data-page');
+        item.classList.toggle('active', tabPage === pageId);
+    });
 
     // 页面切换时的初始化
     if (pageId === 'guide') initGuidePage();
@@ -64,17 +72,12 @@ function switchPage(pageId) {
         });
     }
 
-    // 地图页和全屏地图页不显示悬浮元素
+    // 发起组局按钮只属于找搭子页；AI 悬浮球在全屏地图页隐藏，避免遮挡地图操作。
     const fab = document.getElementById('fabCreateGroup');
     const aiBall = document.getElementById('aiFloatBall');
     if (fab && aiBall) {
-        if (pageId === 'fullMap') {
-            fab.style.display = 'none';
-            aiBall.style.display = 'none';
-        } else {
-            fab.style.display = 'flex';
-            aiBall.style.display = 'flex';
-        }
+        fab.style.display = pageId === 'partner' ? 'flex' : 'none';
+        aiBall.style.display = pageId === 'fullMap' ? 'none' : 'flex';
     }
 }
 
@@ -110,9 +113,9 @@ function updateNavBar() {
         document.body.classList.remove('logged-in');
     }
 
-    // 默认显示找搭子
+    // 默认回到首页，避免未登录用户直接落到需要账号的功能页。
     if (!currentPage || currentPage === 'fullMap') {
-        switchPage('partner');
+        switchPage('home');
     }
 }
 
@@ -218,14 +221,54 @@ function initFullMapPage() {
     });
 }
 
-// ========== 底部 Tab ==========
-function initBottomTabs() {
-    document.querySelectorAll('.bottom-tab-bar .tab-item').forEach(tab => {
+// ========== 页面导航 ==========
+function initNavigation() {
+    // 所有带 data-page 的视觉入口走同一套切页函数，像把多扇门接到同一个走廊。
+    document.querySelectorAll('[data-page]').forEach(tab => {
         tab.addEventListener('click', () => {
             const page = tab.getAttribute('data-page');
             if (page) switchPage(page);
         });
     });
+}
+
+// ========== 主题切换 ==========
+function initThemeToggle() {
+    const themeButton = document.getElementById('themeToggleBtn');
+    const savedTheme = localStorage.getItem('njuatlas-theme') || 'light';
+
+    // localStorage 就像浏览器里的小笔记本，可以记住上次离开时是开灯还是关灯。
+    const applyTheme = (theme) => {
+        document.documentElement.setAttribute('data-theme', theme);
+        if (themeButton) themeButton.textContent = theme === 'dark' ? '☀️' : '🌙';
+        localStorage.setItem('njuatlas-theme', theme);
+    };
+
+    applyTheme(savedTheme);
+
+    themeButton?.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    });
+}
+
+// ========== 首页像素方块 ==========
+function initPixelField() {
+    const field = document.getElementById('pixelField');
+    if (!field || field.dataset.ready === 'true') return;
+
+    // CSS Grid 就像在纸上画格子，这里用 64 个格子围住 NJUATLAS 标识。
+    const cellCount = 64;
+    for (let i = 0; i < cellCount; i += 1) {
+        const cell = document.createElement('span');
+        cell.className = 'pixel-cell';
+        cell.style.setProperty('--i', i);
+        cell.style.setProperty('--row', Math.floor(i / 8));
+        cell.style.setProperty('--col', i % 8);
+        cell.style.setProperty('--delay', `${(i % 10) * 0.08}s`);
+        field.appendChild(cell);
+    }
+    field.dataset.ready = 'true';
 }
 
 // ========== FAB 按钮 ==========
@@ -259,14 +302,16 @@ function init() {
 
     // 初始化各模块
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件
-    initBottomTabs();
+    initNavigation();
+    initThemeToggle();
+    initPixelField();
     initAIFloat();
     initFabButton();
     initMapExpand();
     initFullMapPage();
 
-    // 默认加载找搭子页面
-    switchPage('partner');
+    // 默认加载首页，同时预加载找搭子数据，用户登录后进入页面不需要再等首屏初始化。
+    switchPage('home');
     initPartnerPage();
 }
 
@@ -274,7 +319,7 @@ function init() {
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     await doLogout();
     updateNavBar();
-    switchPage('partner');
+    switchPage('home');
     showToast('已退出登录');
 });
 

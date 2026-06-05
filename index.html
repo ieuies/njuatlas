@@ -29,11 +29,17 @@
         <!-- 顶部标题栏 -->
         <header class="top-bar">
             <div class="top-bar-left">
-                <span class="top-logo">nju.atlas</span>
-                <span class="top-divider">·</span>
-                <span class="page-title" id="pageTitle">找搭子</span>
+                <button class="brand-mark" data-page="home" type="button">NJUATLAS</button>
+                <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="切换夜间模式">🌙</button>
+                <span class="page-title" id="pageTitle">首页</span>
             </div>
             <div class="top-bar-right">
+                <nav class="desktop-nav" aria-label="主导航">
+                    <button class="desktop-nav-item active" data-page="home" type="button">首页</button>
+                    <button class="desktop-nav-item" data-page="partner" type="button">找搭子</button>
+                    <button class="desktop-nav-item" data-page="guide" type="button">吃喝玩乐</button>
+                    <button class="desktop-nav-item" data-page="profile" type="button">个人</button>
+                </nav>
                 <!-- AI 助手入口 -->
                 <button class="ai-entry-btn" id="aiEntryBtn" title="问问AI">
                     <i class="fas fa-robot"></i>
@@ -52,17 +58,59 @@
         <!-- 页面内容区 -->
         <div class="content-area" id="contentArea">
 
+            <!-- ========== 首页：品牌 Hero + 功能入口 ========== -->
+            <div id="homePage" class="page active-page">
+                <section class="atlas-hero" aria-label="NJUATLAS 首页">
+                    <div class="pixel-field" id="pixelField" aria-hidden="true"></div>
+                    <div class="hero-content">
+                        <p class="hero-kicker">NANJING UNIVERSITY SOCIAL ATLAS</p>
+                        <h1>NJUATLAS</h1>
+                        <p class="hero-subtitle">南大图谱：南朋友搭子平台</p>
+                        <div class="hero-actions">
+                            <button class="hero-primary-btn" data-page="partner" type="button">开始找搭子</button>
+                            <button class="hero-secondary-btn" data-page="guide" type="button">看看周边</button>
+                        </div>
+                        <div class="campus-bubbles" aria-hidden="true">
+                            <div class="campus-bubble campus-bubble-library"></div>
+                            <div class="campus-bubble campus-bubble-north"></div>
+                        </div>
+                    </div>
+                </section>
+                <section class="feature-strip" aria-label="功能简介">
+                    <article class="feature-card">
+                        <span class="feature-index">01</span>
+                        <h3>找搭子</h3>
+                        <p>把活动、时间、地点和参与人数放在同一张卡片里，快速判断要不要加入。</p>
+                    </article>
+                    <article class="feature-card">
+                        <span class="feature-index">02</span>
+                        <h3>吃喝玩乐</h3>
+                        <p>把校园周边地点整理成可浏览的指南，减少反复搜索的成本。</p>
+                    </article>
+                    <article class="feature-card">
+                        <span class="feature-index">03</span>
+                        <h3>个人空间</h3>
+                        <p>集中查看收藏、点赞、评论和对话记录，保留自己的校园轨迹。</p>
+                    </article>
+                    <article class="feature-card">
+                        <span class="feature-index">04</span>
+                        <h3>AI 助手</h3>
+                        <p>用自然语言描述需求，让系统帮你缩小选择范围。</p>
+                    </article>
+                </section>
+            </div>
+
             <!-- ========== 找搭子页面（核心：瀑布流+地图+AI） ========== -->
-            <div id="partnerPage" class="page active-page">
+            <div id="partnerPage" class="page">
 
                 <!-- 分类筛选条（横向滚动） -->
                 <div class="partner-filter" id="partnerFilter">
                     <button data-category="all" class="filter-chip active">全部</button>
-                    <button data-category="饭搭子" class="filter-chip">🍜 饭搭子</button>
-                    <button data-category="运动搭子" class="filter-chip">🏃 运动搭子</button>
-                    <button data-category="学习搭子" class="filter-chip">📚 学习搭子</button>
-                    <button data-category="游戏搭子" class="filter-chip">🎮 游戏搭子</button>
-                    <button data-category="电影搭子" class="filter-chip">🎬 电影搭子</button>
+                    <button data-category="饭搭子" class="filter-chip">饭搭子</button>
+                    <button data-category="运动搭子" class="filter-chip">运动搭子</button>
+                    <button data-category="学习搭子" class="filter-chip">学习搭子</button>
+                    <button data-category="游戏搭子" class="filter-chip">游戏搭子</button>
+                    <button data-category="电影搭子" class="filter-chip">电影搭子</button>
                 </div>
 
                 <!-- 地图预览卡片 -->
@@ -174,7 +222,11 @@
 
     <!-- ====== 底部 Tab 导航栏 ====== -->
     <nav class="bottom-tab-bar" id="bottomTabBar">
-        <button class="tab-item active" data-page="partner">
+        <button class="tab-item active" data-page="home">
+            <i class="fas fa-house"></i>
+            <span>首页</span>
+        </button>
+        <button class="tab-item" data-page="partner">
             <i class="fas fa-user-friends"></i>
             <span>找搭子</span>
         </button>
@@ -201,16 +253,16 @@
             </div>
             <div class="ai-chat-body" id="aiChatMessages">
                 <div class="chat-message chat-bot">
-                    <i class="fas fa-robot"></i> 👋 你好！我是搭子AI助手，可以帮你找搭子、推荐附近好吃好玩～
+                    <i class="fas fa-robot"></i> 你好，我是搭子助手，可以帮你找搭子、推荐附近好吃好玩的地方。
                 </div>
             </div>
             <div class="ai-quick-btns" id="aiQuickBtns">
                 <button class="ai-quick-btn">帮我找一个今天下午的羽毛球搭子</button>
                 <button class="ai-quick-btn">仙林有哪些组局离我近？</button>
                 <button class="ai-quick-btn">推荐剧本杀组局附近的好餐厅</button>
-                <button class="ai-quick-btn ai-quick-food">🍲 仙林有什么好吃的火锅？</button>
-                <button class="ai-quick-btn ai-quick-food">🌙 南大周边晚上去哪玩？</button>
-                <button class="ai-quick-btn ai-quick-food">☕ 推荐一家适合约会的咖啡店</button>
+                <button class="ai-quick-btn ai-quick-food">仙林有什么好吃的火锅？</button>
+                <button class="ai-quick-btn ai-quick-food">南大周边晚上去哪玩？</button>
+                <button class="ai-quick-btn ai-quick-food">推荐一家适合约会的咖啡店</button>
             </div>
             <div class="ai-chat-input-row">
                 <input type="text" id="aiChatInput" placeholder="输入你的问题...">
@@ -261,11 +313,11 @@
 <!-- 场所详情模态框 -->
 <div id="placeModal" class="modal">
     <div class="modal-card" style="max-width:600px;">
-        <div class="flex-between"><h3 id="modalTitle"></h3><button id="closeModalBtn" class="close-btn">✖</button></div>
+        <div class="flex-between"><h3 id="modalTitle"></h3><button id="closeModalBtn" class="close-btn">×</button></div>
         <p id="modalDesc"></p>
         <div class="modal-actions">
-            <button id="likePlaceBtn" class="secondary-btn">❤️ 点赞</button>
-            <button id="favPlaceBtn" class="secondary-btn">⭐ 收藏</button>
+            <button id="likePlaceBtn" class="secondary-btn">点赞</button>
+            <button id="favPlaceBtn" class="secondary-btn">收藏</button>
         </div>
         <h4>评论</h4>
         <div id="modalReviews"></div>
@@ -282,11 +334,11 @@
         <form id="partnerForm">
             <select id="partnerCategory" required>
                 <option value="">选择分类</option>
-                <option value="饭搭子">🍜 饭搭子</option>
-                <option value="学习搭子">📚 学习搭子</option>
-                <option value="运动搭子">🏃 运动搭子</option>
-                <option value="游戏搭子">🎮 游戏搭子</option>
-                <option value="电影搭子">🎬 电影搭子</option>
+                <option value="饭搭子">饭搭子</option>
+                <option value="学习搭子">学习搭子</option>
+                <option value="运动搭子">运动搭子</option>
+                <option value="游戏搭子">游戏搭子</option>
+                <option value="电影搭子">电影搭子</option>
             </select>
             <input type="text" id="partnerTitle" placeholder="标题 (例如: 周五晚仙林剧本杀 缺1人)" required>
             <div class="partner-form-row">
@@ -297,15 +349,15 @@
             </div>
             <!-- 时长类型选择器：长期 / 短期 -->
             <div class="time-mode-row" id="durationRow">
-                <span class="time-mode-label">📌 类型</span>
-                <button type="button" class="time-mode-btn active" data-duration="short">⚡ 短期活动</button>
-                <button type="button" class="time-mode-btn" data-duration="long">📅 长期征友</button>
+                <span class="time-mode-label">类型</span>
+                <button type="button" class="time-mode-btn active" data-duration="short">短期活动</button>
+                <button type="button" class="time-mode-btn" data-duration="long">长期征友</button>
             </div>
             <!-- 时间模式选择器（仅短期活动显示） -->
             <div class="time-mode-row" id="timeModeRow">
-                <span class="time-mode-label">⏰ 时间</span>
-                <button type="button" class="time-mode-btn active" data-mode="now">⚡ 立即</button>
-                <button type="button" class="time-mode-btn" data-mode="scheduled">🕐 指定</button>
+                <span class="time-mode-label">时间</span>
+                <button type="button" class="time-mode-btn active" data-mode="now">立即</button>
+                <button type="button" class="time-mode-btn" data-mode="scheduled">指定</button>
             </div>
             <div class="partner-form-row scheduled-time-row" id="scheduledTimeRow" style="display:none;">
                 <input type="date" id="partnerDate">
@@ -346,27 +398,27 @@
 
         <!-- 统计栏 -->
         <div class="post-detail-stats">
-            <span>👁️ <span id="detailViewCount">0</span></span>
-            <span>❤️ <span id="detailLikeCount">0</span></span>
-            <span>💬 <span id="detailCommentCount">0</span></span>
-            <span>👥 <span id="detailParticipantCount">0</span></span>
+            <span>浏览 <span id="detailViewCount">0</span></span>
+            <span>点赞 <span id="detailLikeCount">0</span></span>
+            <span>评论 <span id="detailCommentCount">0</span></span>
+            <span>参与 <span id="detailParticipantCount">0</span></span>
         </div>
 
         <!-- 操作按钮 -->
         <div class="post-detail-actions" id="detailActions">
-            <button class="detail-action-btn" id="detailLikeBtn">❤️ 点赞</button>
-            <button class="detail-action-btn primary" id="detailParticipateBtn" style="display:none;">✅ 我要参加</button>
+            <button class="detail-action-btn" id="detailLikeBtn">点赞</button>
+            <button class="detail-action-btn primary" id="detailParticipateBtn" style="display:none;">我要参加</button>
         </div>
 
         <!-- 已报名用户 -->
         <div class="post-detail-section" id="detailParticipantsSection" style="display:none;">
-            <h4>👥 已报名</h4>
+            <h4>已报名</h4>
             <div class="post-detail-participants" id="detailParticipants"></div>
         </div>
 
         <!-- 评论区 -->
         <div class="post-detail-section">
-            <h4>💬 评论 (<span id="detailCommentTotal">0</span>)</h4>
+            <h4>评论 (<span id="detailCommentTotal">0</span>)</h4>
             <div class="post-detail-comments" id="detailComments">
                 <div class="detail-comments-empty">暂无评论，来抢沙发吧~</div>
             </div>

@@ -45,35 +45,7 @@
 }
 
 /* 额外覆盖：确保在大屏（>=481px）底栏与悬浮控件位置正确，不受其他规则干扰 */
-@media (min-width: 481px) {
-    .bottom-tab-bar {
-        left: 0 !important;
-        right: 0 !important;
-        transform: none !important;
-        width: 100% !important;
-        max-width: none !important;
-        padding: 0 !important;
-    }
 
-    .tab-item { padding: 8px 12px !important; }
-
-    .ai-float-ball {
-        right: 24px !important;
-        left: auto !important;
-        transform: none !important;
-    }
-
-    /* 发起组局按钮在各尺寸上保持居中，不偏右 */
-    .fab-create-group {
-        left: 50% !important;
-        right: auto !important;
-        transform: translateX(-50%) !important;
-        max-width: 380px;
-        width: calc(100% - 48px) !important;
-    }
-
-    .ai-chat-overlay { left: auto !important; right: 24px !important; transform: none !important; }
-}
 
 /* 强制关键容器在默认情况下占满视口宽度，防止左偏 */
 .app-layout.mobile-layout,
@@ -106,7 +78,6 @@
         padding-left: 12px;
         padding-right: 12px;
     }
-    .bottom-tab-bar { left: 50%; transform: translateX(-50%); max-width: 480px; }
 }
 
 /* ========== 全局重置 ========== */
@@ -299,61 +270,6 @@ textarea { resize: vertical; min-height: 100px; }
 
 .page.active-page { display: block; }
 
-/* ========== 底部 Tab 导航栏 ========== */
-.bottom-tab-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    transform: none;
-    width: 100%;
-    max-width: none;
-    height: var(--bottom-tab-height);
-    background: rgba(255, 255, 255, 0.97);
-    backdrop-filter: blur(12px);
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    border-top: 1px solid var(--gray-200);
-    z-index: 200;
-    box-shadow: 0 -2px 10px rgba(91, 46, 140, 0.06);
-    padding-bottom: env(safe-area-inset-bottom, 0);
-}
-
-.tab-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    transition: var(--transition-fast);
-    font-size: 0.7rem;
-    font-weight: 500;
-    min-width: 0;
-    text-align: center;
-}
-
-.tab-item i { font-size: 1.3rem; }
-
-.tab-item.active {
-    color: var(--primary);
-    font-weight: 700;
-}
-
-.tab-item.active i {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-}
-
-.tab-item:active { transform: scale(0.94); }
-
 /* ========== AI 悬浮球 ========== */
 .ai-float-ball {
     position: fixed;
@@ -382,114 +298,12 @@ textarea { resize: vertical; min-height: 100px; }
 
 .ai-float-ball:active { transform: scale(0.94); }
 
-@media (min-width: 481px) {
-    .ai-float-ball {
-        right: 24px !important;
-        left: auto !important;
-    }
-}
+
 
 /* 桌面/平板适配：取消 480px 限制，使应用占满页面，同时调整悬浮/底部元素到视口边缘 */
-@media (min-width: 481px) {
-    /* 在较大屏幕上使应用占满整个视口宽度，去除两侧留白 */
-    .app-layout.mobile-layout {
-        max-width: none;
-        width: 100%;
-        margin: 0;
-    }
-    /* 确保在固定底部 Tab 的大屏场景下，内容区域底部留出足够空间，保持移动端样式不变 */
-    .content-area {
-        padding-bottom: calc(var(--bottom-tab-height) + 16px);
-    }
 
-    /* 底部 TAB 贴合视口宽度，取消居中容器的限制 */
-    .bottom-tab-bar {
-        left: 0;
-        right: 0;
-        transform: none;
-        max-width: none;
-        width: 100vw;
-        padding-bottom: env(safe-area-inset-bottom, 0);
-    }
-
-    /* 在大屏上让顶部栏固定并占满全屏宽度，避免左右留白 */
-    .top-bar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        width: 100vw;
-        z-index: 1100;
-        border-bottom: 1px solid var(--gray-200);
-        background: rgba(255,255,255,0.96);
-        backdrop-filter: blur(12px);
-    }
-
-    /* main-content 顶部增加内边距，防止被固定的 top-bar 遮挡 */
-    .main-content {
-        padding-top: calc(var(--topbar-height) + 8px);
-    }
-
-    /* 在大屏上让主要内容区域占满宽度，移除可能的居中空白 */
-    .app-layout.mobile-layout, .content-area, .page {
-        max-width: none;
-        width: 100vw;
-        margin: 0;
-        padding-left: 0;
-        padding-right: 0;
-    }
-
-    /* 地图卡片和瀑布流在大屏上尽量占满可用宽度 */
-    .map-preview-card, .partner-waterfall, .guide-grid {
-        width: 100%;
-        max-width: none;
-        margin-left: 0;
-        margin-right: 0;
-    }
-
-    /* 悬浮控件贴近右侧边距 */
-    .ai-float-ball,
-    .ai-chat-overlay,
-    .fab-create-group {
-        right: 24px;
-        left: auto;
-        transform: none;
-    }
-
-    .fab-create-group { max-width: 380px; }
-}
 /* 更强制的覆盖：针对更大设备（平板/桌面）确保没有左右留白 */
-@media (min-width: 768px) {
-    .app-layout.mobile-layout {
-        width: 100% !important;
-        max-width: none !important;
-        margin: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
 
-    .top-bar, .bottom-tab-bar {
-        left: 0 !important;
-        right: 0 !important;
-        width: 100% !important;
-        transform: none !important;
-    }
-
-    .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
-        max-width: none !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding-left: 16px !important;
-        padding-right: 16px !important;
-        box-sizing: border-box !important;
-    }
-
-    .map-container {
-        width: calc(100% - 32px) !important;
-        margin: 0 16px !important;
-        max-width: none !important;
-    }
-}
 
 /* ========== AI 对话浮层 ========== */
 .ai-chat-overlay {
@@ -1527,90 +1341,10 @@ button:active { transform: scale(0.96); }
 /* =====================================================================
    桌面端响应式适配（>= 768px）
    ===================================================================== */
-@media (min-width: 768px) {
 
-    /* 放宽最大宽度，桌面端更宽敞 */
-    .app-layout.mobile-layout {
-        max-width: 900px;
-    }
-
-    /* 底部Tab栏也放宽 */
-    .bottom-tab-bar {
-        max-width: 900px;
-    }
-
-    /* 瀑布流改为三列 */
-    .partner-waterfall {
-        column-count: 3;
-        column-gap: 16px;
-    }
-
-    /* 指南瀑布流也三列 */
-    .guide-grid {
-        column-count: 3;
-        column-gap: 16px;
-    }
-
-    /* 内容区左右多留白 */
-    .content-area {
-        padding: 16px 20px 0;
-    }
-
-    /* 地图预览卡片更高 */
-    .map-preview-body {
-        height: 180px;
-    }
-
-    /* AI悬浮球位置调整 */
-    .ai-float-ball {
-        right: calc(50% - 450px + 20px);
-    }
-
-    /* FAB按钮更宽 */
-    .fab-create-group {
-        max-width: 600px;
-        width: calc(100% - 80px);
-    }
-
-    /* 个人中心双列网格 */
-    .profile-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    /* 顶部栏多一点padding */
-    .top-bar {
-        padding: 0 24px;
-    }
-}
 
 /* 大屏进一步放宽 */
-@media (min-width: 1024px) {
-    .app-layout.mobile-layout {
-        max-width: 1100px;
-    }
 
-    .bottom-tab-bar {
-        max-width: 1100px;
-    }
-
-    .partner-waterfall {
-        column-count: 4;
-        column-gap: 18px;
-    }
-
-    .guide-grid {
-        column-count: 4;
-        column-gap: 18px;
-    }
-
-    .ai-float-ball {
-        right: calc(50% - 550px + 24px);
-    }
-
-    .fab-create-group {
-        max-width: 700px;
-    }
-}
 
 /* ========== 帖子详情模态框 ========== */
 .post-detail-card {
@@ -1866,4 +1600,763 @@ button:active { transform: scale(0.96); }
     font-size: 0.78rem;
     cursor: pointer;
     white-space: nowrap;
+}
+
+/* =====================================================================
+   NJUATLAS clean visual layer.
+   Single consolidated override block for the current UI refactor.
+   ===================================================================== */
+
+:root {
+    --atlas-purple: #6b21a5;
+    --atlas-purple-deep: #2a0f42;
+    --atlas-purple-soft: #a855f7;
+    --atlas-ink: #171221;
+    --atlas-muted: #686174;
+    --atlas-bg: #f7f5fb;
+    --atlas-card: rgba(255, 255, 255, 0.9);
+    --atlas-line: rgba(107, 33, 165, 0.12);
+    --atlas-shadow: 0 18px 48px rgba(74, 29, 110, 0.11), 0 3px 12px rgba(20, 16, 31, 0.06);
+    --atlas-shadow-strong: 0 24px 70px rgba(74, 29, 110, 0.17), 0 8px 20px rgba(20, 16, 31, 0.08);
+    --atlas-topbar: 68px;
+}
+
+:root[data-theme="dark"] {
+    --atlas-ink: #f2eeff;
+    --atlas-muted: #b9b0cc;
+    --atlas-bg: #10101a;
+    --atlas-card: rgba(37, 37, 64, 0.9);
+    --atlas-line: rgba(168, 85, 247, 0.22);
+    --atlas-shadow: 0 20px 52px rgba(0, 0, 0, 0.36);
+    --atlas-shadow-strong: 0 28px 76px rgba(0, 0, 0, 0.48);
+}
+
+html,
+body {
+    background: var(--atlas-bg);
+    color: var(--atlas-ink);
+}
+
+body,
+.app-layout.mobile-layout {
+    background:
+        linear-gradient(180deg, rgba(248, 245, 252, 0.96), rgba(255, 255, 255, 0.98));
+    overflow-x: hidden;
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .app-layout.mobile-layout {
+    background: linear-gradient(180deg, #10101a, #17172a);
+}
+
+.app-layout.mobile-layout,
+.main-content,
+.content-area,
+.page {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+}
+
+.main-content {
+    padding-top: var(--atlas-topbar) !important;
+    padding-bottom: 0 !important;
+}
+
+.content-area {
+    padding: 0 !important;
+    overflow: visible !important;
+}
+
+.page {
+    background: transparent !important;
+}
+
+.page.active-page {
+    display: block;
+}
+
+/* 桌面端只用顶部导航；底部导航只给移动端使用。 */
+.bottom-tab-bar {
+    display: none !important;
+}
+
+.top-bar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 3000 !important;
+    height: var(--atlas-topbar) !important;
+    width: 100% !important;
+    padding: 0 clamp(18px, 4vw, 56px) !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.86) !important;
+    border-bottom: 1px solid var(--atlas-line) !important;
+    backdrop-filter: blur(18px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+
+:root[data-theme="dark"] .top-bar {
+    background: rgba(18, 18, 32, 0.88) !important;
+}
+
+.top-bar-left,
+.top-bar-right,
+.desktop-nav {
+    display: flex;
+    align-items: center;
+}
+
+.top-bar-left {
+    gap: 12px;
+}
+
+.top-bar-right {
+    gap: 12px;
+}
+
+.brand-mark {
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--atlas-ink);
+    font-size: clamp(1.75rem, 3.4vw, 2.35rem);
+    font-weight: 950;
+    letter-spacing: -0.06em;
+    cursor: pointer;
+}
+
+.theme-toggle-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--atlas-line);
+    border-radius: 999px;
+    background: var(--atlas-card);
+    box-shadow: 0 8px 22px rgba(74, 29, 110, 0.08);
+    cursor: pointer;
+}
+
+.page-title {
+    color: var(--atlas-muted);
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.desktop-nav {
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--atlas-line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.45);
+}
+
+:root[data-theme="dark"] .desktop-nav {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.desktop-nav-item {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--atlas-muted);
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.desktop-nav-item.active {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(107, 33, 165, 0.24);
+}
+
+.ai-entry-btn,
+.login-round-btn,
+.logout-btn,
+.map-expand-btn,
+.primary-btn,
+.secondary-btn,
+.small-btn,
+.join-btn,
+.hero-primary-btn,
+.hero-secondary-btn {
+    min-height: 44px;
+    border-radius: 999px;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.ai-entry-btn,
+.login-round-btn,
+.logout-btn,
+.map-expand-btn,
+.secondary-btn,
+.small-btn,
+.hero-secondary-btn {
+    border: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    color: var(--atlas-ink);
+    box-shadow: 0 8px 22px rgba(74, 29, 110, 0.08);
+}
+
+.primary-btn,
+.join-btn,
+.hero-primary-btn {
+    border: 0;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+}
+
+.desktop-nav-item:hover,
+.theme-toggle-btn:hover,
+.ai-entry-btn:hover,
+.login-round-btn:hover,
+.hero-primary-btn:hover,
+.hero-secondary-btn:hover,
+.partner-card:hover,
+.guide-card:hover,
+.feature-card:hover,
+.profile-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--atlas-shadow-strong);
+}
+
+.atlas-hero {
+    position: relative;
+    min-height: calc(100vh - var(--atlas-topbar));
+    padding: clamp(68px, 9vw, 110px) 20px 56px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, #160b22 0%, #30124d 58%, #f3eff8 100%) !important;
+}
+
+/* 首页背景覆盖整个首页，而不是只覆盖 Hero 上半部分。 */
+#homePage {
+    min-height: calc(100vh - var(--atlas-topbar));
+    background: linear-gradient(135deg, #160b22 0%, #30124d 58%, #f3eff8 100%) !important;
+}
+
+.atlas-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 42px 42px,
+        linear-gradient(0deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px) 0 0 / 42px 42px,
+        linear-gradient(135deg, rgba(12, 6, 20, 0.72), rgba(70, 26, 104, 0.34) 58%, rgba(244, 239, 250, 0.1));
+    pointer-events: none;
+}
+
+.pixel-field {
+    position: absolute;
+    left: 50%;
+    top: 43%;
+    display: grid;
+    grid-template-columns: repeat(8, clamp(18px, 4vw, 42px));
+    grid-auto-rows: clamp(18px, 4vw, 42px);
+    gap: clamp(8px, 1.4vw, 15px);
+    transform: translate(-50%, -50%) rotate(-8deg);
+    opacity: 0.78;
+    pointer-events: none;
+    animation: pixelFieldDrift 12s ease-in-out infinite;
+}
+
+.pixel-cell {
+    position: relative;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #6b21a5, #8b5cf6, #a855f7);
+    box-shadow: 0 18px 42px rgba(107, 33, 165, 0.22);
+    filter: hue-rotate(calc(var(--i) * 3deg));
+    animation: pixelFloat 4.8s ease-in-out infinite, pixelPulse 7.6s ease-in-out infinite;
+    animation-delay: var(--delay);
+    will-change: transform, opacity, filter;
+}
+
+.pixel-cell::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 55%);
+}
+
+.hero-content {
+    position: relative;
+    z-index: 1;
+    width: min(980px, 100%);
+    text-align: center;
+}
+
+.hero-kicker {
+    margin: 0 0 14px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: clamp(0.72rem, 1.6vw, 0.95rem);
+    font-weight: 950;
+    letter-spacing: 0.18em;
+}
+
+.hero-content h1 {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(3.2rem, 11vw, 7.8rem);
+    font-weight: 950;
+    letter-spacing: -0.09em;
+    line-height: 0.9;
+    text-shadow: 0 18px 50px rgba(20, 8, 36, 0.28);
+}
+
+.hero-subtitle {
+    margin: 22px auto 0;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: clamp(1rem, 2.6vw, 1.35rem);
+    font-weight: 800;
+}
+
+.hero-actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 30px;
+}
+
+.hero-primary-btn,
+.hero-secondary-btn {
+    min-width: 144px;
+    padding: 0 24px;
+    font-size: 0.95rem;
+    font-weight: 950;
+    cursor: pointer;
+}
+
+.hero-primary-btn {
+    background: linear-gradient(135deg, #fff, #ead7ff);
+    color: #3a155b;
+}
+
+.hero-secondary-btn {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.campus-bubbles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+    gap: 16px;
+    width: min(560px, 100%);
+    margin: 34px auto 0;
+}
+
+.campus-bubble {
+    min-height: 130px;
+    border-radius: 24px;
+    background-position: center;
+    background-size: cover;
+    box-shadow: 0 24px 70px rgba(18, 12, 29, 0.32);
+    overflow: hidden;
+    animation: campusBubbleFloat 6.8s ease-in-out infinite;
+}
+
+.campus-bubble:nth-child(2) {
+    animation-delay: -2.4s;
+}
+
+.campus-bubble-library {
+    background-image:
+        linear-gradient(135deg, rgba(23, 9, 36, 0.12), rgba(107, 33, 165, 0.22)),
+        url("https://commons.wikimedia.org/wiki/Special:FilePath/Du_Xia_Library_in_Nanjing_University_Xianlin_Campus_01_2013-05.JPG");
+}
+
+.campus-bubble-north {
+    background-image:
+        linear-gradient(135deg, rgba(23, 9, 36, 0.16), rgba(107, 33, 165, 0.24)),
+        url("https://commons.wikimedia.org/wiki/Special:FilePath/Nanjing%20University%20Gulou%20Campus%202010-11.jpg");
+}
+
+.feature-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    width: min(1120px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 34px 0 56px;
+}
+
+.feature-card,
+.partner-card,
+.guide-card,
+.profile-card,
+.profile-stat,
+.modal-card,
+.ai-chat-panel,
+.map-preview-card,
+.full-map-container {
+    border: 0 !important;
+    border-radius: 18px;
+    background: var(--atlas-card) !important;
+    box-shadow: var(--atlas-shadow);
+    backdrop-filter: blur(16px);
+}
+
+.feature-card {
+    min-height: 178px;
+    padding: 22px;
+}
+
+.feature-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 28px;
+    margin-bottom: 22px;
+    border-radius: 999px;
+    background: rgba(107, 33, 165, 0.1);
+    color: var(--atlas-purple);
+    font-weight: 950;
+}
+
+.feature-card h3 {
+    margin: 0 0 10px;
+    color: var(--atlas-ink);
+    font-size: 1.05rem;
+}
+
+.feature-card p {
+    margin: 0;
+    color: var(--atlas-muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+#partnerPage,
+#guidePage,
+#profilePage {
+    width: min(1180px, calc(100% - 40px)) !important;
+    margin: 0 auto !important;
+    padding: 24px 0 96px;
+}
+
+.partner-filter {
+    gap: 8px;
+    padding: 10px;
+    margin: 0 0 14px;
+    border: 0;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.84);
+    box-shadow: var(--atlas-shadow);
+}
+
+.filter-chip {
+    min-height: 38px;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(107, 33, 165, 0.08);
+    color: var(--atlas-ink);
+    font-weight: 900;
+}
+
+.filter-chip.active {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+}
+
+.map-preview-card {
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+
+.map-preview-header {
+    min-height: 44px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.partner-waterfall {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+    gap: 16px;
+    column-count: auto !important;
+}
+
+.partner-paper-card {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    min-height: 236px;
+    border-radius: 20px;
+    background:
+        repeating-linear-gradient(180deg, rgba(107, 33, 165, 0.055) 0 1px, transparent 1px 31px),
+        linear-gradient(135deg, #fffdf7, #f8f1ff 72%, #fff) !important;
+    transform: rotate(var(--paper-tilt, -0.25deg));
+}
+
+.partner-paper-card:nth-child(2n) {
+    --paper-tilt: 0.22deg;
+}
+
+.partner-paper-pin {
+    display: grid;
+    place-items: start center;
+    padding-top: 18px;
+    color: rgba(107, 33, 165, 0.75);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.06rem;
+    font-weight: 950;
+    background: rgba(107, 33, 165, 0.07);
+    border-right: 1px dashed rgba(107, 33, 165, 0.22);
+}
+
+.partner-card-content {
+    padding: 16px 16px 14px;
+}
+
+.partner-paper-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.partner-card-tag,
+.post-detail-tag,
+.partner-card-type {
+    padding: 4px 8px;
+    border-radius: 10px;
+    background: rgba(107, 33, 165, 0.1);
+    color: var(--atlas-purple);
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+
+.partner-card-title {
+    margin-bottom: 8px;
+    color: #23162e;
+    font-size: 1.08rem;
+    line-height: 1.35;
+}
+
+.partner-card-desc {
+    min-height: 48px;
+    color: #67556f;
+    font-size: 0.88rem;
+    line-height: 1.72;
+}
+
+.partner-card-meta {
+    display: grid;
+    gap: 7px;
+    margin: 12px 0;
+}
+
+.partner-card-meta span {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 8px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.partner-card-meta b {
+    color: rgba(107, 33, 165, 0.82);
+}
+
+.partner-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 10px 0 12px;
+}
+
+.partner-card-stats span {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.74);
+    color: #7b6a83;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.partner-paper-card .join-btn {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 12px;
+    font-weight: 950;
+}
+
+.guide-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    column-count: auto !important;
+}
+
+.guide-card {
+    min-height: 168px;
+    padding: 18px;
+    background:
+        linear-gradient(90deg, rgba(107, 33, 165, 0.14) 0 5px, transparent 5px),
+        var(--atlas-card) !important;
+}
+
+.guide-img {
+    height: 120px;
+    border-radius: 14px;
+    object-fit: cover;
+    filter: saturate(0.92) contrast(0.96);
+}
+
+.profile-shell {
+    display: grid;
+    gap: 16px;
+}
+
+.profile-summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 18px;
+    align-items: center;
+    padding: 22px;
+}
+
+.profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    box-shadow: 0 16px 36px rgba(107, 33, 165, 0.22);
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@keyframes pixelFloat {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-12px) scale(1.04); }
+}
+
+@keyframes pixelFieldDrift {
+    0%, 100% { translate: 0 0; }
+    35% { translate: 16px -9px; }
+    70% { translate: -12px 10px; }
+}
+
+@keyframes pixelPulse {
+    0%, 100% { opacity: 0.58; }
+    45% { opacity: 0.96; }
+}
+
+@keyframes campusBubbleFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --atlas-topbar: 58px;
+    }
+
+    .top-bar {
+        padding: 0 14px !important;
+    }
+
+    .desktop-nav,
+    .ai-entry-btn .fas,
+    .ai-entry-btn span,
+    .topbar-username,
+    .page-title {
+        display: none !important;
+    }
+
+    .brand-mark {
+        font-size: 1.35rem;
+    }
+
+    .atlas-hero {
+        min-height: calc(100vh - var(--atlas-topbar));
+        padding: 52px 16px 36px;
+    }
+
+    .hero-content h1 {
+        font-size: clamp(3rem, 15vw, 4.1rem);
+    }
+
+    .pixel-field {
+        grid-template-columns: repeat(8, 20px);
+        grid-auto-rows: 20px;
+        gap: 10px;
+    }
+
+    .campus-bubbles {
+        grid-template-columns: 1fr;
+        width: min(320px, 100%);
+        margin-top: 28px;
+    }
+
+    .campus-bubble {
+        min-height: 96px;
+    }
+
+    .feature-strip {
+        grid-template-columns: 1fr;
+        width: calc(100% - 28px);
+        margin: 22px auto 36px;
+        gap: 12px;
+    }
+
+    #partnerPage,
+    #guidePage,
+    #profilePage {
+        width: calc(100% - 24px) !important;
+        padding-bottom: 92px;
+    }
+
+    .bottom-tab-bar {
+        display: flex !important;
+        position: fixed !important;
+        left: 50% !important;
+        right: auto !important;
+        bottom: 0 !important;
+        width: min(100%, 520px) !important;
+        height: 66px;
+        transform: translateX(-50%) !important;
+        z-index: 2800;
+        border-top: 1px solid var(--atlas-line);
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(18px);
+    }
+
+    .tab-item {
+        min-width: 44px;
+        min-height: 44px;
+        color: var(--atlas-muted);
+        font-size: 0.72rem;
+        font-weight: 900;
+    }
+
+    .tab-item.active {
+        color: var(--atlas-purple);
+    }
+
+    .partner-waterfall,
+    .guide-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .partner-paper-card {
+        grid-template-columns: 44px minmax(0, 1fr);
+    }
+
+    .profile-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }

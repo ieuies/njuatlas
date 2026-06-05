@@ -17,12 +17,12 @@ let fullMapInstance = null;
 // 动态分类颜色（根据标签名生成 HSL 色相）
 const categoryColorCache = {};
 function _categoryStyle(cat) {
-    if (!cat) return { color: '#999', icon: '📍', tagClass: 'tag-default' };
+    if (!cat) return { color: '#999', icon: '', tagClass: 'tag-default' };
     if (!categoryColorCache[cat]) {
         const hue = [...cat].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
         categoryColorCache[cat] = {
             color: `hsl(${hue}, 65%, 50%)`,
-            icon: '📍',
+            icon: '',
             tagClass: 'tag-dynamic',
         };
     }
@@ -76,10 +76,10 @@ function _mapPost(p) {
 }
 
 function _formatPostTime(iso, urgency) {
-    // urgency='now' → 显示"⚡ 立即"
-    if (urgency === 'now') return '⚡ 立即';
-    // urgency='long_term' → 显示"📅 长期有效"
-    if (urgency === 'long_term') return '📅 长期有效';
+    // urgency='now' → 显示"立即"
+    if (urgency === 'now') return '立即';
+    // urgency='long_term' → 显示"长期有效"
+    if (urgency === 'long_term') return '长期有效';
     // scheduled 或旧数据 → 格式化具体时间
     if (!iso) return urgency === 'scheduled' ? '已设定' : '';
     const d = new Date(iso);
@@ -159,8 +159,8 @@ function addMarkersToMap(map, data) {
                     <strong style="color:${style.color};">${escapeHtml(post.category)}</strong>
                     <div style="font-weight:700;margin:4px 0;">${escapeHtml(post.title)}</div>
                     <div style="color:#666;">${escapeHtml(post.description).substring(0, 80)}</div>
-                    ${post.time ? `<div>⏰ ${escapeHtml(post.time)}</div>` : ''}
-                    <button id="map-join-${post.id}" style="margin-top:8px;padding:6px 14px;background:linear-gradient(135deg,#5B2E8C,#EC4899);color:white;border:none;border-radius:14px;cursor:pointer;font-size:0.8rem;">👋 我要参加</button>
+                    ${post.time ? `<div>时间：${escapeHtml(post.time)}</div>` : ''}
+                    <button id="map-join-${post.id}" style="margin-top:8px;padding:6px 14px;background:#6B21A5;color:white;border:none;border-radius:12px;cursor:pointer;font-size:0.8rem;">我要参加</button>
                 </div>
             `;
             const infoWindow = new window.AMap.InfoWindow({
@@ -256,32 +256,34 @@ function renderWaterfall() {
         return;
     }
 
-    container.innerHTML = filtered.map(p => {
-        const style = _categoryStyle(p.category);
-        return `
-        <div class="partner-card" data-id="${p.id}">
+    container.innerHTML = filtered.map((p, index) => `
+        <article class="partner-card partner-paper-card" data-id="${p.id}">
+            <div class="partner-paper-pin">${String(index + 1).padStart(2, '0')}</div>
             <div class="partner-card-content">
-                <div class="partner-card-tags">
-                    ${p.tags.map(t => `<span class="partner-card-tag">📍 ${escapeHtml(t)}</span>`).join('')}
+                <div class="partner-paper-head">
+                    <div class="partner-card-tags">
+                        ${p.tags.slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
+                    </div>
+                    <span class="partner-card-type">${p.type === 'event' ? '🎟️ 活动' : '📝 招募'}</span>
                 </div>
                 <div class="partner-card-title">${escapeHtml(p.title)}</div>
-                <div class="partner-card-desc">${escapeHtml(p.description).substring(0, 100)}</div>
+                <div class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</div>
                 <div class="partner-card-meta">
-                    ${p.location ? `<span><i class="fas fa-map-pin"></i> ${escapeHtml(p.location)}</span>` : ''}
-                    ${p.time ? `<span><i class="fas fa-clock"></i> ${escapeHtml(p.time)}</span>` : ''}
-                    <span><i class="fas fa-user"></i> ${p.publisher}</span>
+                    ${p.location ? `<span><b>📍 地点</b>${escapeHtml(p.location)}</span>` : ''}
+                    ${p.time ? `<span><b>🕒 时间</b>${escapeHtml(p.time)}</span>` : ''}
+                    <span><b>👤 发起</b>${escapeHtml(p.publisher)}</span>
                 </div>
                 <div class="partner-card-stats">
                     <span>❤️ ${p.likeCount}</span>
                     <span>💬 ${p.commentCount}</span>
-                    <span>👥 ${p.members}人参加</span>
+                    <span>👥 ${p.members}</span>
                 </div>
                 <button class="join-btn" data-id="${p.id}">
-                    ${p.type === 'event' ? '✅ 我要参加' : '👋 我也感兴趣'}
+                    ${p.type === 'event' ? '我要参加' : '感兴趣'}
                 </button>
             </div>
-        </div>`;
-    }).join('');
+        </article>
+    `).join('');
 
     // 「参加」按钮
     container.querySelectorAll('.join-btn').forEach(btn => {
@@ -313,7 +315,7 @@ async function handleParticipate(postId) {
     try {
         const result = await participateEvent(postId, 'going');
         if (result.status === 'going') {
-            showToast('报名成功！🎉');
+            showToast('报名成功');
         } else if (result.status === null) {
             showToast('已取消报名');
         }
@@ -362,7 +364,7 @@ function initPostDetailModal() {
             currentDetailPost.like_count = result.like_count;
             _updateDetailStats();
             likeBtn.classList.toggle('liked', result.liked);
-            likeBtn.innerHTML = result.liked ? '❤️ 已点赞' : '❤️ 点赞';
+            likeBtn.textContent = result.liked ? '已点赞' : '点赞';
         } catch (err) {
             showToast('操作失败: ' + err.message);
         }
@@ -378,7 +380,7 @@ function initPostDetailModal() {
             currentDetailPost.participant_count = result.participant_count;
             _updateDetailStats();
             const going = result.status === 'going';
-            participateBtn.textContent = going ? '✅ 已报名 (点击取消)' : '✅ 我要参加';
+            participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
             participateBtn.classList.toggle('going', going);
             // 刷新报名列表
             await _refreshDetailParticipants(currentDetailPost.id);
@@ -437,8 +439,8 @@ function _resetDetailUI() {
     document.getElementById('detailParticipantsSection').style.display = 'none';
     document.getElementById('detailParticipateBtn').style.display = 'none';
     document.getElementById('detailLikeBtn').classList.remove('liked');
-    document.getElementById('detailLikeBtn').innerHTML = '❤️ 点赞';
-    document.getElementById('detailParticipateBtn').textContent = '✅ 我要参加';
+    document.getElementById('detailLikeBtn').textContent = '点赞';
+    document.getElementById('detailParticipateBtn').textContent = '我要参加';
     document.getElementById('detailParticipateBtn').classList.remove('going');
 }
 
@@ -450,7 +452,7 @@ function _renderPostDetail(post) {
     // 标签
     const tags = post.tags || [];
     document.getElementById('detailTags').innerHTML = tags.map(t =>
-        `<span class="post-detail-tag">📍 ${escapeHtml(t)}</span>`
+        `<span class="post-detail-tag">${escapeHtml(t)}</span>`
     ).join('');
 
     // 元信息
@@ -468,7 +470,7 @@ function _renderPostDetail(post) {
     const likeBtn = document.getElementById('detailLikeBtn');
     if (post.is_liked) {
         likeBtn.classList.add('liked');
-        likeBtn.innerHTML = '❤️ 已点赞';
+        likeBtn.textContent = '已点赞';
     }
 
     // 活动帖显示报名按钮
@@ -476,7 +478,7 @@ function _renderPostDetail(post) {
     if (post.type === 'event') {
         participateBtn.style.display = 'block';
         const going = post.participation_status === 'going';
-        participateBtn.textContent = going ? '✅ 已报名 (点击取消)' : '✅ 我要参加';
+        participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
         participateBtn.classList.toggle('going', going);
     }
 
@@ -863,7 +865,7 @@ function initPartnerModal() {
                 event_time: event_time,
             });
 
-            showToast('发布成功！🎉');
+            showToast('发布成功');
             closeModal();
             // 刷新列表
             await loadPostsFromAPI();
