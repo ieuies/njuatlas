@@ -1760,49 +1760,6 @@ body,
     border-color: rgba(255, 255, 255, 0.28);
 }
 
-.campus-bubbles {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-}
-
-.campus-bubble {
-    position: absolute;
-    width: 260px;
-    height: 180px;
-    border-radius: 28px;
-    background-position: center;
-    background-size: cover;
-    box-shadow: 0 24px 70px rgba(18, 12, 29, 0.32);
-    overflow: hidden;
-    animation: campusBubbleFloat 6.8s ease-in-out infinite;
-}
-
-.campus-bubble:nth-child(1) {
-    bottom: 24px;
-    left: -40px;
-    animation-delay: 0s;
-}
-
-.campus-bubble:nth-child(2) {
-    top: 20px;
-    right: -50px;
-    animation-delay: -2.4s;
-}
-
-.campus-bubble-library {
-    background-image:
-        linear-gradient(135deg, rgba(23, 9, 36, 0.12), rgba(107, 33, 165, 0.22)),
-        url("https://commons.wikimedia.org/wiki/Special:FilePath/Du_Xia_Library_in_Nanjing_University_Xianlin_Campus_01_2013-05.JPG");
-}
-
-.campus-bubble-north {
-    background-image:
-        linear-gradient(135deg, rgba(23, 9, 36, 0.16), rgba(107, 33, 165, 0.24)),
-        url("https://commons.wikimedia.org/wiki/Special:FilePath/Nanjing%20University%20Gulou%20Campus%202010-11.jpg");
-}
-
 .feature-strip {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2487,11 +2444,6 @@ body,
     45% { opacity: 0.96; }
 }
 
-@keyframes campusBubbleFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-}
-
 @media (max-width: 768px) {
     :root {
         --atlas-topbar: 58px;
@@ -2524,28 +2476,6 @@ body,
         grid-template-columns: repeat(8, 20px);
         grid-auto-rows: 20px;
         gap: 10px;
-    }
-
-    .campus-bubbles {
-        position: absolute;
-        inset: 0;
-        width: auto;
-        margin: 0;
-    }
-
-    .campus-bubble {
-        width: 160px;
-        height: 110px;
-    }
-
-    .campus-bubble:nth-child(1) {
-        bottom: 18px;
-        left: -20px;
-    }
-
-    .campus-bubble:nth-child(2) {
-        top: 64px;
-        right: -30px;
     }
 
     .feature-strip {
