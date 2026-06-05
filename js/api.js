@@ -84,6 +84,9 @@ export async function resetPassword(email, code, newPassword) {
 export async function changePassword(currentPassword, newPassword) {
     return request('/user/password/change', 'POST', { current_password: currentPassword, new_password: newPassword });
 }
+export async function deleteAccount(password) {
+    return request('/user/account', 'DELETE', { password });
+}
 
 // ── 个人资料（阶段二新增） ──
 export async function getMyProfile() {

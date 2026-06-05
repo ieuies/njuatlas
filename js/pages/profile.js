@@ -1,4 +1,4 @@
-import { getFavorites, getLikes, getReviews, getConversations, changePassword, getMyProfile, updateMyProfile, listPosts } from '../api.js';
+import { getFavorites, getLikes, getReviews, getConversations, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.js';
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 
@@ -295,33 +295,7 @@ async function renderMyActivities(container) {
 }
 
 /* ================================================================
-   修改密码
-   ================================================================ */
-async function handleChangePassword() {
-    const oldPwd = document.getElementById('oldPassword').value;
-    const newPwd = document.getElementById('newPassword').value;
-    const button = document.getElementById('changePasswordBtn');
-    if (!oldPwd || !newPwd) return showToast('请填写当前密码和新密码');
-    if (newPwd.length < 8) return showToast('新密码至少 8 位');
-
-    const originalText = button.innerText;
-    button.disabled = true;
-    button.innerText = '提交中...';
-    try {
-        await changePassword(oldPwd, newPwd);
-        showToast('密码已修改，请重新登录');
-        await doLogout();
-        window.updateNavBar();
-    } catch (e) {
-        showToast(e.message);
-    } finally {
-        button.disabled = false;
-        button.innerText = originalText;
-    }
-}
-
-/* ================================================================
-   编辑个人资料
+   编辑个人资料（含密码修改与账号注销）
    ================================================================ */
 function initEditProfile() {
     const modal = document.getElementById('editProfileModal');
@@ -329,16 +303,19 @@ function initEditProfile() {
     const closeBtn = document.getElementById('closeEditProfileBtn');
     const cancelBtn = document.getElementById('cancelEditProfileBtn');
     const form = document.getElementById('editProfileForm');
+    const deleteBtn = document.getElementById('deleteAccountBtn');
 
     openBtn?.addEventListener('click', async () => {
-        // 预填当前值
+        // 预填当前值，清空密码字段
+        document.getElementById('editOldPassword').value = '';
+        document.getElementById('editNewPassword').value = '';
+        document.getElementById('deleteAccountPassword').value = '';
         try {
             const profile = await getMyProfile();
             document.getElementById('editUsername').value = profile.username || '';
             document.getElementById('editBio').value = profile.bio || '';
             document.getElementById('editTags').value = (profile.tags || []).join(', ');
         } catch (e) { /* 使用默认值 */ }
-        // 更新编辑框中的头像预览
         const user = getUser();
         const email = (user?.email || '').toLowerCase().trim();
         const preview = document.getElementById('editAvatarPreview');
@@ -355,33 +332,64 @@ function initEditProfile() {
         if (e.target === modal) modal.style.display = 'none';
     });
 
+    // 保存：更新资料 + 可选修改密码
     form?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('editUsername').value.trim();
         const bio = document.getElementById('editBio').value.trim();
         const tagsStr = document.getElementById('editTags').value.trim();
         const tags = tagsStr ? tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean) : [];
+        const oldPwd = document.getElementById('editOldPassword').value;
+        const newPwd = document.getElementById('editNewPassword').value;
 
         const saveBtn = document.getElementById('saveProfileBtn');
         const originalText = saveBtn.innerText;
         saveBtn.disabled = true;
         saveBtn.innerText = '保存中...';
         try {
+            // 更新个人资料
             await updateMyProfile({ username, bio, tags });
-            showToast('资料已更新');
+            // 如果填了新密码，则同时修改密码
+            if (newPwd) {
+                if (!oldPwd) { showToast('请输入当前密码以修改密码'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
+                if (newPwd.length < 8) { showToast('新密码至少 8 位'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
+                await changePassword(oldPwd, newPwd);
+                showToast('资料和密码已更新');
+            } else {
+                showToast('资料已更新');
+            }
             modal.style.display = 'none';
-            // 刷新显示
-            if (username) {
-                document.getElementById('profileUsername').innerText = username;
-            }
-            if (bio) {
-                document.getElementById('profileBio').innerText = bio;
-            }
+            if (username) document.getElementById('profileUsername').innerText = username;
+            if (bio) document.getElementById('profileBio').innerText = bio;
         } catch (err) {
             showToast(err.message || '保存失败');
         } finally {
             saveBtn.disabled = false;
             saveBtn.innerText = originalText;
+        }
+    });
+
+    // 注销账号
+    deleteBtn?.addEventListener('click', async () => {
+        const password = document.getElementById('deleteAccountPassword').value;
+        if (!password) return showToast('请输入密码以确认注销');
+        if (!confirm('确定要注销账号吗？此操作不可撤销，所有数据将被永久删除！')) return;
+
+        const originalText = deleteBtn.innerText;
+        deleteBtn.disabled = true;
+        deleteBtn.innerText = '注销中...';
+        try {
+            await deleteAccount(password);
+            showToast('账号已注销');
+            modal.style.display = 'none';
+            await doLogout();
+            window.updateNavBar();
+            window.switchPage('home');
+        } catch (err) {
+            showToast(err.message || '注销失败，请确认密码正确');
+        } finally {
+            deleteBtn.disabled = false;
+            deleteBtn.innerText = originalText;
         }
     });
 }
@@ -398,10 +406,6 @@ export async function refreshProfile() {
 export function initProfilePage() {
     initProfileTabs();
     initEditProfile();
-
-    // 修改密码
-    const cpBtn = document.getElementById('changePasswordBtn');
-    if (cpBtn) cpBtn.onclick = handleChangePassword;
 
     // 重新发送验证邮件
     const verifyBtn = document.getElementById('sendVerifyEmailBtn');

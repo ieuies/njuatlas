@@ -1685,12 +1685,11 @@ body,
 .pixel-cell {
     position: relative;
     border-radius: 9px;
-    background: linear-gradient(135deg, #6b21a5, #8b5cf6, #a855f7);
-    box-shadow: 0 18px 42px rgba(107, 33, 165, 0.22);
-    filter: hue-rotate(calc(var(--i) * 3deg));
+    background: linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa);
+    box-shadow: 0 18px 42px rgba(124, 58, 237, 0.25);
     animation: pixelFloat 4.8s ease-in-out infinite, pixelPulse 7.6s ease-in-out infinite;
     animation-delay: var(--delay);
-    will-change: transform, opacity, filter;
+    will-change: transform, opacity;
 }
 
 .pixel-cell::after {
@@ -1762,16 +1761,17 @@ body,
 }
 
 .campus-bubbles {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(170px, 1fr));
-    gap: 16px;
-    width: min(560px, 100%);
-    margin: 34px auto 0;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
 }
 
 .campus-bubble {
-    min-height: 130px;
-    border-radius: 24px;
+    position: absolute;
+    width: 260px;
+    height: 180px;
+    border-radius: 28px;
     background-position: center;
     background-size: cover;
     box-shadow: 0 24px 70px rgba(18, 12, 29, 0.32);
@@ -1779,7 +1779,15 @@ body,
     animation: campusBubbleFloat 6.8s ease-in-out infinite;
 }
 
+.campus-bubble:nth-child(1) {
+    bottom: 24px;
+    left: -40px;
+    animation-delay: 0s;
+}
+
 .campus-bubble:nth-child(2) {
+    top: 20px;
+    right: -50px;
     animation-delay: -2.4s;
 }
 
@@ -1800,8 +1808,10 @@ body,
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 18px;
     width: min(1120px, calc(100% - 40px));
-    margin: 0 auto;
-    padding: 34px 0 56px;
+    margin: -20px auto 0;
+    padding: 24px 0 56px;
+    position: relative;
+    z-index: 1;
 }
 
 .feature-card,
@@ -1820,8 +1830,8 @@ body,
 }
 
 .feature-card {
-    min-height: 178px;
-    padding: 22px;
+    min-height: 200px;
+    padding: 24px;
 }
 
 .feature-index {
@@ -1830,24 +1840,26 @@ body,
     justify-content: center;
     width: 38px;
     height: 28px;
-    margin-bottom: 22px;
+    margin-bottom: 18px;
     border-radius: 999px;
-    background: rgba(107, 33, 165, 0.1);
+    background: rgba(124, 58, 237, 0.1);
     color: var(--atlas-purple);
     font-weight: 950;
+    font-size: 0.8rem;
 }
 
 .feature-card h3 {
     margin: 0 0 10px;
     color: var(--atlas-ink);
-    font-size: 1.05rem;
+    font-size: 1.1rem;
+    font-weight: 800;
 }
 
 .feature-card p {
     margin: 0;
-    color: var(--atlas-muted);
-    font-size: 0.9rem;
-    line-height: 1.7;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.75;
 }
 
 #partnerPage,
@@ -2259,9 +2271,69 @@ body,
     background: var(--bg-primary);
 }
 
+/* 危险操作区 */
+.danger-zone {
+    padding: 12px 0 0;
+}
+
+.danger-zone-title {
+    font-weight: 700;
+    color: var(--danger);
+    font-size: 0.9rem;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.danger-zone-desc {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin: 0 0 10px;
+}
+
+.danger-zone input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--danger);
+    background: var(--bg-secondary);
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    transition: border-color 0.2s, background-color 0.3s;
+}
+
+.danger-zone input:focus {
+    border-color: #dc2626;
+    outline: none;
+}
+
+.danger-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: 24px;
+    border: 1.5px solid var(--danger);
+    background: transparent;
+    color: var(--danger);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.danger-btn:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
 /* 旧的 profile stats 取消显示（已被新 stats row 替代） */
 .profile-stats,
-.profile-grid {
+.profile-grid,
+.profile-settings,
+.password-form {
     display: none !important;
 }
 
@@ -2321,19 +2393,31 @@ body,
     }
 
     .campus-bubbles {
-        grid-template-columns: 1fr;
-        width: min(320px, 100%);
-        margin-top: 28px;
+        position: absolute;
+        inset: 0;
+        width: auto;
+        margin: 0;
     }
 
     .campus-bubble {
-        min-height: 96px;
+        width: 160px;
+        height: 110px;
+    }
+
+    .campus-bubble:nth-child(1) {
+        bottom: 18px;
+        left: -20px;
+    }
+
+    .campus-bubble:nth-child(2) {
+        top: 64px;
+        right: -30px;
     }
 
     .feature-strip {
         grid-template-columns: 1fr;
         width: calc(100% - 28px);
-        margin: 22px auto 36px;
+        margin: -10px auto 36px;
         gap: 12px;
     }
 
@@ -2479,12 +2563,8 @@ body,
     content: none !important;
 }
 
-/* 首页保留 NJUATLAS 背后的方块阵列和下方图泡 */
+/* 首页保留 NJUATLAS 背后的方块阵列 */
 .pixel-field {
-    display: grid !important;
-}
-
-.campus-bubbles {
     display: grid !important;
 }
 
@@ -2586,18 +2666,18 @@ body,
     }
 }
 
-/* 找搭子桌面布局：左半区地图，右半区找搭子卡片（50/50 分屏） */
+/* 找搭子桌面布局：左侧紧凑地图，右侧找搭子卡片 */
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(300px, 440px) minmax(0, 1fr);
         grid-template-rows: auto 1fr;
         grid-template-areas:
             "map filter"
             "map list";
         gap: 18px;
         width: calc(100% - 36px) !important;
-        max-width: 1400px !important;
+        max-width: 1280px !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
         margin: 0 auto !important;
         padding: 18px 0 30px !important;
@@ -2615,7 +2695,7 @@ body,
         position: sticky;
         top: calc(var(--atlas-topbar) + 18px);
         height: calc(100vh - var(--atlas-topbar) - 36px);
-        min-height: 520px;
+        min-height: 480px;
         max-height: calc(100vh - var(--atlas-topbar) - 36px);
         margin: 0 !important;
         align-self: start;
