@@ -113,16 +113,19 @@ def amap_request(endpoint, params):
     return data
 
 
-def search_places(keywords, city=None, location=None, page=1, page_size=20, radius=5000, types=None):
+def search_places(keywords, city=None, location=None, page=1, page_size=20, radius=5000, types=None, sortrule=None):
     params = {
-        "keywords": keywords,
         "offset": page_size,
         "page": page,
         "extensions": "all",
     }
 
+    if keywords:
+        params["keywords"] = keywords
     if types:
         params["types"] = types
+    if sortrule:
+        params["sortrule"] = sortrule
 
     if location:
         params["location"] = location

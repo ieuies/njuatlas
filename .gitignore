@@ -19,3 +19,6 @@ __pycache__/
 # 本地数据库
 *.db
 *.sqlite
+
+# 前端打包产物
+js/bundle.js

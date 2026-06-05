@@ -4,7 +4,6 @@ import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
-import { loadAmapScript } from './config.js';
 import { initAIPage } from './pages/ai.js';
 
 // 延迟导入 openPostDetail，避免循环依赖
@@ -219,7 +218,6 @@ function initMapExpand() {
 // ========== 初始化 ==========
 function init() {
     updateNavBar();
-    loadAmapScript().catch(err => console.warn('AMap load failed:', err));
 
     // 初始化各模块
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件

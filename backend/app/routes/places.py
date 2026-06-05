@@ -22,7 +22,7 @@ def get_hot_areas():
 
 
 @places_bp.route("/search", methods=["GET"])
-@limiter.limit("30 per minute")
+@limiter.limit("240 per minute")
 def search():
     """高德 POI 搜索。
 
@@ -37,9 +37,10 @@ def search():
     page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=25)
     radius = int_range(request.args.get("radius", 5000), "radius", min_value=100, max_value=50000)
     types = clean_string(request.args.get("types"), "types", max_length=100)
+    sortrule = clean_string(request.args.get("sortrule"), "sortrule", max_length=20)
 
     result = search_places(keyword, city=city, location=location, page=page,
-                           page_size=page_size, radius=radius, types=types)
+                           page_size=page_size, radius=radius, types=types, sortrule=sortrule)
     if result.get("status") != "1":
         return error_response("高德 API 调用失败", 502, code="amap_api_error")
 

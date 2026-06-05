@@ -85,9 +85,13 @@ async function _fetchCampusData(campus) {
     const location = _getCampusLocation(campus);
     const allItems = [];
 
+    // 错开请求避免同时 6 个并发触发限流（stagger 100ms per category）
+    let delay = 0;
     const promises = Object.entries(CATEGORY_CONFIG).map(async ([cat, cfg]) => {
+        const ms = delay; delay += 100;
+        if (ms > 0) await new Promise(r => setTimeout(r, ms));
         try {
-            const r = await searchPlaces(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types);
+            const r = await searchPlaces(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
             if (r.status === '1' && Array.isArray(r.pois)) {
                 r.pois.forEach(poi => {
                     allItems.push({
@@ -115,6 +119,13 @@ async function _fetchCampusData(campus) {
         if (seen.has(item.name)) return false;
         seen.add(item.name);
         return true;
+    });
+
+    // 按评分降序排列（高德 weight 排序 + 本地评分排序双重保障）
+    deduped.sort((a, b) => {
+        const ra = parseFloat(a.rating) || 0;
+        const rb = parseFloat(b.rating) || 0;
+        return rb - ra;
     });
 
     _guideCache[campus] = deduped;

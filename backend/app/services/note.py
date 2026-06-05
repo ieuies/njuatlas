@@ -294,14 +294,22 @@ class SingleNote:
         db.session.commit()
 
     # ── 序列化 ────────────────────────────────────────────────
-    def to_dict(self, current_user_id=None, include_place=False):
+    def to_dict(self, current_user_id=None, include_place=False,
+                _tags=None, _is_liked=None, _participation=None):
         """输出为 API 可用的 dict。
 
         current_user_id 用于填充 is_liked / is_participated 等当前用户状态。
+
+        批量预加载参数（由 NoteSystem.search 传入，避免 N+1 查询）：
+        - _tags:          预加载的标签名列表，传入时跳过 PostTag 查询
+        - _is_liked:      预加载的点赞状态，传入时跳过 PostLike 查询
+        - _participation: 预加载的报名状态，传入时跳过 EventParticipant 查询
         """
         m = self._m
-        # 优先用缓存（_sync_tags 写入时已缓存），避免重复查询
-        if hasattr(self, '_cached_tag_names') and self._cached_tag_names is not None:
+        # 标签：优先级 _tags > _cached_tag_names > 数据库查询
+        if _tags is not None:
+            tag_names = _tags
+        elif hasattr(self, '_cached_tag_names') and self._cached_tag_names is not None:
             tag_names = list(self._cached_tag_names)
         else:
             tag_names = [pt.tag.name for pt in PostTag.query.filter_by(post_id=m.id).all() if pt.tag]
@@ -333,16 +341,22 @@ class SingleNote:
             "updated_at": m.updated_at.isoformat() if m.updated_at else None,
         }
 
-        # 当前用户的状态
+        # 当前用户的状态（优先用预加载值，避免子查询）
         if current_user_id:
-            result["is_liked"] = PostLike.query.filter_by(
-                post_id=m.id, user_id=current_user_id
-            ).first() is not None
+            if _is_liked is not None:
+                result["is_liked"] = _is_liked
+            else:
+                result["is_liked"] = PostLike.query.filter_by(
+                    post_id=m.id, user_id=current_user_id
+                ).first() is not None
             result["is_owner"] = m.user_id == current_user_id
-            part = EventParticipant.query.filter_by(
-                post_id=m.id, user_id=current_user_id
-            ).first()
-            result["participation_status"] = part.status if part else None
+            if _participation is not None:
+                result["participation_status"] = _participation
+            else:
+                part = EventParticipant.query.filter_by(
+                    post_id=m.id, user_id=current_user_id
+                ).first()
+                result["participation_status"] = part.status if part else None
 
         # 可选：附带场所信息
         if include_place and m.place:
@@ -514,10 +528,49 @@ class NoteSystem:
 
         pagination = q.paginate(page=page, per_page=page_size, error_out=False)
 
+        # ── 批量预加载关联数据，避免 N+1 查询 ──────────────────
+        post_ids = [m.id for m in pagination.items]
+
+        # 标签：1 次查询取所有帖子的标签名
+        tags_map = {}  # {post_id: [tag_name, ...]}
+        if post_ids:
+            pt_rows = (
+                PostTag.query
+                .filter(PostTag.post_id.in_(post_ids))
+                .all()
+            )
+            for pt in pt_rows:
+                if pt.tag:
+                    tags_map.setdefault(pt.post_id, []).append(pt.tag.name)
+
+        # 点赞 & 报名状态：仅当已登录时查询
+        likes_set = set()      # {post_id, ...}
+        parts_map = {}         # {post_id: status}
+        if post_ids and self.user_id:
+            likes = (
+                PostLike.query
+                .filter(PostLike.post_id.in_(post_ids), PostLike.user_id == self.user_id)
+                .all()
+            )
+            likes_set = {l.post_id for l in likes}
+
+            parts = (
+                EventParticipant.query
+                .filter(EventParticipant.post_id.in_(post_ids),
+                        EventParticipant.user_id == self.user_id)
+                .all()
+            )
+            parts_map = {p.post_id: p.status for p in parts}
+
         items = []
         for model in pagination.items:
             note = SingleNote(model=model)
-            items.append(note.to_dict(current_user_id=self.user_id))
+            items.append(note.to_dict(
+                current_user_id=self.user_id,
+                _tags=tags_map.get(model.id, []),
+                _is_liked=model.id in likes_set if self.user_id else None,
+                _participation=parts_map.get(model.id) if self.user_id else None,
+            ))
 
         return {
             "items": items,

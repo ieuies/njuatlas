@@ -91,12 +91,13 @@ export async function updateMyProfile({ username, bio, campus, tags } = {}) {
 }
 
 // ── 地图搜索 ──
-export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null) {
+export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null, sortrule = null) {
     let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
     if (location) url += `&location=${encodeURIComponent(location)}`;
     if (radius) url += `&radius=${encodeURIComponent(radius)}`;
     if (types) url += `&types=${encodeURIComponent(types)}`;
+    if (sortrule) url += `&sortrule=${encodeURIComponent(sortrule)}`;
     return request(url, 'GET', null, false);
 }
 

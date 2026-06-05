@@ -1,7 +1,7 @@
 import { showToast, formatDate, escapeHtml, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
 import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent, listTags } from '../api.js';
-import { API_BASE } from '../config.js';
+import { API_BASE, loadAmapScript } from '../config.js';
 
 // ============================================================
 // 全局状态
@@ -149,20 +149,15 @@ function _formatPostTime(iso, urgency) {
 // ============================================================
 async function ensureAMap() {
     if (window.AMap) return window.AMap;
-    return new Promise((resolve, reject) => {
-        let elapsed = 0;
-        const check = setInterval(() => {
-            if (window.AMap) {
-                clearInterval(check);
-                resolve(window.AMap);
-            }
-            elapsed += 100;
-            if (elapsed > 5000) {
-                clearInterval(check);
-                reject(new Error('AMap script loading timeout'));
-            }
-        }, 100);
-    });
+    // 动态加载高德 SDK（config.js loadAmapScript 返回 Promise，已内置去重和缓存）
+    try {
+        await loadAmapScript();
+        if (window.AMap) return window.AMap;
+        throw new Error('AMap SDK 加载后 window.AMap 仍然不可用');
+    } catch (err) {
+        console.warn('高德地图加载失败:', err.message);
+        throw err;
+    }
 }
 
 function createMapInstance(containerId) {
