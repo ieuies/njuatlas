@@ -752,7 +752,7 @@ function initPartnerModal() {
         suggestionsBox.style.display = 'block';
 
         try {
-            const resp = await fetch(`${API_BASE}/places/suggestions?keyword=${encodeURIComponent(kw)}&city=${encodeURIComponent('南京')}`);
+            const resp = await fetch(`${API_BASE}/places/suggestions?keyword=${encodeURIComponent(kw)}&city=${encodeURIComponent('南京')}&location=118.780,32.058`);
             const data = await resp.json();
             if (!data.tips || data.tips.length === 0) {
                 suggestionsBox.innerHTML = '<li class="suggestion-empty">未找到地点，请尝试其他关键词</li>';

@@ -383,9 +383,10 @@ def place_suggestions():
 
     keyword = clean_string(request.args.get("keyword"), "keyword", required=True, max_length=50)
     city = clean_string(request.args.get("city", "南京"), "city", max_length=30)
+    location = request.args.get("location", "").strip() or None
 
     try:
-        data = inputtips(keyword, city=city)
+        data = inputtips(keyword, city=city, location=location)
     except Exception:
         return error_response("地点搜索服务暂时不可用", 502)
 

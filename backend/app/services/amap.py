@@ -148,9 +148,11 @@ def regeocode(location):
     return amap_request("/geocode/regeo", {"location": location, "extensions": "all"})
 
 
-def inputtips(keywords, city=None):
+def inputtips(keywords, city=None, location=None):
     """POI 输入提示，用于前端地点搜索自动补全。"""
     params = {"keywords": keywords}
     if city:
         params["city"] = city
+    if location:
+        params["location"] = location
     return amap_request("/assistant/inputtips", params)
