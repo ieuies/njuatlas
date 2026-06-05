@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>nju.atlas · 找搭子</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <script>
         window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
     </script>
@@ -92,16 +93,32 @@
                 </section>
             </div>
 
-            <!-- ========== AI 助手页面（仅保留功能结构，暂不新增入口浮层和专属 CSS） ========== -->
+            <!-- ========== AI 助手页面 ========== -->
             <div id="aiPage" class="page">
-                <section class="page-header-flex">
-                    <h2><i class="fas fa-robot"></i> AI助手</h2>
-                </section>
-                <div id="quickQuestions"></div>
-                <div id="chatMessages"></div>
-                <div>
-                    <input type="text" id="chatInput" placeholder="输入你的问题...">
-                    <button id="sendChatBtn" class="primary-btn" type="button">发送</button>
+                <!-- 粒子飘落背景 -->
+                <div class="ai-particles" id="aiParticles" aria-hidden="true"></div>
+                <!-- 聊天主体 -->
+                <div class="ai-chat-wrapper">
+                    <!-- 消息滚动区 -->
+                    <div class="ai-chat-messages" id="chatMessages">
+                        <div class="ai-welcome" id="aiWelcome">
+                            <div class="ai-welcome-avatar">🤖</div>
+                            <h3>你好，我是南大图谱 AI 助手</h3>
+                            <p>可以问我南大周边吃喝玩乐的问题~</p>
+                            <p class="ai-welcome-hint">试试点击下方推荐问题，或直接输入</p>
+                        </div>
+                    </div>
+                    <!-- 推荐问题区 -->
+                    <div class="ai-quick-row" id="quickQuestions"></div>
+                    <!-- 输入区 -->
+                    <div class="ai-input-row">
+                        <div class="ai-input-wrapper">
+                            <input type="text" id="chatInput" placeholder="输入你的问题，如「南大附近有什么好吃的」" maxlength="500" autocomplete="off">
+                            <button id="sendChatBtn" class="ai-send-btn" type="button" title="发送">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -504,6 +521,7 @@
 <script type="module" src="js/pages/profile.js"></script>
 <script type="module" src="js/pages/partner.js"></script>
 <script type="module" src="js/pages/guide.js"></script>
-<script type="module" src="js/app.js"></script>
+    <script type="module" src="js/pages/ai.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>
