@@ -2112,16 +2112,17 @@ body.dark-mode .atlas-hero {
     }
 }
 
-/* 找搭子桌面布局：地图占左侧整栏，筛选与卡片在右侧，避免地图挤在内容上方。 */
+/* 找搭子桌面布局：左半区地图，右半区找搭子卡片（50/50 分屏） */
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
-        grid-template-columns: minmax(360px, 42vw) minmax(0, 1fr);
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 1fr;
         grid-template-areas:
             "map filter"
             "map list";
         gap: 18px;
-        width: min(1440px, calc(100% - 36px)) !important;
+        width: calc(100% - 36px) !important;
         max-width: none !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
         margin: 0 auto !important;
@@ -2142,6 +2143,8 @@ body.dark-mode .atlas-hero {
         min-height: 520px;
         margin: 0 !important;
         align-self: start;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
     }
 
     #partnerPage > .partner-waterfall {
@@ -2150,18 +2153,13 @@ body.dark-mode .atlas-hero {
         align-self: start;
     }
 
-    .map-preview-card {
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr) auto;
-    }
-
     .map-preview-body {
         height: auto !important;
         min-height: 0 !important;
     }
 }
 
-/* 移动端地图放在上侧，底部导航恢复为手机专用入口。 */
+/* 移动端：上半区地图，下半区找搭子卡片 */
 @media (max-width: 768px) {
     #partnerPage.active-page {
         display: grid !important;
@@ -2195,7 +2193,8 @@ body.dark-mode .atlas-hero {
     }
 
     .map-preview-body {
-        height: 260px !important;
+        height: calc(50vh - var(--atlas-topbar) - 60px) !important;
+        min-height: 220px !important;
     }
 
     .bottom-tab-bar {
