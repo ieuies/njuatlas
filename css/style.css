@@ -277,7 +277,11 @@ textarea { resize: vertical; min-height: 100px; }
 
 .page { display: none; }
 
-.page.active-page { display: block; }
+.page.active-page {
+    display: block;
+    position: relative;
+    overflow: hidden;
+}
 
 /* ========== 找搭子页面：分类筛选 ========== */
 .partner-filter {
@@ -1474,6 +1478,8 @@ body,
 
 .page.active-page {
     display: block;
+    position: relative;
+    overflow: hidden;
 }
 
 /* 桌面端只用顶部导航；底部导航只给移动端使用。 */

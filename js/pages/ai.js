@@ -177,8 +177,12 @@ async function sendMessage() {
     }
 }
 
-function initParticles() {
-    const container = document.getElementById('aiParticles');
+/**
+ * 通用粒子飘落特效：为指定容器 id 注入彩色粒子。
+ * @param {string} containerId
+ */
+export function initParticlesForContainer(containerId) {
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
     const colors = ['#7c3aed','#8b5cf6','#a78bfa','#c084fc','#e9d5ff','#f472b6','#818cf8','#c4b5fd'];
@@ -221,13 +225,7 @@ export function initAIPage() {
     }
 
     renderQuickQuestions();
-    initParticles();
-
-    let resizeTimer;
-    window.addEventListener('resize', function () {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(initParticles, 400);
-    });
+    initParticlesForContainer('aiParticles');
 }
 
 window.initAIPage = initAIPage;
