@@ -154,7 +154,7 @@ class SingleNote:
         db.session.commit()
         return comment
 
-    def get_comments(self, page=1, page_size=20):
+    def get_comments(self, page=1, page_size=20, current_user_id=None):
         """获取这条帖子的顶级评论列表（含嵌套回复）。"""
         top = (
             PostComment.query
@@ -181,6 +181,7 @@ class SingleNote:
                     "username": c.user.username if c.user else "",
                     "content": c.content,
                     "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "is_owner": (current_user_id is not None and c.user_id == current_user_id),
                     "replies": [
                         {
                             "id": r.id,
@@ -188,6 +189,7 @@ class SingleNote:
                             "username": r.user.username if r.user else "",
                             "content": r.content,
                             "created_at": r.created_at.isoformat() if r.created_at else None,
+                            "is_owner": (current_user_id is not None and r.user_id == current_user_id),
                         }
                         for r in replies.get(c.id, [])
                     ],
@@ -199,6 +201,25 @@ class SingleNote:
             "total": top.total,
             "has_next": top.has_next,
         }
+
+    def delete_comment(self, comment_id, user_id):
+        """删除评论。仅评论作者或帖主可操作。返回 True=成功, False=无权。"""
+        comment = PostComment.query.filter_by(id=comment_id, post_id=self._m.id).first()
+        if not comment:
+            return False
+        # 评论作者或帖子作者均可删除
+        if comment.user_id != user_id and self._m.user_id != user_id:
+            return False
+        # 如果是父评论，同时删除其所有子回复
+        child_replies = PostComment.query.filter_by(parent_id=comment.id).all()
+        for child in child_replies:
+            db.session.delete(child)
+            self._m.comment_count = max(0, (self._m.comment_count or 0) - 1)
+        db.session.delete(comment)
+        self._m.comment_count = max(0, (self._m.comment_count or 0) - 1)
+        compute_hot(self._m)
+        db.session.commit()
+        return True
 
     def participate(self, user_id, status="going"):
         """切换用户的参与状态。再次调用同状态则取消。"""
@@ -223,13 +244,14 @@ class SingleNote:
         return status
 
     def get_participants(self):
-        """获取报名用户列表。"""
+        """获取报名用户列表（含发起人标记）。"""
         records = EventParticipant.query.filter_by(post_id=self._m.id).all()
         return [
             {
                 "user_id": r.user_id,
                 "username": r.user.username if r.user else "",
                 "status": r.status,
+                "is_organizer": r.user_id == self._m.user_id,
             }
             for r in records
         ]

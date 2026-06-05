@@ -147,7 +147,7 @@ def get_post(post_id):
 
     note.record_view()
     data = note.to_dict(current_user_id=notes.user_id, include_place=True)
-    data["comments"] = note.get_comments()
+    data["comments"] = note.get_comments(current_user_id=notes.user_id)
     data["participants"] = note.get_participants()
     return jsonify(data)
 
@@ -271,7 +271,27 @@ def get_comments(post_id):
 
     page = int_range(request.args.get("page", 1), "page", min_value=1)
     page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=100)
-    return jsonify(note.get_comments(page=page, page_size=page_size))
+    return jsonify(note.get_comments(
+        page=page, page_size=page_size,
+        current_user_id=notes.user_id,
+    ))
+
+
+@note_bp.route("/posts/<int:post_id>/comments/<int:comment_id>", methods=["DELETE"])
+@jwt_required
+@limiter.limit("30 per minute")
+def delete_comment(post_id, comment_id):
+    """删除评论（评论作者或帖主可操作）。"""
+    notes = _ns()
+    note = notes.get_post(post_id)
+    if not note:
+        return error_response("帖子不存在", 404, code="post_not_found")
+
+    success = note.delete_comment(comment_id, g.current_user_id)
+    if not success:
+        return error_response("评论不存在或无权删除", 403, code="forbidden")
+
+    return jsonify({"message": "已删除"})
 
 
 @note_bp.route("/posts/<int:post_id>/participate", methods=["POST"])

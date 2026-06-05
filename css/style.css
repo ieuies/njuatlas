@@ -47,24 +47,26 @@
 /* 额外覆盖：确保在大屏（>=481px）底栏与悬浮控件位置正确，不受其他规则干扰 */
 
 
-/* 强制关键容器在默认情况下占满视口宽度，防止左偏 */
-.app-layout.mobile-layout,
-.main-content,
-.content-area,
-.page,
-.map-preview-card,
-.map-preview-body,
-.map-container,
-#previewMap,
-#fullMap,
-.bottom-tab-bar,
-.top-bar {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    left: 0;
-    right: 0;
-    width: 100vw;
+/* 强制关键容器在移动端占满视口宽度，桌面端由各自布局控制 */
+@media (max-width: 768px) {
+    .app-layout.mobile-layout,
+    .main-content,
+    .content-area,
+    .page,
+    .map-preview-card,
+    .map-preview-body,
+    .map-container,
+    #previewMap,
+    #fullMap,
+    .bottom-tab-bar,
+    .top-bar {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        left: 0;
+        right: 0;
+        width: 100vw;
+    }
 }
 
 /* 确保地图容器内部元素也填充 */
@@ -1146,8 +1148,18 @@ textarea { resize: vertical; min-height: 100px; }
 /* ========== 全局按钮交互 ========== */
 button {
     transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease;
+    cursor: pointer;
 }
-button:active { transform: scale(0.96); }
+/* 仅对明确的可点击按钮做按下缩放，避免影响地图、模态框等内部按钮 */
+.filter-chip:active,
+.join-btn:active,
+.primary-btn:active,
+.secondary-btn:active,
+.small-btn:active,
+.detail-action-btn:active,
+.hero-primary-btn:active,
+.hero-secondary-btn:active,
+.fab-create-group:active { transform: scale(0.96); }
 
 /* 单列适配（小屏幕） */
 @media (max-width: 380px) {
@@ -1303,6 +1315,15 @@ button:active { transform: scale(0.96); }
 .participant-chip .participant-status.interested {
     background: #F59E0B;
 }
+.participant-chip .participant-status.organizer-badge {
+    background: linear-gradient(135deg, #F59E0B, #F97316);
+    color: white;
+    font-weight: 700;
+}
+.participant-chip.organizer {
+    border: 2px solid #F59E0B;
+    background: #FFFBEB;
+}
 
 /* 评论列表 */
 .post-detail-comments {
@@ -1325,6 +1346,9 @@ button:active { transform: scale(0.96); }
     font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 .detail-comment-time {
     font-size: 0.7rem;
@@ -1335,6 +1359,12 @@ button:active { transform: scale(0.96); }
     color: var(--text-secondary);
     line-height: 1.5;
 }
+.detail-comment-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+}
 .detail-comment-reply-btn {
     font-size: 0.72rem;
     color: var(--primary);
@@ -1342,7 +1372,29 @@ button:active { transform: scale(0.96); }
     background: none;
     border: none;
     padding: 2px 6px;
-    margin-top: 4px;
+}
+.detail-comment-delete-btn {
+    font-size: 0.72rem;
+    color: var(--danger);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.detail-comment-delete-btn:hover {
+    opacity: 1;
+}
+.comment-owner-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    vertical-align: middle;
 }
 .detail-comment-replies {
     margin-top: 8px;
@@ -1512,7 +1564,9 @@ body,
 
 .content-area {
     padding: 0 !important;
-    overflow: visible !important;
+    overflow: auto !important;
+    position: relative;
+    z-index: 1;
 }
 
 .page {
@@ -2814,40 +2868,49 @@ body,
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
-        grid-template-columns: 400px 1fr;
+        grid-template-columns: 380px 1fr;
         grid-template-rows: auto 1fr;
-        gap: 18px;
+        gap: 16px;
         width: calc(100% - 36px) !important;
         max-width: 1280px !important;
         margin: 0 auto !important;
         padding: 18px 0 30px !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
+        align-items: start;
     }
 
-    #partnerPage > .map-preview-card {
+    /* 地图在左列，跨越两行 */
+    #partnerPage .map-preview-card {
+        grid-column: 1;
         grid-row: 1 / 3;
         position: sticky;
         top: calc(var(--atlas-topbar) + 18px);
         height: calc(100vh - var(--atlas-topbar) - 36px);
         min-height: 480px;
+        max-height: calc(100vh - var(--atlas-topbar) - 36px);
         margin: 0 !important;
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        z-index: 1;
+    }
+
+    /* 筛选栏在右列第一行 */
+    #partnerPage .partner-filter {
+        grid-column: 2;
+        grid-row: 1;
+        margin: 0 !important;
+    }
+
+    /* 瀑布流在右列第二行 */
+    #partnerPage .partner-waterfall {
+        grid-column: 2;
+        grid-row: 2;
+        margin: 0 !important;
     }
 
     .partner-right-panel {
         display: contents !important;
-    }
-
-    #partnerPage > .partner-filter,
-    .partner-right-panel > .partner-filter {
-        margin: 0 !important;
-    }
-
-    #partnerPage > .partner-waterfall,
-    .partner-right-panel > .partner-waterfall {
-        margin: 0 !important;
     }
 
     .map-preview-body {
@@ -2864,6 +2927,33 @@ body,
         width: 100% !important;
         height: 100% !important;
     }
+
+    /* 桌面端：瀑布流双列 */
+    .partner-waterfall {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+        column-count: auto !important;
+        align-content: start;
+    }
+
+    /* 桌面端 fab 按钮靠右，避免遮挡地图 */
+    .fab-create-group {
+        left: auto;
+        right: 28px;
+        bottom: 28px;
+        transform: none;
+        width: auto;
+        min-width: 160px;
+        max-width: 240px;
+        padding: 14px 24px;
+    }
+    .fab-create-group:hover {
+        transform: translateY(-2px);
+    }
+    .fab-create-group:active {
+        transform: scale(0.96);
+    }
 }
 
 /* 移动端：筛选 → 地图 → 卡片，纵向排列 */
@@ -2871,7 +2961,7 @@ body,
     #partnerPage.active-page {
         display: flex !important;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
         width: calc(100% - 24px) !important;
         padding-bottom: 92px !important;
     }
@@ -2880,13 +2970,13 @@ body,
         display: contents !important;
     }
 
-    #partnerPage > .partner-filter,
+    #partnerPage .partner-filter,
     .partner-right-panel > .partner-filter {
         margin: 0 !important;
         flex-shrink: 0;
     }
 
-    #partnerPage > .map-preview-card {
+    #partnerPage .map-preview-card {
         position: relative !important;
         top: auto !important;
         height: auto !important;
@@ -2898,7 +2988,7 @@ body,
         flex-direction: column;
     }
 
-    #partnerPage > .partner-waterfall,
+    #partnerPage .partner-waterfall,
     .partner-right-panel > .partner-waterfall {
         margin: 0 !important;
     }
@@ -3052,6 +3142,40 @@ body,
     font-weight: 900 !important;
 }
 
+/* 卡片所有者操作按钮 */
+.card-owner-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.card-action-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.card-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+.card-edit-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--bg-tertiary);
+}
+.card-delete-btn:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
 @media (max-width: 768px) {
     .partner-card-footer {
         grid-template-columns: 1fr;
@@ -3059,5 +3183,9 @@ body,
 
     .partner-brief-card .join-btn {
         width: 100% !important;
+    }
+
+    .card-owner-actions {
+        justify-content: flex-end;
     }
 }

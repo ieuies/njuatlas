@@ -181,6 +181,9 @@ export async function togglePostLike(postId) {
 export async function addPostComment(postId, content, parentId = null) {
     return request(`/posts/${postId}/comments`, 'POST', { content, parent_id: parentId });
 }
+export async function deletePostComment(postId, commentId) {
+    return request(`/posts/${postId}/comments/${commentId}`, 'DELETE');
+}
 export async function getPostComments(postId, page = 1, pageSize = 20) {
     return request(`/posts/${postId}/comments?page=${page}&page_size=${pageSize}`, 'GET', null, false);
 }

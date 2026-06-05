@@ -1,6 +1,6 @@
 import { showToast, formatDate, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
-import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, participateEvent, listTags } from '../api.js';
+import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent, listTags } from '../api.js';
 import { API_BASE } from '../config.js';
 
 // ============================================================
@@ -62,6 +62,7 @@ function _mapPost(p) {
         urgency: p.urgency || null,
         time: _formatPostTime(p.event_time, p.urgency),
         publisher: p.username || '匿名同学',
+        publisherId: p.user_id,
         members: p.participant_count || 0,
         slots: 0,  // 后端暂无人数上限字段，预留
         likeCount: p.like_count || 0,
@@ -270,17 +271,24 @@ function renderWaterfall() {
                 <div class="partner-card-meta" aria-label="组局信息">
                     ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
                     ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
-                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}</em></span>
+                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-crown" style="color:#F59E0B;font-size:0.7rem;" title="我发起的"></i>' : ''}</em></span>
                 </div>
                 <div class="partner-card-footer">
                     <div class="partner-card-stats">
-                        <span>点赞 ${p.likeCount}</span>
-                        <span>评论 ${p.commentCount}</span>
-                        <span>人数 ${p.members}</span>
+                        <span>👍 ${p.likeCount}</span>
+                        <span>💬 ${p.commentCount}</span>
+                        <span>👥 ${p.members}</span>
                     </div>
-                    <button class="join-btn" data-id="${p.id}">
-                        ${p.type === 'event' ? '我要参加' : '感兴趣'}
-                    </button>
+                    ${p.isOwner ? `
+                        <div class="card-owner-actions" data-id="${p.id}">
+                            <button class="card-action-btn card-edit-btn" data-id="${p.id}" title="编辑">✏️</button>
+                            <button class="card-action-btn card-delete-btn" data-id="${p.id}" title="删除">🗑️</button>
+                        </div>
+                    ` : `
+                        <button class="join-btn" data-id="${p.id}" data-pstatus="${p.participationStatus || ''}">
+                            ${p.type === 'event' ? (p.participationStatus === 'going' ? '已报名' : '我要参加') : '感兴趣'}
+                        </button>
+                    `}
                 </div>
             </div>
         </article>
@@ -294,9 +302,28 @@ function renderWaterfall() {
         });
     });
 
-    // 卡片点击 → 打开帖子详情
+    // 卡片所有者操作按钮
+    container.querySelectorAll('.card-edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const pid = parseInt(btn.getAttribute('data-id'));
+            const post = partnersData.find(p => p.id === pid);
+            if (post) _openEditPostCard(post);
+        });
+    });
+    container.querySelectorAll('.card-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const pid = parseInt(btn.getAttribute('data-id'));
+            _deletePostCard(pid);
+        });
+    });
+
+    // 卡片点击 → 打开帖子详情（但所有者操作按钮区域除外）
     container.querySelectorAll('.partner-card').forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+            // 如果点击的是按钮或按钮内部元素，不打开详情
+            if (e.target.closest('button')) return;
             const pid = parseInt(card.getAttribute('data-id'));
             if (pid) openPostDetail(pid);
         });
@@ -326,6 +353,43 @@ async function handleParticipate(postId) {
         refreshPreviewMarkers();
     } catch (err) {
         showToast('操作失败: ' + err.message);
+    }
+}
+
+/** 从卡片直接编辑帖子 */
+function _openEditPostCard(post) {
+    const modal = document.getElementById('partnerModal');
+    if (!modal) return;
+    document.getElementById('partnerCategory').value = post.category || '';
+    document.getElementById('partnerTitle').value = post.title || '';
+    document.getElementById('partnerDesc').value = post.description || '';
+    document.getElementById('partnerLocation').value = post.location || '';
+    document.getElementById('partnerSlots').value = post.slots || 1;
+    document.getElementById('partnerBudget').value = '';
+    modal.setAttribute('data-edit-id', post.id);
+    // 设置时长类型
+    const isLong = post.type === 'forum';
+    const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
+    durationBtns.forEach(b => {
+        b.classList.remove('active');
+        if (b.getAttribute('data-duration') === (isLong ? 'long' : 'short')) b.classList.add('active');
+    });
+    const timeModeRow = document.getElementById('timeModeRow');
+    if (timeModeRow) timeModeRow.style.display = isLong ? 'none' : 'flex';
+    modal.style.display = 'flex';
+}
+
+/** 从卡片直接删除帖子 */
+async function _deletePostCard(postId) {
+    if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
+    try {
+        await deletePost(postId);
+        showToast('已删除');
+        partnersData = await loadPostsFromAPI();
+        renderWaterfall();
+        refreshPreviewMarkers();
+    } catch (err) {
+        showToast('删除失败: ' + err.message);
     }
 }
 
@@ -556,8 +620,9 @@ function _renderDetailParticipants(participants) {
     }
     section.style.display = 'block';
     container.innerHTML = participants.map(p => `
-        <span class="participant-chip">
+        <span class="participant-chip${p.is_organizer ? ' organizer' : ''}">
             ${escapeHtml(p.username || '用户')}
+            ${p.is_organizer ? '<span class="participant-status organizer-badge" title="发起人">👑 发起人</span>' : ''}
             <span class="participant-status${p.status === 'interested' ? ' interested' : ''}">${p.status === 'going' ? '确定' : '感兴趣'}</span>
         </span>
     `).join('');
@@ -574,22 +639,28 @@ function _renderDetailComments(commentsData) {
     }
 
     container.innerHTML = items.map(c => `
-        <div class="detail-comment">
+        <div class="detail-comment" data-comment-id="${c.id}">
             <div class="detail-comment-header">
-                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}</span>
+                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${c.is_owner ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                 <span class="detail-comment-time">${formatDate(c.created_at)}</span>
             </div>
             <div class="detail-comment-body">${escapeHtml(c.content)}</div>
-            <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
+            <div class="detail-comment-actions">
+                <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
+                ${c.is_owner ? `<button class="detail-comment-delete-btn" data-comment-id="${c.id}" title="删除评论">🗑️</button>` : ''}
+            </div>
             ${(c.replies && c.replies.length) ? `
                 <div class="detail-comment-replies">
                     ${c.replies.map(r => `
-                        <div class="detail-comment">
+                        <div class="detail-comment" data-comment-id="${r.id}">
                             <div class="detail-comment-header">
-                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}</span>
+                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${r.is_owner ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                                 <span class="detail-comment-time">${formatDate(r.created_at)}</span>
                             </div>
                             <div class="detail-comment-body">${escapeHtml(r.content)}</div>
+                            <div class="detail-comment-actions">
+                                ${r.is_owner ? `<button class="detail-comment-delete-btn" data-comment-id="${r.id}" title="删除回复">🗑️</button>` : ''}
+                            </div>
                         </div>
                     `).join('')}
                 </div>
@@ -602,6 +673,22 @@ function _renderDetailComments(commentsData) {
         btn.addEventListener('click', () => {
             const commentId = parseInt(btn.getAttribute('data-comment-id'));
             _showReplyInput(btn.closest('.detail-comment'), commentId);
+        });
+    });
+
+    // 删除评论按钮
+    container.querySelectorAll('.detail-comment-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const commentId = parseInt(btn.getAttribute('data-comment-id'));
+            if (!confirm('确定要删除这条评论吗？')) return;
+            try {
+                await deletePostComment(currentDetailPost.id, commentId);
+                showToast('评论已删除');
+                await _refreshDetailComments(currentDetailPost.id);
+            } catch (err) {
+                showToast('删除失败: ' + err.message);
+            }
         });
     });
 }
@@ -952,7 +1039,7 @@ export async function initPartnerPage() {
     initPartnerModal();
     initPostDetailModal();
 
-    // 桌面端：将 filter 和 waterfall 包在右侧面板中，配合 flexbox 布局
+    // 桌面端：使用 grid 布局（filter + waterfall 在右侧面板中，配合 display: contents）
     _ensureRightPanel();
 
     // 数据加载 + 筛选栏初始化 → 并行发起
@@ -970,21 +1057,20 @@ export async function initPartnerPage() {
     initPreviewMap();
 }
 
-/** 桌面端用右侧面板包裹 filter + waterfall，配合 flex 布局 */
+/** 桌面端用右侧面板包裹 filter + waterfall，配合 grid 布局（display: contents 让子元素参与父级 grid） */
 function _ensureRightPanel() {
     const page = document.getElementById('partnerPage');
     if (!page) return;
-    let panel = page.querySelector('.partner-right-panel');
-    if (!panel) {
-        panel = document.createElement('div');
-        panel.className = 'partner-right-panel';
-        const filter = page.querySelector('.partner-filter');
-        const waterfall = page.querySelector('.partner-waterfall');
-        if (filter && waterfall) {
-            filter.parentNode.insertBefore(panel, filter);
-            panel.appendChild(filter);
-            panel.appendChild(waterfall);
-        }
+    // 避免重复包裹
+    if (page.querySelector('.partner-right-panel')) return;
+    const panel = document.createElement('div');
+    panel.className = 'partner-right-panel';
+    const filter = page.querySelector('.partner-filter');
+    const waterfall = page.querySelector('.partner-waterfall');
+    if (filter && waterfall) {
+        filter.parentNode.insertBefore(panel, filter);
+        panel.appendChild(filter);
+        panel.appendChild(waterfall);
     }
 }
 
