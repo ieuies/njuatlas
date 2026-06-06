@@ -401,6 +401,33 @@ export function initParticles(containerId = 'aiParticles') {
     container.appendChild(frag);
 }
 
+// 移动端软键盘适配：使用 visualViewport API 避免键盘遮挡输入框
+function initViewportAdaptation() {
+    const container = document.getElementById('aiPage');
+    if (!container || !window.visualViewport) return;
+
+    const applyViewport = () => {
+        const viewport = window.visualViewport;
+        // 仅在移动端（宽度 ≤ 768）且键盘弹出时（视口高度明显变小）调整
+        if (window.innerWidth <= 768 && viewport.height < window.innerHeight - 60) {
+            const offset = window.innerHeight - viewport.height;
+            container.style.paddingBottom = offset + 'px';
+        } else {
+            container.style.paddingBottom = '';
+        }
+        // 确保输入框在可视区域内
+        const input = document.getElementById('chatInput');
+        if (input && document.activeElement === input) {
+            requestAnimationFrame(() => {
+                input.scrollIntoView({ block: 'end', behavior: 'instant' });
+            });
+        }
+    };
+
+    window.visualViewport.addEventListener('resize', applyViewport);
+    window.visualViewport.addEventListener('scroll', applyViewport);
+}
+
 // 初始化
 export function initAIPage() {
     const sendBtn = document.getElementById('sendChatBtn');
@@ -415,10 +442,15 @@ export function initAIPage() {
                 sendMessage();
             }
         });
+        // 输入框聚焦时滚动到底部
+        input.addEventListener('focus', () => {
+            setTimeout(() => scrollToBottom(), 300);
+        });
         input.dataset.aiReady = 'true';
     }
 
     initSidebarControls();
+    initViewportAdaptation();
     if (isLoggedIn()) loadConversationList();
     renderQuickQuestions();
     initParticles('aiParticles');

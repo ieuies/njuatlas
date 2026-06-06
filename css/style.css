@@ -3883,9 +3883,11 @@ body,
     }
 }
 
-/* 确保展开按钮在桌面端默认隐藏（已在原样式中隐藏，这里加强） */
-.ai-sidebar-expand {
-    display: none;
+/* 桌面端默认隐藏展开按钮（仅在侧栏折叠时由兄弟选择器覆盖为 flex） */
+@media (min-width: 769px) {
+    .ai-sidebar-expand {
+        display: none;
+    }
 }
 /* ========== 修复未登录时右上角登录按钮为圆形 ========== */
 .top-bar-right .login-round-btn {
