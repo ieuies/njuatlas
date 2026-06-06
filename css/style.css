@@ -4071,4 +4071,12 @@ body,
     .ai-chat-wrapper {
         padding-top: 52px;
     }
+@media (min-width: 769px) {
+    #partnerPage .partner-filter {
+        flex-wrap: wrap !important;
+        overflow-x: visible !important;
+    }
+    #partnerPage .partner-filter .filter-chip {
+        flex-shrink: 1 !important;
+    }
 }
