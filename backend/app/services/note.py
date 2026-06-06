@@ -8,6 +8,9 @@ NoteSystem   ：帖子集合的检索与管理（创建、多维筛选、标签�
 """
 
 import json
+import time as _time
+
+from sqlalchemy.orm import selectinload
 
 from app import db
 from app.models import (
@@ -87,6 +90,7 @@ class SingleNote:
             self._pending_tags = []
 
         db.session.commit()
+        _clear_search_cache()
         self._is_new = False
         return self
 
@@ -149,6 +153,7 @@ class SingleNote:
         EventParticipant.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         db.session.delete(self._m)
         db.session.commit()
+        _clear_search_cache()
 
     # ── 权限 ──────────────────────────────────────────────────
     def can_edit(self, user_id):
@@ -163,11 +168,13 @@ class SingleNote:
             self._m.like_count = max(0, (self._m.like_count or 0) - 1)
             compute_hot(self._m)
             db.session.commit()
+            _clear_search_cache()
             return False
         db.session.add(PostLike(post_id=self._m.id, user_id=user_id))
         self._m.like_count = (self._m.like_count or 0) + 1
         compute_hot(self._m)
         db.session.commit()
+        _clear_search_cache()
         return True
 
     def add_comment(self, user_id, content, parent_id=None):
@@ -182,6 +189,7 @@ class SingleNote:
         self._m.comment_count = (self._m.comment_count or 0) + 1
         compute_hot(self._m)
         db.session.commit()
+        _clear_search_cache()
         return comment
 
     def get_comments(self, page=1, page_size=20, current_user_id=None):
@@ -249,10 +257,15 @@ class SingleNote:
         self._m.comment_count = max(0, (self._m.comment_count or 0) - 1)
         compute_hot(self._m)
         db.session.commit()
+        _clear_search_cache()
         return True
 
     def participate(self, user_id, status="going"):
         """切换用户的参与状态。再次调用同状态则取消。"""
+        # 发起者不能报名自己的活动
+        if user_id == self._m.user_id:
+            raise ValueError("你不能报名自己发布的活动")
+
         existing = EventParticipant.query.filter_by(
             post_id=self._m.id, user_id=user_id
         ).first()
@@ -261,16 +274,23 @@ class SingleNote:
             self._m.participant_count = max(0, (self._m.participant_count or 0) - 1)
             compute_hot(self._m)
             db.session.commit()
+            _clear_search_cache()
             return None  # 已取消
         if existing:
             existing.status = status
         else:
+            # 报名人数不能超过上限
+            current_count = self._m.participant_count or 0
+            max_slots = self._m.max_participants or 1
+            if current_count >= max_slots:
+                raise ValueError(f"报名人数已满（{max_slots}/{max_slots}）")
             db.session.add(EventParticipant(
                 post_id=self._m.id, user_id=user_id, status=status
             ))
-            self._m.participant_count = (self._m.participant_count or 0) + 1
+            self._m.participant_count = current_count + 1
         compute_hot(self._m)
         db.session.commit()
+        _clear_search_cache()
         return status
 
     def get_participants(self):
@@ -288,10 +308,9 @@ class SingleNote:
 
     # ── 浏览计数 ──────────────────────────────────────────────
     def record_view(self):
-        """浏览数 +1。"""
+        """浏览数 +1（不在此处 commit，由路由层统一提交以减少写入阻塞）。"""
         self._m.view_count = (self._m.view_count or 0) + 1
         compute_hot(self._m)
-        db.session.commit()
 
     # ── 序列化 ────────────────────────────────────────────────
     def to_dict(self, current_user_id=None, include_place=False,
@@ -374,6 +393,14 @@ class SingleNote:
 # ═══════════════════════════════════════════════════════════════
 # NoteSystem —— 帖子集合管理系统
 # ═══════════════════════════════════════════════════════════════
+
+# ── 帖子列表缓存（减少云数据库查询延迟）──
+_SEARCH_CACHE = {}       # {cache_key: (timestamp, result)}
+_SEARCH_CACHE_TTL = 15   # 缓存 15 秒（足够覆盖首次加载 + 分类切换）
+
+def _clear_search_cache():
+    """写操作后清除搜索缓存，确保数据一致性。"""
+    _SEARCH_CACHE.clear()
 
 class NoteSystem:
     """帖子系统的统一入口。
@@ -490,6 +517,14 @@ class NoteSystem:
         - user_id:   只看某用户发的帖
         - page, page_size: 分页
         """
+        # ── 缓存：相同查询参数 15 秒内直接返回，避免云数据库延迟 ──
+        cache_key = json.dumps([type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size], sort_keys=True, default=str)
+        now = _time.time()
+        if cache_key in _SEARCH_CACHE:
+            cached_at, cached_result = _SEARCH_CACHE[cache_key]
+            if now - cached_at < _SEARCH_CACHE_TTL:
+                return cached_result
+
         q = EventPost.query
 
         # 类型筛选
@@ -497,12 +532,12 @@ class NoteSystem:
             q = q.filter(EventPost.type == type)
 
         # 标签筛选：AND 逻辑（帖子必须同时拥有传入的所有标签）
+        # 批量查询标签名 → ID 映射，避免 N 次 Tag 查询
         if tags:
-            for tag_name in tags:
-                tag = Tag.query.filter_by(name=tag_name).first()
-                if tag:
-                    sub = PostTag.query.filter_by(tag_id=tag.id).with_entities(PostTag.post_id).subquery()
-                    q = q.filter(EventPost.id.in_(sub))
+            tag_rows = Tag.query.filter(Tag.name.in_(tags)).all()
+            for tag in tag_rows:
+                sub = PostTag.query.filter_by(tag_id=tag.id).with_entities(PostTag.post_id).subquery()
+                q = q.filter(EventPost.id.in_(sub))
 
         # 关联场所
         if place_id is not None:
@@ -526,10 +561,14 @@ class NoteSystem:
             # 默认 hot
             q = q.order_by(EventPost.hot_score.desc())
 
-        pagination = q.paginate(page=page, per_page=page_size, error_out=False)
+        # 预加载用户信息，避免 to_dict() 中 m.user 触发 N 次懒查询
+        q = q.options(selectinload(EventPost.user))
+        # 用 limit/offset 代替 paginate()，跳过不必要的 COUNT 查询
+        q = q.limit(page_size).offset((page - 1) * page_size)
+        rows = q.all()
 
         # ── 批量预加载关联数据，避免 N+1 查询 ──────────────────
-        post_ids = [m.id for m in pagination.items]
+        post_ids = [m.id for m in rows]
 
         # 标签：1 次查询取所有帖子的标签名
         tags_map = {}  # {post_id: [tag_name, ...]}
@@ -563,7 +602,7 @@ class NoteSystem:
             parts_map = {p.post_id: p.status for p in parts}
 
         items = []
-        for model in pagination.items:
+        for model in rows:
             note = SingleNote(model=model)
             items.append(note.to_dict(
                 current_user_id=self.user_id,
@@ -572,13 +611,13 @@ class NoteSystem:
                 _participation=parts_map.get(model.id) if self.user_id else None,
             ))
 
-        return {
+        result = {
             "items": items,
             "page": page,
             "page_size": page_size,
-            "total": pagination.total,
-            "has_next": pagination.has_next,
         }
+        _SEARCH_CACHE[cache_key] = (now, result)
+        return result
 
     # ── 场所关联帖子 ──────────────────────────────────────────
     def posts_for_place(self, place_id, page=1, page_size=10):

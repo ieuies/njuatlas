@@ -148,3 +148,24 @@ def jwt_required(view_func):
         return view_func(*args, **kwargs)
 
     return wrapper
+
+
+def jwt_optional(view_func):
+    """可选 JWT 认证：有 token 就解析并设置 g.current_user_id，没有也不报错。"""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        from app.models import RevokedToken, User
+
+        token = extract_bearer_token()
+        if token:
+            payload, error = decode_access_token(token)
+            if not error and not RevokedToken.query.filter_by(jti=payload["jti"]).first():
+                user = User.query.get(payload["sub"])
+                if user:
+                    g.current_token = token
+                    g.current_token_payload = payload
+                    g.current_user = user
+                    g.current_user_id = user.id
+        return view_func(*args, **kwargs)
+
+    return wrapper

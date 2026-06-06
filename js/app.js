@@ -1,16 +1,21 @@
-import { initPartnerPage, loadPartnerData } from './pages/partner.js';
-import { initGuidePage } from './pages/guide.js';
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
-import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
 import { initAIPage, initParticles } from './pages/ai.js';
+
+// ── 按需懒加载：大模块（partner 63KB / guide 10KB / profile 21KB）在首次导航时才下载 ──
+let _partnerMod = null;
+let _guideMod = null;
+let _profileMod = null;
+function _loadPartner() { return _partnerMod || (_partnerMod = import('./pages/partner.js')); }
+function _loadGuide()   { return _guideMod   || (_guideMod   = import('./pages/guide.js')); }
+function _loadProfile() { return _profileMod || (_profileMod = import('./pages/profile.js')); }
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
 async function getOpenPostDetail() {
     if (!openPostDetailFn) {
-        const mod = await import('./pages/partner.js');
+        const mod = await _loadPartner();
         openPostDetailFn = mod.openPostDetail;
     }
     return openPostDetailFn;
@@ -31,7 +36,7 @@ const pageTitles = {
     fullMap: '组局地图',
 };
 
-function switchPage(pageId) {
+async function switchPage(pageId) {
     // 这些页面沿用现有登录模态框；这里不改账号流程，只把入口统一接到已有 authModal。
     const protectedPages = ['profile'];
     if (protectedPages.includes(pageId) && !isLoggedIn()) {
@@ -88,13 +93,31 @@ function switchPage(pageId) {
     const particleId = particleMap[pageId];
     if (particleId) initParticles(particleId);
 
-    // 页面切换时的初始化
-    if (pageId === 'guide') initGuidePage();
-    else if (pageId === 'ai') initAIPage();
-    else if (pageId === 'partner') loadPartnerData();
-    else if (pageId === 'profile') refreshProfile();
-    else if (pageId === 'fullMap') {
-        // 全屏地图：等浏览器完成布局后再初始化，避免容器尺寸为 0
+    // 页面切换时的初始化（大模块按需动态加载）
+    if (pageId === 'guide') {
+        const mod = await _loadGuide();
+        mod.initGuidePage();
+    } else if (pageId === 'ai') {
+        initAIPage();
+    } else if (pageId === 'partner') {
+        const mod = await _loadPartner();
+        // 首次加载时初始化模态框等
+        if (!_partnerMod._inited) {
+            _partnerMod._inited = true;
+            mod.initPartnerPage();
+        }
+        mod.loadPartnerData();
+    } else if (pageId === 'profile') {
+        const mod = await _loadProfile();
+        // 首次加载时绑定编辑资料等按钮事件
+        if (!_profileMod._inited) {
+            _profileMod._inited = true;
+            mod.initProfilePage();
+        }
+        mod.refreshProfile();
+    } else if (pageId === 'fullMap') {
+        // 确保 partner 模块已加载（全屏地图需要 initFullMapMarkers）
+        await _loadPartner();
         requestAnimationFrame(() => {
             requestAnimationFrame(() => initFullMapMarkers());
         });
@@ -238,11 +261,9 @@ function init() {
     initFabButton();
     initMapExpand();
     initFullMapPage();
-    initProfilePage();       // 绑定个人中心编辑资料等按钮事件
 
-    // 默认加载首页，同时预加载找搭子数据，用户登录后进入页面不需要再等首屏初始化。
+    // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
     switchPage('home');
-    initPartnerPage();
 
     // 窗口大小改变时，刷新当前页面的粒子效果（带防抖）
     let resizeTimer;

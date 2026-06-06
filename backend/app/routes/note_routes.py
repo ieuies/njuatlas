@@ -7,8 +7,10 @@
 
 from flask import Blueprint, g, jsonify, request
 
-from app.auth_utils import jwt_required
+from app import db
+from app.auth_utils import jwt_optional, jwt_required
 from app.errors import error_response
+from app.models import EventParticipant, PostLike, PostTag
 from app.rate_limit import limiter
 from app.services.note import NoteSystem, SingleNote
 from app.validators import clean_string, get_json_body, int_range
@@ -96,6 +98,7 @@ def create_post():
 
 
 @note_bp.route("/posts", methods=["GET"])
+@jwt_optional
 def list_posts():
     """帖子列表 —— 多维筛选。
 
@@ -140,11 +143,13 @@ def list_posts():
 
 
 @note_bp.route("/posts/<int:post_id>", methods=["GET"])
+@jwt_optional
 def get_post(post_id):
     """帖子详情。
 
     浏览计数 +1（未登录用户也计入）。
     返回帖子内容、评论列表、参与用户列表。
+    优化：预加载标签/点赞/报名状态，避免 to_dict() 内部的 3 次额外查询。
     """
     notes = NoteSystem(user_id=g.current_user_id if hasattr(g, "current_user_id") else None)
     note = notes.get_post(post_id)
@@ -152,9 +157,34 @@ def get_post(post_id):
         return error_response("帖子不存在", 404, code="post_not_found")
 
     note.record_view()
-    data = note.to_dict(current_user_id=notes.user_id, include_place=True)
-    data["comments"] = note.get_comments(current_user_id=notes.user_id)
+
+    # ── 预加载：一次性查出 to_dict() 需要的用户状态，避免 N+1 ──
+    user_id = notes.user_id
+    if user_id:
+        _is_liked = PostLike.query.filter_by(
+            post_id=post_id, user_id=user_id
+        ).first() is not None
+        part = EventParticipant.query.filter_by(
+            post_id=post_id, user_id=user_id
+        ).first()
+        _participation = part.status if part else None
+    else:
+        _is_liked = False
+        _participation = None
+    _tags = [pt.tag.name for pt in PostTag.query.filter_by(post_id=post_id).all() if pt.tag]
+
+    data = note.to_dict(
+        current_user_id=user_id,
+        include_place=True,
+        _tags=_tags,
+        _is_liked=_is_liked,
+        _participation=_participation,
+    )
+    data["comments"] = note.get_comments(current_user_id=user_id)
     data["participants"] = note.get_participants()
+
+    # 统一提交 view_count 更新（从 record_view 移出，减少写入阻塞）
+    db.session.commit()
     return jsonify(data)
 
 
@@ -325,15 +355,16 @@ def participate(post_id):
     note = notes.get_post(post_id)
     if not note:
         return error_response("帖子不存在", 404, code="post_not_found")
-    if note.type != "event":
-        return error_response("只有活动帖支持报名", 400, code="not_event_post")
 
     data = get_json_body(request)
     status = clean_string(data.get("status", "going"), "status", max_length=20) or "going"
     if status not in ("going", "interested"):
         return error_response("status 必须是 going 或 interested", 400)
 
-    result = note.participate(g.current_user_id, status=status)
+    try:
+        result = note.participate(g.current_user_id, status=status)
+    except ValueError as e:
+        return error_response(str(e), 400)
     return jsonify({
         "status": result,
         "participant_count": note.participant_count,
@@ -389,9 +420,15 @@ def my_post_comments():
         .limit(100)
         .all()
     )
+    # 批量预加载帖子标题，避免 N+1 查询
+    post_ids = [c.post_id for c in comments]
+    posts_map = {}
+    if post_ids:
+        posts = EventPost.query.filter(EventPost.id.in_(post_ids)).all()
+        posts_map = {p.id: p for p in posts}
     items = []
     for c in comments:
-        post = EventPost.query.get(c.post_id)
+        post = posts_map.get(c.post_id)
         items.append({
             "id": c.id,
             "content": c.content,

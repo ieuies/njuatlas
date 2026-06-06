@@ -382,6 +382,9 @@ textarea { resize: vertical; min-height: 100px; }
 .map-container {
     width: 100%;
     height: 100%;
+    /* 提升到独立 GPU 合成层，避免地图重绘触发主线程重排 */
+    will-change: transform;
+    transform: translateZ(0);
 }
 
 .map-legend {

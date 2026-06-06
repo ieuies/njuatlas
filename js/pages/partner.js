@@ -1,23 +1,24 @@
 import { showToast, formatDate, escapeHtml, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
-import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent, listTags } from '../api.js';
+import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent } from '../api.js';
 import { API_BASE, loadAmapScript } from '../config.js';
 
 // ============================================================
 // 全局状态
 // ============================================================
-let partnersData = [];       // 当前显示的帖子列表（来自后端 API）
-let allTags = [];            // 后端返回的所有标签
-let currentCategory = 'all'; // 当前选中的分类标签名
+let _allPartnersData = [];    // 后端全量数据缓存（只请求一次）
+let partnersData = [];        // 当前显示的帖子列表（筛选后的视图）
+let currentCategory = 'all';  // 当前选中的分类标签名
 
 // 发布/编辑模态框的共享状态（initPartnerModal 和 _openEditPostModal 共用）
 let _modalDuration = 'short';        // 'short' | 'long'
 let _modalUrgency = 'now';           // 'now' | 'scheduled'
 let _modalLocationCoords = null;     // "lng,lat" 字符串
 
-// 高德地图实例
-let previewMap = null;
-let fullMapInstance = null;
+// 高德地图实例（单例：预览和全屏共用同一个 AMap.Map，通过移动 DOM 容器切换）
+let _sharedMap = null;
+let _sharedMapContainer = null;  // 包裹 map 的可移动 div
+let _currentMapParent = null;    // 'preview' | 'full' — 地图当前所在的容器
 
 // 校区坐标映射（WGS-84 → 高德 GCJ-02 转换前）
 const CAMPUS_COORDS = {
@@ -81,19 +82,51 @@ function _isCurrentUserOwner(item) {
 // ============================================================
 // 数据加载：从后端 API 获取帖子列表
 // ============================================================
-async function loadPostsFromAPI() {
+/** 首次加载：从后端拉取全量帖子，缓存到 _allPartnersData */
+async function loadAllPosts() {
+    if (_allPartnersData.length > 0) {
+        // 已缓存，直接应用筛选
+        _applyCategoryFilter();
+        return _allPartnersData;
+    }
     try {
-        const params = { sort: 'hot', page_size: 100 };
-        if (currentCategory !== 'all') {
-            params.tags = currentCategory;  // 后端 AND 匹配
-        }
-        const result = await listPosts(params);
-        partnersData = (result.items || []).map(_mapPost);
-        return partnersData;
+        const result = await listPosts({ sort: 'hot', page_size: 100 });
+        _allPartnersData = (result.items || []).map(_mapPost);
+        _applyCategoryFilter();  // 初次加载后应用当前分类筛选
+        return _allPartnersData;
     } catch (err) {
         console.warn('加载帖子失败，使用空列表:', err.message);
+        _allPartnersData = [];
         partnersData = [];
         return [];
+    }
+}
+
+/** 客户端筛选：从全量缓存中按 currentCategory 过滤到 partnersData */
+function _applyCategoryFilter() {
+    if (currentCategory === 'all') {
+        partnersData = _allPartnersData;
+    } else {
+        partnersData = _allPartnersData.filter(p => p.tags.includes(currentCategory));
+    }
+}
+
+/** 切换分类时调用：纯客户端筛选，无网络请求 */
+function switchCategory(category) {
+    if (currentCategory === category) return;
+    currentCategory = category;
+    _applyCategoryFilter();
+    renderWaterfall();
+    refreshPreviewMarkers();
+}
+
+/** 后台刷新全量数据（不改变当前筛选） */
+async function _reloadAllPosts() {
+    try {
+        const result = await listPosts({ sort: 'hot', page_size: 100 });
+        _allPartnersData = (result.items || []).map(_mapPost);
+    } catch (err) {
+        console.warn('刷新帖子失败:', err.message);
     }
 }
 
@@ -160,29 +193,149 @@ async function ensureAMap() {
     }
 }
 
-function createMapInstance(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return null;
-    container.innerHTML = '';
+/**
+ * 获取或创建共享地图实例。
+ * 整个页面只存在一个 AMap.Map，通过移动其 DOM 容器在预览区和全屏区之间切换。
+ * @param {'preview'|'full'} targetParent - 地图要显示在哪个容器
+ * @returns {object|null} AMap.Map 实例
+ */
+function _getOrCreateSharedMap(targetParent) {
+    const containerId = targetParent === 'full' ? 'fullMap' : 'previewMap';
+    const target = document.getElementById(containerId);
+    if (!target) return null;
 
-    // 以用户校区为原点，未设置则默认鼓楼
+    // 如果地图已存在且在同一容器 → 直接返回
+    if (_sharedMap && _currentMapParent === targetParent) {
+        return _sharedMap;
+    }
+
     const center = _getMapCenter();
 
-    return new window.AMap.Map(containerId, {
-        zoom: 15,
-        center: center,
-        mapStyle: 'amap://styles/light',
-        resizeEnable: true,
+    if (!_sharedMap) {
+        // 首次创建：在可移动的 wrapper div 内实例化地图
+        _sharedMapContainer = document.createElement('div');
+        _sharedMapContainer.style.cssText = 'width:100%;height:100%;';
+        target.innerHTML = '';
+        target.appendChild(_sharedMapContainer);
+
+        _sharedMap = new window.AMap.Map(_sharedMapContainer, {
+            zoom: 15,
+            center: center,
+            mapStyle: 'amap://styles/light',
+            resizeEnable: false,  // 由我们手动 throttle resize
+        });
+        _currentMapParent = targetParent;
+        _setupResizeObserver();
+    } else {
+        // 地图已存在但容器不同 → 移动 wrapper div 到新容器
+        target.innerHTML = '';
+        target.appendChild(_sharedMapContainer);
+        _currentMapParent = targetParent;
+        // 容器尺寸变化后通知地图重新计算布局
+        _sharedMap.resize();
+        // 重新绑定 ResizeObserver（部分浏览器在 reparent 后需要）
+        if (_resizeObserver && _sharedMapContainer) {
+            _resizeObserver.unobserve(_sharedMapContainer);
+            _resizeObserver.observe(_sharedMapContainer);
+        }
+    }
+
+    return _sharedMap;
+}
+
+/** 销毁共享地图实例（页面卸载时调用） */
+function _destroySharedMap() {
+    if (_sharedMap) {
+        _sharedMap.destroy();
+        _sharedMap = null;
+        _sharedMapContainer = null;
+        _currentMapParent = null;
+    }
+    if (_resizeObserver) {
+        _resizeObserver.disconnect();
+        _resizeObserver = null;
+    }
+}
+
+// 手动 throttle resize：替代 Amap 内置的 resizeEnable（已关闭），
+// 用 ResizeObserver + 300ms debounce 在容器尺寸真正变化时才触发 map.resize()
+let _resizeObserver = null;
+let _resizeTimer = null;
+
+function _setupResizeObserver() {
+    if (_resizeObserver) return;
+    if (!window.ResizeObserver) return; // 旧浏览器回退
+    _resizeObserver = new ResizeObserver((entries) => {
+        if (!_sharedMap) return;
+        for (const entry of entries) {
+            if (entry.target === _sharedMapContainer && entry.contentRect.width > 0) {
+                clearTimeout(_resizeTimer);
+                _resizeTimer = setTimeout(() => {
+                    if (_sharedMap) _sharedMap.resize();
+                }, 300);
+                break;
+            }
+        }
     });
+    if (_sharedMapContainer) {
+        _resizeObserver.observe(_sharedMapContainer);
+    }
+}
+
+// marker 图标缓存：按颜色复用 AMap.Icon，避免每个标记都创建新的 SVG data URI
+const _iconCache = {};
+function _getMarkerIcon(color) {
+    if (!_iconCache[color]) {
+        _iconCache[color] = new window.AMap.Icon({
+            size: new window.AMap.Size(32, 32),
+            image: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="${color}" stroke="white" stroke-width="3"/></svg>`)}`,
+            imageSize: new window.AMap.Size(32, 32),
+        });
+    }
+    return _iconCache[color];
+}
+
+// 延迟初始化 — window.AMap 在模块加载时尚未可用，需在 SDK 加载后创建
+let __markerOffset = null;
+function _getMarkerOffset() {
+    if (!__markerOffset) __markerOffset = new window.AMap.Pixel(-16, -16);
+    return __markerOffset;
+}
+let __infoWindowOffset = null;
+function _getInfoWindowOffset() {
+    if (!__infoWindowOffset) __infoWindowOffset = new window.AMap.Pixel(0, -36);
+    return __infoWindowOffset;
+}
+
+// 共享 InfoWindow 实例：避免每次点击标记都创建新的 InfoWindow 对象
+let _sharedInfoWindow = null;
+
+function _openInfoWindow(map, coords, post, style) {
+    const infoContent = `
+        <div class="amap-info-content" style="max-width:240px;font-size:0.85rem;">
+            <strong style="color:${style.color};">${escapeHtml(post.category)}</strong>
+            <div style="font-weight:700;margin:4px 0;">${escapeHtml(post.title)}</div>
+            <div style="color:#666;">${escapeHtml(post.description).substring(0, 80)}</div>
+            ${post.time ? `<div>时间：${escapeHtml(post.time)}</div>` : ''}
+            <button class="map-join-btn" data-post-id="${post.id}" style="margin-top:8px;padding:6px 14px;background:#6B21A5;color:white;border:none;border-radius:12px;cursor:pointer;font-size:0.8rem;">我要参加</button>
+        </div>
+    `;
+    if (!_sharedInfoWindow) {
+        _sharedInfoWindow = new window.AMap.InfoWindow({
+            offset: _getInfoWindowOffset(),
+        });
+    }
+    _sharedInfoWindow.setContent(infoContent);
+    _sharedInfoWindow.open(map, coords);
 }
 
 function addMarkersToMap(map, data) {
     map.clearMap();
     if (!data.length) return [];
 
+    // 批量创建标记，一次性添加到地图以减少重绘次数
     const markers = [];
     data.forEach(post => {
-        // 优先用后端返回的 GCJ-02 坐标；没有坐标的帖子不画在地图上
         const coords = post.lnglat;
         if (!coords || coords.length < 2 || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) {
             return;
@@ -192,76 +345,78 @@ function addMarkersToMap(map, data) {
         const marker = new window.AMap.Marker({
             position: coords,
             title: post.title,
-            icon: new window.AMap.Icon({
-                size: new window.AMap.Size(32, 32),
-                image: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='${encodeURIComponent(style.color)}' stroke='white' stroke-width='3' /%3E%3C/svg%3E`,
-                imageSize: new window.AMap.Size(32, 32),
-            }),
-            offset: new window.AMap.Pixel(-16, -16),
+            icon: _getMarkerIcon(style.color),
+            offset: _getMarkerOffset(),
             zIndex: 100,
         });
 
-        marker.on('click', () => {
-            const infoContent = `
-                <div class="amap-info-content" style="max-width:240px;font-size:0.85rem;">
-                    <strong style="color:${style.color};">${escapeHtml(post.category)}</strong>
-                    <div style="font-weight:700;margin:4px 0;">${escapeHtml(post.title)}</div>
-                    <div style="color:#666;">${escapeHtml(post.description).substring(0, 80)}</div>
-                    ${post.time ? `<div>时间：${escapeHtml(post.time)}</div>` : ''}
-                    <button id="map-join-${post.id}" style="margin-top:8px;padding:6px 14px;background:#6B21A5;color:white;border:none;border-radius:12px;cursor:pointer;font-size:0.8rem;">我要参加</button>
-                </div>
-            `;
-            const infoWindow = new window.AMap.InfoWindow({
-                content: infoContent,
-                offset: new window.AMap.Pixel(0, -36),
-            });
-            infoWindow.open(map, coords);
+        marker.on('click', () => _openInfoWindow(map, coords, post, style));
 
-            // 绑定「我要参加」按钮
-            setTimeout(() => {
-                const btn = document.getElementById(`map-join-${post.id}`);
-                if (btn) {
-                    btn.addEventListener('click', () => handleParticipate(post.id));
-                }
-            }, 100);
-        });
-
-        marker.setMap(map);
         markers.push(marker);
     });
 
+    // 一次性批量添加到地图，替代逐个 setMap 减少重绘
+    if (markers.length > 0) {
+        map.add(markers);
+    }
     return markers;
 }
+
+// 事件委托：统一处理地图 InfoWindow 中的「我要参加」按钮点击
+// 替代每个 marker 的 setTimeout + addEventListener，更高效且不会有时序问题
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.map-join-btn');
+    if (!btn) return;
+    const postId = parseInt(btn.getAttribute('data-post-id'));
+    if (postId) handleParticipate(postId);
+});
 
 // ============================================================
 // 地图初始化入口
 // ============================================================
 async function initPreviewMap() {
     try {
+        // 1. 立即触发 SDK 脚本下载（网络 I/O，不阻塞主线程）
         await ensureAMap();
-        if (!previewMap) {
-            previewMap = createMapInstance('previewMap');
-        }
-        if (previewMap) {
-            const filtered = currentCategory === 'all'
-                ? partnersData
-                : partnersData.filter(p => p.tags.includes(currentCategory));
-            addMarkersToMap(previewMap, filtered);
-        }
+        // 2. 将 CPU 密集的地图实例化推迟到浏览器空闲时
+        await new Promise((resolve) => {
+            const doInit = () => {
+                try {
+                    const map = _getOrCreateSharedMap('preview');
+                    if (map) {
+                        const filtered = currentCategory === 'all'
+                            ? partnersData
+                            : partnersData.filter(p => p.tags.includes(currentCategory));
+                        addMarkersToMap(map, filtered);
+                    }
+                } catch (e) {
+                    console.warn('地图渲染失败:', e);
+                }
+                resolve();
+            };
+            if (window.requestIdleCallback) {
+                requestIdleCallback(doInit, { timeout: 3000 });
+            } else {
+                setTimeout(doInit, 50);
+            }
+        });
     } catch (err) {
         console.warn('预览地图初始化失败:', err);
     }
 }
 
 async function refreshPreviewMarkers() {
-    if (!previewMap) {
+    // 只有地图在预览区时才刷新标记；否则等切回预览时自然刷新
+    if (_currentMapParent !== 'preview') return;
+    const map = _sharedMap;
+    if (!map) {
         await initPreviewMap();
         return;
     }
     const filtered = currentCategory === 'all'
         ? partnersData
         : partnersData.filter(p => p.tags.includes(currentCategory));
-    addMarkersToMap(previewMap, filtered);
+    addMarkersToMap(map, filtered);
 }
 
 // ============================================================
@@ -274,13 +429,27 @@ async function initFullMapMarkers() {
         if (!container || container.offsetWidth === 0) {
             await new Promise(r => setTimeout(r, 200));
         }
-        if (!fullMapInstance) {
-            fullMapInstance = createMapInstance('fullMap');
-        }
-        if (fullMapInstance) {
-            addMarkersToMap(fullMapInstance, partnersData);
-            setTimeout(() => fullMapInstance?.resize(), 100);
-        }
+        // 将 CPU 密集的地图实例化推迟到浏览器空闲时
+        await new Promise((resolve) => {
+            const doInit = () => {
+                try {
+                    // 复用共享地图实例，将其从预览区移动到全屏区
+                    const map = _getOrCreateSharedMap('full');
+                    if (map) {
+                        addMarkersToMap(map, partnersData);
+                        setTimeout(() => map.resize(), 100);
+                    }
+                } catch (e) {
+                    console.warn('全屏地图渲染失败:', e);
+                }
+                resolve();
+            };
+            if (window.requestIdleCallback) {
+                requestIdleCallback(doInit, { timeout: 3000 });
+            } else {
+                setTimeout(doInit, 50);
+            }
+        });
     } catch (err) {
         console.warn('全屏地图初始化失败:', err);
     }
@@ -332,9 +501,13 @@ function renderWaterfall() {
                         <button class="join-btn owner-delete-btn" data-id="${p.id}">
                             🗑️ 删除活动
                         </button>
+                    ` : (p.type === 'event' && p.members >= p.slots && p.participationStatus !== 'going') ? `
+                        <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;">
+                            🚫 已满员
+                        </button>
                     ` : `
                         <button class="join-btn" data-id="${p.id}">
-                            ${p.type === 'event' ? (p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加') : (p.participationStatus === 'going' ? '✅ 已关注·点此取消' : '感兴趣')}
+                            ${p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加'}
                         </button>
                     `}
                 </div>
@@ -371,6 +544,20 @@ function renderWaterfall() {
 // ============================================================
 // 参与活动（"上车" / "我要参加"）
 // ============================================================
+/** 直接更新单个卡片的 DOM，避免全量 renderWaterfall 重建 */
+function _updateSingleCardDOM(postId, status, participantCount, slots) {
+    const card = document.querySelector(`.partner-card[data-id="${postId}"]`);
+    if (!card) return;
+    const btn = card.querySelector('.join-btn:not(.owner-delete-btn)');
+    if (btn) {
+        btn.textContent = status === 'going' ? '✅ 已报名·点此取消' : '我要参加';
+    }
+    const statSpans = card.querySelectorAll('.partner-card-stats span');
+    if (statSpans.length >= 4) {
+        statSpans[3].textContent = `👥 ${participantCount}/${slots}`;
+    }
+}
+
 async function handleParticipate(postId) {
     if (!isLoggedIn()) {
         showToast('请先登录');
@@ -386,16 +573,20 @@ async function handleParticipate(postId) {
         } else if (result.status === null) {
             showToast('已取消报名');
         }
-        renderWaterfall();
-        // 刷新本地数据；若后端未返回用户态字段，保留刚才的按钮状态，避免刷新后误回到“我要参加”。
+        // 即时更新受影响的单张卡片 DOM，不触发全量重建
+        const post = _allPartnersData.find(p => p.id === postId) || partnersData.find(p => p.id === postId);
+        _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 1);
+        // 后台静默刷新全量数据并重渲染（fire-and-forget，不阻塞用户交互）
         const latestStatus = result.status ?? null;
-        await loadPostsFromAPI();
-        const updated = partnersData.find(p => p.id === postId);
-        if (updated && latestStatus === 'going' && updated.participationStatus !== 'going') {
-            updated.participationStatus = latestStatus;
-        }
-        renderWaterfall();
-        refreshPreviewMarkers();
+        _reloadAllPosts().then(() => {
+            const updated = _allPartnersData.find(p => p.id === postId) || partnersData.find(p => p.id === postId);
+            if (updated && latestStatus === 'going' && updated.participationStatus !== 'going') {
+                updated.participationStatus = latestStatus;
+            }
+            _applyCategoryFilter();
+            renderWaterfall();
+            refreshPreviewMarkers();
+        }).catch(() => {});
     } catch (err) {
         showToast('操作失败: ' + err.message);
     }
@@ -420,7 +611,8 @@ async function _deletePostCard(postId) {
     try {
         await deletePost(postId);
         showToast('已删除');
-        partnersData = await loadPostsFromAPI();
+        await _reloadAllPosts();
+        _applyCategoryFilter();
         renderWaterfall();
         refreshPreviewMarkers();
     } catch (err) {
@@ -454,28 +646,58 @@ function initPostDetailModal() {
         }
     });
 
-    // 点赞
+    // 点赞（乐观更新：先改 UI，再发请求，失败回滚）
     likeBtn?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!isLoggedIn()) { showToast('请先登录'); return; }
+        // 乐观更新：立即翻转 UI
+        const prevLiked = currentDetailPost.is_liked;
+        const prevCount = currentDetailPost.like_count || 0;
+        currentDetailPost.is_liked = !prevLiked;
+        currentDetailPost.like_count = prevLiked ? prevCount - 1 : prevCount + 1;
+        _updateDetailStats();
+        likeBtn.classList.toggle('liked', currentDetailPost.is_liked);
+        likeBtn.textContent = currentDetailPost.is_liked ? '已点赞' : '点赞';
         try {
             const result = await togglePostLike(currentDetailPost.id);
+            // 用服务端真实数据修正
             currentDetailPost.is_liked = result.liked;
             currentDetailPost.like_count = result.like_count;
             _updateDetailStats();
             likeBtn.classList.toggle('liked', result.liked);
             likeBtn.textContent = result.liked ? '已点赞' : '点赞';
         } catch (err) {
+            // 失败回滚
+            currentDetailPost.is_liked = prevLiked;
+            currentDetailPost.like_count = prevCount;
+            _updateDetailStats();
+            likeBtn.classList.toggle('liked', prevLiked);
+            likeBtn.textContent = prevLiked ? '已点赞' : '点赞';
             showToast('操作失败: ' + err.message);
         }
     });
 
-    // 报名
+    // 报名（乐观更新 + 后台刷新列表）
     participateBtn?.addEventListener('click', async () => {
-        if (!currentDetailPost || currentDetailPost.type !== 'event') return;
+        if (!currentDetailPost) return;
         if (!isLoggedIn()) { showToast('请先登录'); return; }
+        // 乐观更新：立即翻转按钮和计数
+        const prevStatus = currentDetailPost.participation_status;
+        const prevCount = currentDetailPost.participant_count || 0;
+        const newStatus = prevStatus === 'going' ? null : 'going';
+        currentDetailPost.participation_status = newStatus;
+        currentDetailPost.participant_count = newStatus === 'going' ? prevCount + 1 : Math.max(0, prevCount - 1);
+        _updateDetailStats();
+        participateBtn.textContent = newStatus === 'going' ? '已报名，点击取消' : '我要参加';
+        participateBtn.classList.toggle('going', newStatus === 'going');
+        // 乐观追加/移除当前用户到参与者列表
+        const user = getUser();
+        if (user && user.username) {
+            _optimisticUpdateParticipants(newStatus, user);
+        }
         try {
             const result = await participateEvent(currentDetailPost.id, 'going');
+            // 用服务端真实数据修正
             currentDetailPost.participation_status = result.status;
             currentDetailPost.participant_count = result.participant_count;
             _applyParticipationResult(currentDetailPost.id, result);
@@ -483,11 +705,18 @@ function initPostDetailModal() {
             const going = result.status === 'going';
             participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
             participateBtn.classList.toggle('going', going);
-            // 刷新报名列表
-            await _refreshDetailParticipants(currentDetailPost.id);
-            renderWaterfall();
-            refreshPreviewMarkers();
+            // 后台静默刷新参与者列表（fire-and-forget，不阻塞用户）
+            _refreshDetailParticipants(currentDetailPost.id);
+            // 后台更新卡片列表和地图（不阻塞）
+            _deferredWaterfallAndMapRefresh();
         } catch (err) {
+            // 失败回滚
+            currentDetailPost.participation_status = prevStatus;
+            currentDetailPost.participant_count = prevCount;
+            _updateDetailStats();
+            participateBtn.textContent = prevStatus === 'going' ? '已报名，点击取消' : '我要参加';
+            participateBtn.classList.toggle('going', prevStatus === 'going');
+            _revertOptimisticParticipants(prevStatus, user);
             showToast('操作失败: ' + err.message);
         }
     });
@@ -524,7 +753,8 @@ function initPostDetailModal() {
             document.getElementById('postDetailModal').style.display = 'none';
             currentDetailPost = null;
             // 重新加载列表
-            partnersData = await loadPostsFromAPI();
+            await _reloadAllPosts();
+            _applyCategoryFilter();
             renderWaterfall();
             refreshPreviewMarkers();
         } catch (err) {
@@ -586,23 +816,66 @@ function _openEditPostModal(post) {
     modal.style.display = 'flex';
 }
 
+/** 将列表缓存数据映射为 _renderPostDetail 兼容的格式（用于即时渲染） */
+function _mapCachedToDetailFormat(cached) {
+    if (!cached) return null;
+    return {
+        id: cached.id,
+        type: cached.type,
+        title: cached.title,
+        content: cached.description,
+        tags: cached.tags,
+        username: cached.publisher,
+        event_time: cached.time === '立即' || cached.time === '长期有效' ? null : null,
+        urgency: cached.urgency,
+        location_name: cached.location,
+        budget: cached.budget,
+        contact: cached.contact,
+        is_owner: cached.isOwner,
+        like_count: cached.likeCount,
+        view_count: cached.views,
+        comment_count: cached.commentCount,
+        participant_count: cached.members,
+        max_participants: cached.slots,
+        is_liked: cached.isLiked,
+        participation_status: cached.participationStatus,
+        _fromCache: true,  // 标记为缓存数据，评论/参与者待加载
+    };
+}
+
 /** 打开帖子详情 */
 async function openPostDetail(postId) {
     const modal = document.getElementById('postDetailModal');
     if (!modal) return;
 
     modal.style.display = 'flex';
-    // 清空旧数据防止闪烁
     _resetDetailUI();
 
+    // ── 即时渲染：优先用列表缓存数据展示主体内容 ──
+    const cached = partnersData.find(p => p.id === postId);
+    if (cached) {
+        const quick = _mapCachedToDetailFormat(cached);
+        _renderPostDetail(quick);
+        // 标记评论和参与者正在加载
+        document.getElementById('detailComments').innerHTML = '<div class="detail-comments-empty">加载评论中...</div>';
+    }
+
+    // ── 异步拉取完整数据（评论 + 参与者 + 最新状态）──
     try {
         const post = await getPost(postId);
         currentDetailPost = post;
         _renderPostDetail(post);
     } catch (err) {
-        showToast('加载帖子详情失败: ' + err.message);
-        modal.style.display = 'none';
-        currentDetailPost = null;
+        if (!cached) {
+            // 没有缓存数据时才完全关闭
+            showToast('加载帖子详情失败: ' + err.message);
+            modal.style.display = 'none';
+            currentDetailPost = null;
+        } else {
+            // 有缓存数据时保持展示，仅提示刷新失败
+            console.warn('帖子详情刷新失败:', err.message);
+            currentDetailPost = cached;
+        }
     }
 }
 
@@ -620,11 +893,15 @@ function _resetDetailUI() {
     document.getElementById('detailComments').innerHTML = '';
     document.getElementById('detailParticipants').innerHTML = '';
     document.getElementById('detailParticipantsSection').style.display = 'none';
-    document.getElementById('detailParticipateBtn').style.display = 'none';
+    var pb = document.getElementById('detailParticipateBtn');
+    pb.style.display = 'none';
+    pb.textContent = '我要参加';
+    pb.classList.remove('going');
+    pb.disabled = false;
     document.getElementById('detailLikeBtn').classList.remove('liked');
     document.getElementById('detailLikeBtn').textContent = '点赞';
-    document.getElementById('detailParticipateBtn').textContent = '我要参加';
-    document.getElementById('detailParticipateBtn').classList.remove('going');
+    var oa = document.getElementById('detailOwnerActions');
+    if (oa) oa.style.display = 'none';
 }
 
 function _renderPostDetail(post) {
@@ -659,31 +936,40 @@ function _renderPostDetail(post) {
     }
 
     // 统计
-    _updateDetailStats();
+    _updateDetailStats(post);
     // 人数显示为 "已报名/上限"
     const slots = post.max_participants || 1;
     document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
 
     // 操作按钮
     const likeBtn = document.getElementById('detailLikeBtn');
+    // 先重置再设置，兼容 _renderPostDetail 被多次调用（缓存→API）
+    likeBtn.classList.remove('liked');
+    likeBtn.textContent = '点赞';
     if (post.is_liked) {
         likeBtn.classList.add('liked');
         likeBtn.textContent = '已点赞';
     }
 
-    // 活动帖显示报名按钮（非自己的帖子才能报名）
+    // 报名按钮（非自己的帖子都能报名）
     const participateBtn = document.getElementById('detailParticipateBtn');
     const ownerActions = document.getElementById('detailOwnerActions');
+    const isFull = (post.participant_count || 0) >= (post.max_participants || 1);
     if (post.is_owner) {
         participateBtn.style.display = 'none';
         if (ownerActions) ownerActions.style.display = 'flex';
+    } else if (isFull && post.participation_status !== 'going') {
+        participateBtn.style.display = 'block';
+        participateBtn.textContent = '🚫 已满员';
+        participateBtn.disabled = true;
+        participateBtn.classList.remove('going');
+        if (ownerActions) ownerActions.style.display = 'none';
     } else {
-        if (post.type === 'event') {
-            participateBtn.style.display = 'block';
-            const going = post.participation_status === 'going';
-            participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
-            participateBtn.classList.toggle('going', going);
-        }
+        participateBtn.style.display = 'block';
+        participateBtn.disabled = false;
+        const going = post.participation_status === 'going';
+        participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
+        participateBtn.classList.toggle('going', going);
         if (ownerActions) ownerActions.style.display = 'none';
     }
 
@@ -694,8 +980,8 @@ function _renderPostDetail(post) {
     _renderDetailComments(post.comments || { items: [] });
 }
 
-function _updateDetailStats() {
-    const post = currentDetailPost;
+function _updateDetailStats(postOverride) {
+    const post = postOverride || currentDetailPost;
     if (!post) return;
     document.getElementById('detailViewCount').textContent = post.view_count || 0;
     document.getElementById('detailLikeCount').textContent = post.like_count || 0;
@@ -718,6 +1004,60 @@ function _renderDetailParticipants(participants) {
             <span class="participant-status${p.status === 'interested' ? ' interested' : ''}">${p.status === 'going' ? '确定' : '感兴趣'}</span>
         </span>
     `).join('');
+}
+
+/** 乐观追加当前用户到参与者列表 DOM */
+function _optimisticUpdateParticipants(newStatus, user) {
+    const section = document.getElementById('detailParticipantsSection');
+    const container = document.getElementById('detailParticipants');
+    if (!section || !container) return;
+    section.style.display = 'block';
+    if (newStatus === 'going') {
+        const chip = document.createElement('span');
+        chip.className = 'participant-chip optimistic';
+        chip.dataset.optimisticUser = user.username;
+        chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
+        container.appendChild(chip);
+    } else {
+        // 取消报名：移除之前乐观添加的 chip
+        const chips = container.querySelectorAll('.participant-chip');
+        for (const c of chips) {
+            if (c.textContent.includes(user.username) && !c.classList.contains('organizer')) {
+                c.remove();
+                break;
+            }
+        }
+    }
+    if (!container.querySelector('.participant-chip')) {
+        section.style.display = 'none';
+    }
+}
+
+/** 回滚乐观参与者更新 */
+function _revertOptimisticParticipants(prevStatus, user) {
+    const container = document.getElementById('detailParticipants');
+    if (!container) return;
+    if (prevStatus !== 'going') {
+        // 乐观加上的，需要移除
+        const chip = container.querySelector(`[data-optimistic-user="${user.username}"]`);
+        if (chip) chip.remove();
+    } else {
+        // 乐观移除的，需要加回来
+        const chip = document.createElement('span');
+        chip.className = 'participant-chip';
+        chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
+        container.appendChild(chip);
+    }
+}
+
+/** 后台延迟刷新瀑布流和地图（fire-and-forget，不阻塞用户交互） */
+let _deferredRefreshTimer = null;
+function _deferredWaterfallAndMapRefresh() {
+    clearTimeout(_deferredRefreshTimer);
+    _deferredRefreshTimer = setTimeout(() => {
+        renderWaterfall();
+        refreshPreviewMarkers();
+    }, 500);
 }
 
 function _renderDetailComments(commentsData) {
@@ -842,42 +1182,33 @@ async function _refreshDetailParticipants(postId) {
 // ============================================================
 // 分类筛选（动态生成，基于后端标签）
 // ============================================================
-async function initFilters() {
+// 固定搭子分类（不再从后端动态拉取标签作为筛选项）
+const FIXED_CATEGORIES = [
+    { label: '全部', category: 'all' },
+    { label: '🍚 饭搭子', category: '饭搭子' },
+    { label: '⚽ 运动搭子', category: '运动搭子' },
+    { label: '📚 学习搭子', category: '学习搭子' },
+    { label: '🎮 游戏搭子', category: '游戏搭子' },
+    { label: '🎬 电影搭子', category: '电影搭子' },
+    { label: '✈️ 旅游搭子', category: '旅游搭子' },
+    { label: '🎵 音乐搭子', category: '音乐搭子' },
+    { label: '📷 摄影搭子', category: '摄影搭子' },
+];
+
+function initFilters() {
     const container = document.getElementById('partnerFilter');
     if (!container) return;
 
-    // 先从后端拉取标签列表（仅 activity 类别，排除 food / identity / 价格标签）
-    try {
-        const result = await listTags();
-        allTags = (result.items || []).filter(t => {
-            // 排除价格/数字标签
-            if (/^[\d¥￥]/.test(t.name) || ['AA', '免费', '自费'].includes(t.name)) return false;
-            // 排除 food 和 identity 类别
-            if (t.category === 'food' || t.category === 'identity') return false;
-            // 保留 activity 类别 + 搭子类型（category 可能为 unknown）
-            return true;
-        });
-    } catch (e) {
-        allTags = [];
-    }
-
-    const chips = [
-        { label: '全部', category: 'all' },
-        ...allTags.slice(0, 10).map(t => ({ label: t.name, category: t.name })),
-    ];
-
-    container.innerHTML = chips.map((c, i) =>
+    container.innerHTML = FIXED_CATEGORIES.map((c, i) =>
         `<span class="filter-chip${i === 0 ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${escapeHtml(c.label)}</span>`
     ).join('');
 
     container.querySelectorAll('.filter-chip').forEach(chip => {
-        chip.addEventListener('click', async () => {
-            currentCategory = chip.getAttribute('data-category');
+        chip.addEventListener('click', () => {
+            const category = chip.getAttribute('data-category');
             container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
-            await loadPostsFromAPI();
-            renderWaterfall();
-            refreshPreviewMarkers();
+            switchCategory(category);  // 纯客户端筛选，无网络请求
         });
     });
 }
@@ -1124,7 +1455,8 @@ function initPartnerModal() {
                 showToast('发布成功');
             }
             closeModal();
-            partnersData = await loadPostsFromAPI();
+            await _reloadAllPosts();
+            _applyCategoryFilter();
             renderWaterfall();
             refreshPreviewMarkers();
         } catch (err) {
@@ -1154,16 +1486,24 @@ export async function initPartnerPage() {
 
 /** 加载找搭子数据（仅在首次进入找搭子页面时调用） */
 export async function loadPartnerData() {
-    if (_partnerDataLoaded) return;
+    if (_partnerDataLoaded) {
+        // 从全屏地图返回时：将共享地图移回预览区并刷新标记
+        if (_currentMapParent === 'full') {
+            const map = _getOrCreateSharedMap('preview');
+            if (map) {
+                const filtered = currentCategory === 'all'
+                    ? partnersData
+                    : partnersData.filter(p => p.tags.includes(currentCategory));
+                addMarkersToMap(map, filtered);
+            }
+        }
+        return;
+    }
     _partnerDataLoaded = true;
 
-    const dataPromise = partnersData.length ? Promise.resolve(partnersData) : loadPostsFromAPI();
-    const filtersPromise = initFilters();
-
-    const posts = await dataPromise;
+    initFilters();  // 同步设置固定分类 chips
+    await loadAllPosts();  // 首次加载全量数据并缓存
     renderWaterfall();
-
-    await filtersPromise;
 
     initPreviewMap();
 }
