@@ -1,6 +1,6 @@
 /* =====================================================================
-   nju.atlas · 找搭�?�?移动端竖屏设�?
-   主色: #5B2E8C (南大�?  辅色: #F472B6 (玫瑰�?
+   nju.atlas · 找搭 ? ?移动端竖屏设 ?
+   主色: #5B2E8C (南大 ?  辅色: #F472B6 (玫瑰 ?
    ===================================================================== */
 
 /* ========== CSS 变量 ========== */
@@ -66,10 +66,10 @@
     }
 }
 
-/* 确保地图容器内部元素也填�?*/
+/* 确保地图容器内部元素也填 ?*/
 .map-container, #previewMap, #fullMap { width: 100% !important; height: 100% !important; display: block; }
 
-/* 保持手机端视觉上居中与窄屏限�?*/
+/* 保持手机端视觉上居中与窄屏限 ?*/
 @media (max-width: 480px) {
     .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
         max-width: 480px;
@@ -93,7 +93,7 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* ====== 全局滚动条美�?====== */
+/* ====== 全局滚动条美 ?====== */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -139,13 +139,13 @@ input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
 textarea { resize: vertical; min-height: 100px; }
 
 /* =====================================================================
-   移动端布局：主�?+ 底部Tab + 悬浮元素
+   移动端布局：主 ?+ 底部Tab + 悬浮元素
    ===================================================================== */
 .app-layout.mobile-layout {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    /* 使用视口宽度，避免两侧留�?*/
+    /* 使用视口宽度，避免两侧留 ?*/
     width: 100vw;
     max-width: 100vw;
     overflow-x: hidden;
@@ -161,7 +161,7 @@ textarea { resize: vertical; min-height: 100px; }
     padding-bottom: calc(var(--bottom-tab-height) + 16px);
 }
 
-/* ========== 顶部标题�?========== */
+/* ========== 顶部标题 ?========== */
 .top-bar {
     height: var(--topbar-height);
     display: flex;
@@ -283,16 +283,18 @@ textarea { resize: vertical; min-height: 100px; }
     overflow: hidden;
 }
 
-/* ========== 找搭子页面：分类筛�?========== */
+/* ========== 找搭子页面：分类筛 ?========== */
 .partner-filter {
     display: flex;
     flex-wrap: nowrap;
     gap: 8px;
-    margin-bottom: 12px;
+    margin: 0 !important;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding: 4px 0;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    width: max-content;
+    min-width: 0;
 }
 
 .partner-filter::-webkit-scrollbar { display: none; }
@@ -309,6 +311,7 @@ textarea { resize: vertical; min-height: 100px; }
     transition: var(--transition-fast);
     white-space: nowrap;
     flex-shrink: 0;
+    min-width: fit-content;
 }
 
 .filter-chip:hover {
@@ -378,7 +381,7 @@ textarea { resize: vertical; min-height: 100px; }
     overflow: hidden;
 }
 
-/* 高德地图容器（必须有明确宽高�?*/
+/* 高德地图容器（必须有明确宽高 ?*/
 .map-container {
     width: 100%;
     height: 100%;
@@ -588,7 +591,7 @@ textarea { resize: vertical; min-height: 100px; }
     border: 1px solid var(--gray-200);
 }
 
-/* ========== 指南页面瀑布�?========== */
+/* ========== 指南页面瀑布 ?========== */
 .guide-grid {
     column-count: 2;
     column-gap: 12px;
@@ -825,7 +828,7 @@ textarea { resize: vertical; min-height: 100px; }
     padding: 14px;
 }
 
-/* 时间模式选择�?*/
+/* 时间模式选择 ?*/
 .time-mode-row {
     display: flex;
     align-items: center;
@@ -1066,7 +1069,7 @@ button {
     transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease;
     cursor: pointer;
 }
-/* 仅对明确的可点击按钮做按下缩放，避免影响地图、模态框等内部按�?*/
+/* 仅对明确的可点击按钮做按下缩放，避免影响地图、模态框等内部按 ?*/
 .filter-chip:active,
 .join-btn:active,
 .primary-btn:active,
@@ -1075,7 +1078,7 @@ button {
 .detail-action-btn:active,
 .fab-create-group:active { transform: scale(0.96); }
 
-/* 单列适配（小屏幕�?*/
+/* 单列适配（小屏幕 ?*/
 @media (max-width: 380px) {
     .partner-waterfall { column-count: 1; }
     .guide-grid { column-count: 1; }
@@ -1193,7 +1196,7 @@ button {
     margin: 0 0 10px 0;
 }
 
-/* 已报名用�?*/
+/* 已报名用 ?*/
 .post-detail-participants {
     display: flex;
     flex-wrap: wrap;
@@ -1347,7 +1350,7 @@ button {
     white-space: nowrap;
 }
 
-/* 回复输入�?*/
+/* 回复输入 ?*/
 .detail-reply-input-row {
     display: flex;
     gap: 6px;
@@ -1483,7 +1486,7 @@ body,
     overflow: hidden;
 }
 
-/* 桌面端只用顶部导航；底部导航只给移动端使用�?*/
+/* 桌面端只用顶部导航；底部导航只给移动端使用 ?*/
 .bottom-tab-bar {
     display: none !important;
 }
@@ -1767,6 +1770,7 @@ body,
 }
 
 .filter-chip {
+    flex-shrink: 0;
     min-height: 38px;
     padding: 0 15px;
     border: 0;
@@ -1800,7 +1804,7 @@ body,
     column-count: auto !important;
 }
 
-/* ====== 吃喝玩乐指南（大众点�?美团风格�?====== */
+/* ====== 吃喝玩乐指南（大众点 ?美团风格 ?====== */
 .guide-header {
     text-align: center;
     margin-bottom: 16px;
@@ -2112,7 +2116,7 @@ body,
     margin-top: 6px;
 }
 
-/* 数据统计�?*/
+/* 数据统计 ?*/
 .profile-stats-row {
     display: flex;
     justify-content: space-around;
@@ -2186,7 +2190,7 @@ body,
     box-shadow: 0 4px 12px rgba(107, 33, 165, 0.25);
 }
 
-/* Tab 内容�?*/
+/* Tab 内容 ?*/
 .profile-tab-content {
     min-height: 200px;
 }
@@ -2197,7 +2201,7 @@ body,
     color: var(--text-tertiary);
 }
 
-/* 内容卡片（用�?Tab 内） */
+/* 内容卡片（用 ?Tab 内） */
 .profile-content-card {
     background: var(--atlas-card);
     border-radius: 14px;
@@ -2290,7 +2294,7 @@ body,
     background: var(--bg-primary);
 }
 
-/* 危险操作�?*/
+/* 危险操作 ?*/
 .danger-zone {
     padding: 12px 0 0;
 }
@@ -2363,7 +2367,7 @@ body,
         display: none !important;
     }
 
-    /* 移动端退出按钮缩�?*/
+    /* 移动端退出按钮缩 ?*/
     .logout-btn {
         width: 28px !important;
         height: 28px !important;
@@ -2494,7 +2498,7 @@ body,
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    /* 移动端个人中�?*/
+    /* 移动端个人中 ?*/
     .profile-header-top {
         flex-direction: column;
         align-items: center;
@@ -2570,7 +2574,7 @@ body,
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
-        grid-template-columns: 380px 1fr;
+        grid-template-columns: 380px minmax(0, 1fr);
         grid-template-rows: auto 1fr;
         gap: 16px;
         width: calc(100% - 36px) !important;
@@ -2597,14 +2601,11 @@ body,
         z-index: 1;
     }
 
-    /* 筛选栏在右列第一�?*/
-    #partnerPage .partner-filter {
-        grid-column: 2;
-        grid-row: 1;
-        margin: 0 !important;
-    }
+    /* 筛选栏容器在右列第一行 */
+    
+}
 
-    /* 瀑布流在右列第二�?*/
+    /* 瀑布流在右列第二行 */
     #partnerPage .partner-waterfall {
         grid-column: 2;
         grid-row: 2;
@@ -2630,7 +2631,7 @@ body,
         height: 100% !important;
     }
 
-    /* 桌面端：瀑布流双�?*/
+    /* 桌面端：瀑布流双 ?*/
     .partner-waterfall {
         display: grid !important;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -2639,7 +2640,7 @@ body,
         align-content: start;
     }
 
-    /* 桌面�?fab 按钮靠右，避免遮挡地�?*/
+    /* 桌面 ?fab 按钮靠右，避免遮挡地 ?*/
     .fab-create-group {
         left: auto;
         right: 28px;
@@ -2658,7 +2659,7 @@ body,
     }
 }
 
-/* 移动端：筛�?�?地图 �?卡片，纵向排�?*/
+/* 移动端：筛 ? ?地图  ?卡片，纵向排 ?*/
 @media (max-width: 768px) {
     #partnerPage.active-page {
         display: flex !important;
@@ -2672,6 +2673,7 @@ body,
         display: contents !important;
     }
 
+    }
     #partnerPage .partner-filter,
     .partner-right-panel > .partner-filter {
         margin: 0 !important;
@@ -2851,7 +2853,7 @@ body,
     white-space: nowrap;
 }
 
-/* 发起者删除按钮（红色边框�?*/
+/* 发起者删除按钮（红色边框 ?*/
 .partner-brief-card .owner-delete-btn {
     background: transparent !important;
     color: var(--danger) !important;
@@ -2873,7 +2875,7 @@ body,
     }
 }
 
-/* 顶部导航最终对齐：新增 AI 助手后，所有按钮固定同一高度并按中文基线居中�?*/
+/* 顶部导航最终对齐：新增 AI 助手后，所有按钮固定同一高度并按中文基线居中 ?*/
 .desktop-nav {
     align-items: center !important;
 }
@@ -2897,19 +2899,9 @@ body,
     line-height: 1 !important;
 }
 
-/* 对齐修正：搭子分类按钮文字要在胶囊中垂直居中，不能贴着上沿�?*/
-.partner-filter .filter-chip {
-    height: 52px !important;
-    min-height: 52px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 24px !important;
-    line-height: 1 !important;
-    vertical-align: middle !important;
 }
 
-/* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致�?*/
+/* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致 ?*/
 .profile-tabs {
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -2929,7 +2921,7 @@ body,
     white-space: nowrap;
 }
 
-/* 退出按钮只做紧凑图标按钮，避免被全局按钮规则撑成大白圆�?*/
+/* 退出按钮只做紧凑图标按钮，避免被全局按钮规则撑成大白圆 ?*/
 .topbar-user {
     height: 40px !important;
     min-height: 40px !important;
@@ -2965,7 +2957,7 @@ body,
 }
 
 /* =====================================================================
-   AI 助手聊天页面 �?专属样式
+   AI 助手聊天页面  ?专属样式
    ===================================================================== */
 
 /* 关键：让 AI 页面撑满 content-area，用 flex 布局而非 block */
@@ -2992,7 +2984,7 @@ body,
     padding: 0 16px;
 }
 
-/* ---- 消息滚动�?---- */
+/* ---- 消息滚动 ?---- */
 .ai-chat-messages {
     flex: 1;
     min-height: 0;
@@ -3005,7 +2997,7 @@ body,
     gap: 10px;
 }
 
-/* ---- 欢迎�?---- */
+/* ---- 欢迎 ?---- */
 .ai-welcome {
     display: flex;
     flex-direction: column;
@@ -3180,7 +3172,7 @@ body,
     gap: 8px;
 }
 
-/* ---- 推荐问题�?---- */
+/* ---- 推荐问题 ?---- */
 .ai-quick-row {
     display: flex;
     flex-wrap: wrap;
@@ -3293,7 +3285,7 @@ body,
     transform: none;
 }
 
-/* ---- 移动�?AI 页面适配 ---- */
+/* ---- 移动 ?AI 页面适配 ---- */
 @media (max-width: 768px) {
     #aiPage.active-page {
         min-height: calc(100vh - var(--atlas-topbar) - 66px) !important;
@@ -3365,9 +3357,9 @@ body,
     }
 }
 
-/* ========== 最终解决方案：桌面端地图顶部严格对�?+ 恢复正确高度 ========== */
+/* ========== 最终解决方案：桌面端地图顶部严格对 ?+ 恢复正确高度 ========== */
 
-/* 桌面端（�?69px�?*/
+/* 桌面端（ ?69px ?*/
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
@@ -3413,15 +3405,9 @@ body,
     }
 
     /* 右侧筛选栏顶部对齐 */
-    #partnerPage .partner-filter {
-        grid-column: 2 / 3 !important;
-        grid-row: 1 / 2 !important;
-        margin: 0 !important;
-        padding: 10px !important;
-        align-self: start !important;
-    }
 
-    /* 右侧瀑布�?*/
+
+    /* 右侧瀑布 ?*/
     #partnerPage .partner-waterfall {
         grid-column: 2 / 3 !important;
         grid-row: 2 / 3 !important;
@@ -3430,7 +3416,7 @@ body,
     }
 }
 
-/* 移动端（�?68px）：地图默认折叠为按钮条，点击展开 */
+/* 移动端（ ?68px）：地图默认折叠为按钮条，点击展开 */
 @media (max-width: 768px) {
     .content-area {
         padding: 0 !important;
@@ -3441,7 +3427,7 @@ body,
         gap: 0 !important;
     }
 
-    /* 地图卡片：默认紧凑折�?*/
+    /* 地图卡片：默认紧凑折 ?*/
     .map-preview-card {
         margin: 0 !important;
         border-radius: 0 !important;
@@ -3490,7 +3476,7 @@ body,
         50% { box-shadow: 0 6px 24px rgba(107,33,165,0.38); }
     }
 
-    /* 展开状态：标题栏恢复普通样�?*/
+    /* 展开状态：标题栏恢复普通样 ?*/
     .map-preview-card.map-expanded .map-preview-header {
         cursor: pointer;
         user-select: none;
@@ -3520,7 +3506,7 @@ body,
         display: none;
     }
 
-    /* 地图主体：默认折叠为 0，展开时出�?*/
+    /* 地图主体：默认折叠为 0，展开时出 ?*/
     .map-preview-body {
         height: 0 !important;
         min-height: 0 !important;
@@ -3539,7 +3525,7 @@ body,
         height: 100% !important;
     }
 
-    /* 图例默认隐藏，展开时显�?*/
+    /* 图例默认隐藏，展开时显 ?*/
     .map-preview-card .map-legend {
         display: none;
         padding-left: 14px !important;
@@ -3550,7 +3536,7 @@ body,
     }
 }
 /* =====================================================================
-   AI 助手侧栏样式（类�?DeepSeek�?
+   AI 助手侧栏样式（类 ?DeepSeek ?
    ===================================================================== */
 
 /* AI 页面容器：flex 布局 */
@@ -3809,7 +3795,7 @@ body,
     }
 }
 
-/* 加载状�?*/
+/* 加载状 ?*/
 .ai-conv-loading,
 .ai-conv-empty {
     text-align: center;
@@ -3835,7 +3821,7 @@ body,
     }
 }
 
-/* 桌面端默认隐藏展开按钮（仅在侧栏折叠时由兄弟选择器覆盖为 flex�?*/
+/* 桌面端默认隐藏展开按钮（仅在侧栏折叠时由兄弟选择器覆盖为 flex ?*/
 @media (min-width: 769px) {
     .ai-sidebar-expand {
         display: none;
@@ -3857,19 +3843,19 @@ body,
     box-shadow: var(--shadow-md) !important;
 }
 
-/* 保持圆形的悬停效�?*/
+/* 保持圆形的悬停效 ?*/
 .top-bar-right .login-round-btn:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
 }
 
-/* ========== 移动端地图召唤按钮（纯图标圆形，右侧悬浮�?========== */
+/* ========== 移动端地图召唤按钮（纯图标圆形，右侧悬浮 ?========== */
 .map-fab-mobile {
     display: none;
 }
 
 @media (max-width: 768px) {
-    /* 隐藏原本的地图卡�?*/
+    /* 隐藏原本的地图卡 ?*/
     .map-preview-card {
         display: none !important;
     }
@@ -3901,8 +3887,181 @@ body,
         box-shadow: 0 2px 10px rgba(107, 33, 165, 0.24);
     }
 
-    /* 发起组局按钮往上挪一点，避免被地图按钮遮�?*/
+    /* 发起组局按钮往上挪一点，避免被地图按钮遮 ?*/
     .fab-create-group {
         bottom: calc(var(--bottom-tab-height) + 20px) !important;
     }
+}
+/* ========== 分类栏滑动容器（统一版） ========== */
+.filter-slider-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-bottom: 14px;
+    padding: 6px 40px;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(10px);
+}
+
+/* 滚动包装器 */
+.filter-scroll-wrapper {
+    flex: 1;
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    position: relative;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+}
+.filter-scroll-wrapper::-webkit-scrollbar {
+    display: none;
+}
+
+/* 边缘渐变遮罩：提示用户"左右还有内容" */
+.filter-scroll-wrapper::before,
+.filter-scroll-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 32px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.filter-scroll-wrapper::before {
+    left: 0;
+    background: linear-gradient(to right, var(--atlas-card), transparent);
+}
+.filter-scroll-wrapper::after {
+    right: 0;
+    background: linear-gradient(to left, var(--atlas-card), transparent);
+}
+.filter-scroll-wrapper.has-mask-left::before,
+.filter-scroll-wrapper.has-mask-right::after {
+    opacity: 1;
+}
+
+/* 内部分类列表 */
+.partner-filter {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 0;
+    margin: 0 !important;
+    background: transparent;
+    border: none;
+    width: max-content;
+    min-width: 0;
+}
+
+/* 分类按钮：响应式高度，去掉死板的 52px */
+.partner-filter .filter-chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    color: var(--atlas-ink);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, transform 0.12s;
+    min-height: 36px;
+    scroll-snap-align: start;
+}
+
+.partner-filter .filter-chip:active {
+    transform: scale(0.96);
+}
+
+.partner-filter .filter-chip.active {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(107, 33, 165, 0.25);
+}
+
+/* 悬浮箭头：绝对定位，不占位，不引起布局抖动 */
+.scroll-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--atlas-card);
+    border: 1.5px solid var(--atlas-line);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(255,255,255,0.5) inset;
+    transition: opacity 0.25s ease, visibility 0.25s ease, transform 0.2s ease, background-color 0.2s;
+    font-size: 0.75rem;
+}
+
+.scroll-arrow:hover {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    border-color: var(--atlas-purple);
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 6px 20px rgba(107, 33, 165, 0.3);
+}
+
+.scroll-arrow-left  { left: 6px; }
+.scroll-arrow-right { right: 6px; }
+
+/* 箭头隐藏状态：用 visibility 替代 display:none，避免抖动 */
+/* 箭头默认可见，只在内容未溢出时隐藏 */
+.scroll-arrow.is-hidden {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 确保箭头始终可见（调试用） */
+.scroll-arrow.force-visible,
+.scroll-arrow.always-visible {
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .filter-slider-container {
+        padding: 6px 36px;
+        margin: 8px 12px 0;
+        border-radius: 14px;
+    }
+    .partner-filter .filter-chip {
+        min-height: 40px;
+        padding: 0 14px;
+        font-size: 0.85rem;
+    }
+    .scroll-arrow {
+        width: 28px;
+        height: 28px;
+        z-index: 100;
+    }
+    .scroll-arrow-left  { left: 4px; }
+    .scroll-arrow-right { right: 4px; }
 }

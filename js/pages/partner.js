@@ -1240,18 +1240,131 @@ function initFilters() {
     ).join('');
 
     container.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.style.flexShrink = '0';  // 确保按钮不被压缩
         chip.addEventListener('click', () => {
             const category = chip.getAttribute('data-category');
             container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
-            switchCategory(category);  // 纯客户端筛选，无网络请求
+            switchCategory(category);
         });
     });
+
+    // 新增：初始化分类滑动箭头
+    setupCategoryScrollArrows();
+}/**
+ * 为搭子分类栏添加左右滑动箭头
+ * 将原有的 .partner-filter 包装进滚动容器，并生成左右箭头控制 scrollLeft
+ */
+function setupCategoryScrollArrows() {
+    const originalFilter = document.getElementById('partnerFilter');
+    if (!originalFilter) {
+        console.warn('[setupCategoryScrollArrows] partnerFilter not found');
+        return;
+    }
+
+    const existingContainer = originalFilter.closest('.filter-slider-container');
+    if (existingContainer) {
+        console.log('[setupCategoryScrollArrows] existing container found, rebinding events');
+        bindArrowEvents(existingContainer);
+        requestAnimationFrame(() => window._refreshCategoryArrows?.());
+        return;
+    }
+
+    console.log('[setupCategoryScrollArrows] creating new scroll container');
+    const parent = originalFilter.parentNode;
+    const container = document.createElement('div');
+    container.className = 'filter-slider-container';
+
+    const leftArrow = document.createElement('button');
+    leftArrow.className = 'scroll-arrow scroll-arrow-left';  // 默认可见，由 updateState 控制
+    leftArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    leftArrow.setAttribute('aria-label', '向左滑动');
+
+    const rightArrow = document.createElement('button');
+    rightArrow.className = 'scroll-arrow scroll-arrow-right';  // 默认可见，由 updateState 控制
+    rightArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    rightArrow.setAttribute('aria-label', '向右滑动');
+
+    const scrollWrapper = document.createElement('div');
+    scrollWrapper.className = 'filter-scroll-wrapper';
+
+    container.appendChild(leftArrow);
+    container.appendChild(scrollWrapper);
+    container.appendChild(rightArrow);
+    parent.insertBefore(container, originalFilter);
+    scrollWrapper.appendChild(originalFilter);
+
+    bindArrowEvents(container);
+    window.addEventListener('resize', () => window._refreshCategoryArrows?.());
+
+    // 确保在字体加载和布局稳定后再次检测
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+            requestAnimationFrame(() => window._refreshCategoryArrows?.());
+        });
+    }
+    // 延迟再检测一次，确保所有异步内容渲染完毕
+    setTimeout(() => window._refreshCategoryArrows?.(), 100);
+    setTimeout(() => window._refreshCategoryArrows?.(), 500);
 }
 
-// ============================================================
-// 发布搭子模态框
-// ============================================================
+function bindArrowEvents(container) {
+    const leftArrow = container.querySelector('.scroll-arrow-left');
+    const rightArrow = container.querySelector('.scroll-arrow-right');
+    const scrollWrapper = container.querySelector('.filter-scroll-wrapper');
+    if (!leftArrow || !rightArrow || !scrollWrapper) return;
+
+    const scrollStep = (direction) => {
+        const amount = Math.max(180, scrollWrapper.clientWidth * 0.75);
+        const target = scrollWrapper.scrollLeft + (direction === 'left' ? -amount : amount);
+        scrollWrapper.scrollTo({ left: target, behavior: 'smooth' });
+    };
+
+    leftArrow.addEventListener('click', (e) => { e.stopPropagation(); scrollStep('left'); });
+    rightArrow.addEventListener('click', (e) => { e.stopPropagation(); scrollStep('right'); });
+
+    const updateState = () => {
+        const maxScroll = scrollWrapper.scrollWidth - scrollWrapper.clientWidth;
+        const current = scrollWrapper.scrollLeft;
+        // 使用更宽松的阈值，避免浮点误差导致误判
+        const hasOverflow = maxScroll > 2;
+
+        // 始终输出调试信息
+        console.log('[CategoryScroll]', { maxScroll, current, hasOverflow, scrollWidth: scrollWrapper.scrollWidth, clientWidth: scrollWrapper.clientWidth, leftArrow: leftArrow.className, rightArrow: rightArrow.className });
+
+        // 强制显示箭头（调试用）：如果有溢出，至少显示右箭头
+        if (hasOverflow) {
+            // 有溢出时显示箭头，到边界时隐藏对应方向
+            const showLeft = current > 2;
+            const showRight = current < maxScroll - 2;
+
+            leftArrow.classList.toggle('is-hidden', !showLeft);
+            rightArrow.classList.toggle('is-hidden', !showRight);
+
+            console.log('[CategoryScroll] overflow detected, showLeft:', showLeft, 'showRight:', showRight);
+        } else {
+            // 无溢出时隐藏箭头
+            leftArrow.classList.add('is-hidden');
+            rightArrow.classList.add('is-hidden');
+            console.log('[CategoryScroll] no overflow, arrows hidden');
+        }
+
+        // 边缘渐变遮罩
+        scrollWrapper.classList.toggle('has-mask-left', hasOverflow && current > 2);
+        scrollWrapper.classList.toggle('has-mask-right', hasOverflow && current < maxScroll - 2);
+    };
+
+    scrollWrapper.addEventListener('scroll', () => requestAnimationFrame(updateState), { passive: true });
+
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => requestAnimationFrame(updateState));
+        ro.observe(scrollWrapper);
+    }
+
+    window._refreshCategoryArrows = updateState;
+    requestAnimationFrame(updateState);
+}
+
 function initPartnerModal() {
     const modal = document.getElementById('partnerModal');
     const closeBtn = document.getElementById('closePartnerModalBtn');
@@ -1513,24 +1626,6 @@ let _partnerDataLoaded = false;
 
 let _partnerPageInitialized = false;
 
-export async function initPartnerPage() {
-    // 纯事件绑定，不依赖任何数据，立即执行（仅首次）
-    initPartnerModal();
-    initPostDetailModal();
-    initMobileMapToggle();
-
-    // 桌面端：使用 grid 布局
-    _ensureRightPanel();
-
-    // 窗口缩放时更新地图折叠交互（仅首次绑定，后续复用 initMobileMapToggle idempotent）
-    if (!_partnerPageInitialized) {
-        _partnerPageInitialized = true;
-        window.addEventListener('resize', () => {
-            initMobileMapToggle();
-        });
-    }
-}
-
 /** 加载找搭子数据（仅在首次进入找搭子页面时调用） */
 export async function loadPartnerData() {
     if (_partnerDataLoaded) {
@@ -1557,21 +1652,55 @@ export async function loadPartnerData() {
 
 /** 桌面端用右侧面板包裹 filter + waterfall，配合 grid 布局（display: contents 让子元素参与父级 grid） */
 function _ensureRightPanel() {
+    // 不再包裹元素。
+    // setupCategoryScrollArrows 创建的 .filter-slider-container 已经是 #partnerPage 的直接子元素。
+    // CSS grid 直接定位 .filter-slider-container 和 .partner-waterfall。
     const page = document.getElementById('partnerPage');
     if (!page) return;
-    // 避免重复包裹
-    if (page.querySelector('.partner-right-panel')) return;
-    const panel = document.createElement('div');
-    panel.className = 'partner-right-panel';
-    const filter = page.querySelector('.partner-filter');
+
+    // 清理可能存在的旧 partner-right-panel 包裹
+    const existingPanel = page.querySelector('.partner-right-panel');
+    if (existingPanel) {
+        while (existingPanel.firstChild) {
+            page.insertBefore(existingPanel.firstChild, existingPanel);
+        }
+        existingPanel.remove();
+    }
+
+    // 确保 waterfall 在 filter-slider-container 之后
+    const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
-    if (filter && waterfall) {
-        filter.parentNode.insertBefore(panel, filter);
-        panel.appendChild(filter);
-        panel.appendChild(waterfall);
+    if (container && waterfall && container.nextElementSibling !== waterfall) {
+        page.insertBefore(waterfall, container.nextElementSibling);
     }
 }
+export async function initPartnerPage() {
+    initPartnerModal();
+    initPostDetailModal();
+    initMobileMapToggle();
 
+    setupCategoryScrollArrows();      // 确保包装和箭头生成
+    _ensureRightPanel();
+
+    // 页面切换时刷新箭头（例如从其他页切回找搭子）
+    const partnerPage = document.getElementById('partnerPage');
+    if (partnerPage) {
+        const observer = new MutationObserver(() => {
+            if (partnerPage.classList.contains('active-page')) {
+                setTimeout(() => window._refreshCategoryArrows?.(), 100);
+            }
+        });
+        observer.observe(partnerPage, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    if (!_partnerPageInitialized) {
+        _partnerPageInitialized = true;
+        window.addEventListener('resize', () => {
+            initMobileMapToggle();
+            setTimeout(() => window._refreshCategoryArrows?.(), 150);
+        });
+    }
+}
 // 导出供其他模块使用（地图标记点击等）
 export { openPostDetail };
 // ============================================================
@@ -1594,3 +1723,80 @@ function _debounce(fn, delay) {
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
 }
+
+// ============================================================
+// 全局暴露 & 自动初始化（确保 app.js 未调用时也能工作）
+// ============================================================
+
+// 暴露到全局，方便 app.js 调用
+window.initPartnerPage = initPartnerPage;
+window.loadPartnerData = loadPartnerData;
+window.setupCategoryScrollArrows = setupCategoryScrollArrows;
+
+// 自动初始化：如果 DOM 已就绪，立即执行
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('[partner.js] DOMContentLoaded - auto init');
+        // 如果 partnerFilter 存在，立即初始化
+        if (document.getElementById('partnerFilter')) {
+            setupCategoryScrollArrows();
+        }
+    });
+} else {
+    // DOM 已就绪，立即执行
+    console.log('[partner.js] DOM already ready - auto init');
+    if (document.getElementById('partnerFilter')) {
+        setupCategoryScrollArrows();
+    }
+}
+
+// 监听页面切换：当 partnerPage 变为 active 时初始化
+const _partnerPageObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            const target = mutation.target;
+            if (target.id === 'partnerPage' && target.classList.contains('active-page')) {
+                console.log('[partner.js] partnerPage activated - auto init');
+                setTimeout(() => {
+                    setupCategoryScrollArrows();
+                    window._refreshCategoryArrows?.();
+                }, 50);
+            }
+        }
+    });
+});
+
+// 如果 partnerPage 存在，立即监听
+const _partnerPageEl = document.getElementById('partnerPage');
+if (_partnerPageEl) {
+    _partnerPageObserver.observe(_partnerPageEl, { attributes: true, attributeFilter: ['class'] });
+}
+
+
+// 强制显示箭头（调试用）
+window.forceShowArrows = function() {
+    document.querySelectorAll('.scroll-arrow').forEach(arrow => {
+        arrow.classList.remove('is-hidden');
+        arrow.style.visibility = 'visible';
+        arrow.style.opacity = '1';
+        arrow.style.display = 'flex';
+    });
+    console.log('[forceShowArrows] 所有箭头已强制显示');
+};
+
+// 强制检查溢出状态
+window.checkOverflow = function() {
+    const wrapper = document.querySelector('.filter-scroll-wrapper');
+    if (!wrapper) {
+        console.warn('[checkOverflow] 未找到 filter-scroll-wrapper');
+        return;
+    }
+    const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
+    console.log('[checkOverflow]', {
+        scrollWidth: wrapper.scrollWidth,
+        clientWidth: wrapper.clientWidth,
+        maxScroll: maxScroll,
+        hasOverflow: maxScroll > 2,
+        scrollLeft: wrapper.scrollLeft
+    });
+};
