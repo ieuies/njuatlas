@@ -86,17 +86,18 @@ export async function deleteAccount(password) {
 export async function getMyProfile() {
     return request('/me/profile', 'GET');
 }
-export async function updateMyProfile({ username, bio, tags } = {}) {
-    return request('/me/profile', 'PUT', { username, bio, tags });
+export async function updateMyProfile({ username, bio, campus, tags } = {}) {
+    return request('/me/profile', 'PUT', { username, bio, campus, tags });
 }
 
 // ── 地图搜索 ──
-export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null) {
+export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null, sortrule = null) {
     let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
     if (location) url += `&location=${encodeURIComponent(location)}`;
     if (radius) url += `&radius=${encodeURIComponent(radius)}`;
     if (types) url += `&types=${encodeURIComponent(types)}`;
+    if (sortrule) url += `&sortrule=${encodeURIComponent(sortrule)}`;
     return request(url, 'GET', null, false);
 }
 
@@ -108,8 +109,8 @@ export async function chatRecommend(message, sessionId = null, city = '南京') 
 }
 
 // ── 帖子系统（搭子论坛） ──
-export async function createPost({ type, title, content, tags, place_id, event_time, location, location_name } = {}) {
-    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, location, location_name });
+export async function createPost({ type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact } = {}) {
+    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact });
 }
 export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size } = {}) {
     const params = new URLSearchParams();
@@ -164,4 +165,16 @@ export async function getReviews() {
 }
 export async function getMyPostComments() {
     return request('/me/post-comments', 'GET');
+}
+
+export async function getConversationList() {
+    return request('/me/conversations', 'GET');
+}
+
+export async function getConversationMessages(sessionId) {
+    return request(`/llm/conversation/${sessionId}/messages`, 'GET');
+}
+
+export async function deleteConversation(sessionId) {
+    return request(`/llm/conversation/${sessionId}`, 'DELETE');
 }

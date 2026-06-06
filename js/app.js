@@ -1,11 +1,10 @@
-import { initPartnerPage } from './pages/partner.js';
+import { initPartnerPage, loadPartnerData } from './pages/partner.js';
 import { initGuidePage } from './pages/guide.js';
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
-import { loadAmapScript } from './config.js';
-import { initAIPage, initParticlesForContainer } from './pages/ai.js';
+import { initAIPage } from './pages/ai.js';
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
@@ -81,6 +80,7 @@ function switchPage(pageId) {
     // 页面切换时的初始化
     if (pageId === 'guide') initGuidePage();
     else if (pageId === 'ai') initAIPage();
+    else if (pageId === 'partner') loadPartnerData();
     else if (pageId === 'profile') refreshProfile();
     else if (pageId === 'fullMap') {
         // 全屏地图：等浏览器完成布局后再初始化，避免容器尺寸为 0
@@ -89,35 +89,12 @@ function switchPage(pageId) {
         });
     }
 
-    // 为当前页面注入粒子特效（首次切换时生成，之后 resize 统一重建）
-    refreshCurrentPageParticles();
-
     // 发起组局按钮只属于找搭子页，离开该页时隐藏。
     const fab = document.getElementById('fabCreateGroup');
     if (fab) {
         fab.style.display = pageId === 'partner' ? 'flex' : 'none';
     }
 }
-
-// ========== 粒子特效统一管理 ==========
-const pageParticleMap = {
-    home: 'homeParticles',
-    partner: 'partnerParticles',
-    ai: 'aiParticles',
-    guide: 'guideParticles',
-    profile: 'profileParticles',
-};
-
-function refreshCurrentPageParticles() {
-    const containerId = pageParticleMap[currentPage] || pageParticleMap.home;
-    initParticlesForContainer(containerId);
-}
-
-let particleResizeTimer;
-window.addEventListener('resize', function () {
-    clearTimeout(particleResizeTimer);
-    particleResizeTimer = setTimeout(refreshCurrentPageParticles, 400);
-});
 
 // 全屏地图标记初始化（委托给 partner 模块的高德地图实例）
 async function initFullMapMarkers() {
@@ -241,7 +218,6 @@ function initMapExpand() {
 // ========== 初始化 ==========
 function init() {
     updateNavBar();
-    loadAmapScript().catch(err => console.warn('AMap load failed:', err));
 
     // 初始化各模块
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件

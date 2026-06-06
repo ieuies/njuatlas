@@ -1,7 +1,7 @@
 import { showToast, formatDate, escapeHtml, wgs84ToGcj02 } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
 import { listPosts, getPost, createPost, updatePost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent, listTags } from '../api.js';
-import { API_BASE } from '../config.js';
+import { API_BASE, loadAmapScript } from '../config.js';
 
 // ============================================================
 // 全局状态
@@ -10,9 +10,30 @@ let partnersData = [];       // 当前显示的帖子列表（来自后端 API�
 let allTags = [];            // 后端返回的所有标签
 let currentCategory = 'all'; // 当前选中的分类标签名
 
+// 发布/编辑模态框的共享状态（initPartnerModal 和 _openEditPostModal 共用）
+let _modalDuration = 'short';        // 'short' | 'long'
+let _modalUrgency = 'now';           // 'now' | 'scheduled'
+let _modalLocationCoords = null;     // "lng,lat" 字符串
+
 // 高德地图实例
 let previewMap = null;
 let fullMapInstance = null;
+
+// 校区坐标映射（WGS-84 → 高德 GCJ-02 转换前）
+const CAMPUS_COORDS = {
+    '鼓楼': [118.780, 32.058],
+    '仙林': [118.954, 32.114],
+    '浦口': [118.652, 32.157],
+    '苏州': [120.385, 31.355],
+};
+function _getMapCenter() {
+    const user = getUser();
+    const campus = user?.campus || '';
+    const coords = CAMPUS_COORDS[campus];
+    if (coords) return wgs84ToGcj02(coords[0], coords[1]);
+    // 默认：鼓楼校区
+    return wgs84ToGcj02(118.780, 32.058);
+}
 
 // 动态分类颜色（根据标签名生成 HSL 色相）
 const categoryColorCache = {};
@@ -92,7 +113,10 @@ function _mapPost(p) {
         publisher: p.username || '匿名同学',
         publisherId: p.user_id,
         members: p.participant_count || 0,
-        slots: 0,  // 后端暂无人数上限字段，预留
+        slots: p.max_participants || 1,
+        budget: p.budget || '',
+        contact: p.contact || '',
+        views: p.view_count || 0,
         likeCount: p.like_count || 0,
         commentCount: p.comment_count || 0,
         hotScore: p.hot_score || 0,
@@ -125,20 +149,15 @@ function _formatPostTime(iso, urgency) {
 // ============================================================
 async function ensureAMap() {
     if (window.AMap) return window.AMap;
-    return new Promise((resolve, reject) => {
-        let elapsed = 0;
-        const check = setInterval(() => {
-            if (window.AMap) {
-                clearInterval(check);
-                resolve(window.AMap);
-            }
-            elapsed += 100;
-            if (elapsed > 5000) {
-                clearInterval(check);
-                reject(new Error('AMap script loading timeout'));
-            }
-        }, 100);
-    });
+    // 动态加载高德 SDK（config.js loadAmapScript 返回 Promise，已内置去重和缓存）
+    try {
+        await loadAmapScript();
+        if (window.AMap) return window.AMap;
+        throw new Error('AMap SDK 加载后 window.AMap 仍然不可用');
+    } catch (err) {
+        console.warn('高德地图加载失败:', err.message);
+        throw err;
+    }
 }
 
 function createMapInstance(containerId) {
@@ -146,8 +165,8 @@ function createMapInstance(containerId) {
     if (!container) return null;
     container.innerHTML = '';
 
-    // 默认中心：南京大学鼓楼校区
-    const center = wgs84ToGcj02(118.780, 32.058);
+    // 以用户校区为原点，未设置则默认鼓楼
+    const center = _getMapCenter();
 
     return new window.AMap.Map(containerId, {
         zoom: 15,
@@ -298,14 +317,16 @@ function renderWaterfall() {
                 <p class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</p>
                 <div class="partner-card-meta" aria-label="组局信息">
                     ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
+                    ${p.budget ? `<span><b>预算</b><em>${escapeHtml(p.budget)}</em></span>` : ''}
                     ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
                     <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' 👑' : ''}</em></span>
                 </div>
                 <div class="partner-card-footer">
                     <div class="partner-card-stats">
+                        <span>👁 ${p.views}</span>
                         <span>👍 ${p.likeCount}</span>
                         <span>💬 ${p.commentCount}</span>
-                        <span>👥 ${p.members}</span>
+                        <span>👥 ${p.members}/${p.slots}</span>
                     </div>
                     ${p.isOwner ? `
                         <button class="join-btn owner-delete-btn" data-id="${p.id}">
@@ -512,19 +533,55 @@ function initPostDetailModal() {
     });
 }
 
-/** 打开编辑帖子弹窗（复用发布模态框） */
+/** 打开编辑帖子弹窗（复用发布模态框）。
+ *  post 是 getPost() API 返回的原始数据：
+ *    { type, title, content, tags, urgency, event_time, location, location_name, ... }
+ */
 function _openEditPostModal(post) {
     const modal = document.getElementById('partnerModal');
     if (!modal) return;
     document.getElementById('postDetailModal').style.display = 'none';
-    // 预填数据
-    document.getElementById('partnerCategory').value = post.category || '';
+
+    // ── 1. 预填表单字段（使用原始 API 字段名）──
+    document.getElementById('partnerCategory').value = (post.tags && post.tags[0]) ? post.tags[0] : '';
     document.getElementById('partnerTitle').value = post.title || '';
-    document.getElementById('partnerDesc').value = post.description || '';
-    document.getElementById('partnerLocation').value = post.location || '';
-    document.getElementById('partnerSlots').value = post.slots || 1;
+    document.getElementById('partnerDesc').value = post.content || '';
+    document.getElementById('partnerLocation').value = post.location_name || '';
+    document.getElementById('partnerBudget').value = post.budget || '';
+    document.getElementById('partnerSlots').value = post.max_participants || 1;
     document.getElementById('partnerContact').value = post.contact || '';
-    // 标记为编辑模式
+
+    // ── 2. 恢复时长类型 UI ──
+    _modalDuration = (post.type === 'forum') ? 'long' : 'short';
+    const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
+    durationBtns.forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-duration') === _modalDuration);
+    });
+    const timeModeRow = document.getElementById('timeModeRow');
+    if (timeModeRow) timeModeRow.style.display = _modalDuration === 'long' ? 'none' : 'flex';
+
+    // ── 3. 恢复时间模式 UI ──
+    _modalUrgency = (post.urgency === 'scheduled') ? 'scheduled' : 'now';
+    const timeModeBtns = document.querySelectorAll('#timeModeRow .time-mode-btn');
+    timeModeBtns.forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-mode') === _modalUrgency);
+    });
+    const scheduledRow = document.getElementById('scheduledTimeRow');
+    if (scheduledRow) {
+        scheduledRow.style.display = _modalUrgency === 'scheduled' ? 'flex' : 'none';
+    }
+    // 预填日期时间
+    if (post.event_time) {
+        const d = new Date(post.event_time);
+        document.getElementById('partnerDate').value = d.toISOString().split('T')[0];
+        const time = d.toTimeString().split(' ')[0].substring(0, 5);
+        document.getElementById('partnerTimePicker').value = time;
+    }
+
+    // ── 4. 恢复地点坐标 ──
+    _modalLocationCoords = post.location || null;  // "lng,lat" 字符串
+
+    // ── 5. 标记编辑模式并打开 ──
     modal.setAttribute('data-edit-id', post.id);
     modal.style.display = 'flex';
 }
@@ -556,6 +613,10 @@ function _resetDetailUI() {
     document.getElementById('detailPublisher').textContent = '';
     document.getElementById('detailTime').textContent = '';
     document.getElementById('detailLocation').textContent = '';
+    document.getElementById('detailBudget').textContent = '';
+    document.getElementById('detailBudget').style.display = 'none';
+    document.getElementById('detailContact').textContent = '';
+    document.getElementById('detailContact').style.display = 'none';
     document.getElementById('detailComments').innerHTML = '';
     document.getElementById('detailParticipants').innerHTML = '';
     document.getElementById('detailParticipantsSection').style.display = 'none';
@@ -584,9 +645,24 @@ function _renderPostDetail(post) {
     if (post.location_name) {
         document.getElementById('detailLocation').innerHTML = `<i class="fas fa-map-pin"></i> ${escapeHtml(post.location_name)}`;
     }
+    if (post.budget) {
+        document.getElementById('detailBudget').innerHTML = `<i class="fas fa-yen-sign"></i> ${escapeHtml(post.budget)}`;
+        document.getElementById('detailBudget').style.display = '';
+    } else {
+        document.getElementById('detailBudget').style.display = 'none';
+    }
+    if (post.contact) {
+        document.getElementById('detailContact').innerHTML = `<i class="fas fa-address-book"></i> ${escapeHtml(post.contact)}`;
+        document.getElementById('detailContact').style.display = '';
+    } else {
+        document.getElementById('detailContact').style.display = 'none';
+    }
 
     // 统计
     _updateDetailStats();
+    // 人数显示为 "已报名/上限"
+    const slots = post.max_participants || 1;
+    document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
 
     // 操作按钮
     const likeBtn = document.getElementById('detailLikeBtn');
@@ -818,9 +894,7 @@ function initPartnerModal() {
 
     if (!modal) return;
 
-    // 时长类型 + 时间模式联动
-    let currentDuration = 'short';   // 'short' | 'long'
-    let currentUrgency = 'now';     // 'now' | 'scheduled'
+    // 时长类型 + 时间模式联动（使用模块级变量，以便 _openEditPostModal 访问）
     const scheduledRow = document.getElementById('scheduledTimeRow');
     const timeModeRow = document.getElementById('timeModeRow');
 
@@ -830,9 +904,9 @@ function initPartnerModal() {
         btn.addEventListener('click', () => {
             durationBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            currentDuration = btn.getAttribute('data-duration');
+            _modalDuration = btn.getAttribute('data-duration');
             // 长期 → 隐藏时间行；短期 → 显示时间行
-            timeModeRow.style.display = currentDuration === 'long' ? 'none' : 'flex';
+            timeModeRow.style.display = _modalDuration === 'long' ? 'none' : 'flex';
             scheduledRow.style.display = 'none';  // 切换时长时重置指定时间行
         });
     });
@@ -843,13 +917,12 @@ function initPartnerModal() {
         btn.addEventListener('click', () => {
             timeModeBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            currentUrgency = btn.getAttribute('data-mode');
-            scheduledRow.style.display = currentUrgency === 'scheduled' ? 'flex' : 'none';
+            _modalUrgency = btn.getAttribute('data-mode');
+            scheduledRow.style.display = _modalUrgency === 'scheduled' ? 'flex' : 'none';
         });
     });
 
     // ── 地点搜索自动补全（后端代理高德 inputtips）──
-    let selectedLocationCoords = null;  // "lng,lat" 字符串
     let suggestionIndex = -1;
 
     const locationInput = document.getElementById('partnerLocation');
@@ -894,7 +967,7 @@ function initPartnerModal() {
 
     // 输入时触发搜索
     locationInput.addEventListener('input', () => {
-        selectedLocationCoords = null;
+        _modalLocationCoords = null;
         _doSearch(locationInput.value);
     });
 
@@ -906,7 +979,7 @@ function initPartnerModal() {
         const name = li.getAttribute('data-name');
         if (loc && name) {
             locationInput.value = name;
-            selectedLocationCoords = loc;
+            _modalLocationCoords = loc;
             suggestionsBox.style.display = 'none';
             suggestionIndex = -1;
         }
@@ -956,7 +1029,7 @@ function initPartnerModal() {
         modal.removeAttribute('data-edit-id');
         form?.reset();
         // 重置时长类型为短期
-        currentDuration = 'short';
+        _modalDuration = 'short';
         durationBtns.forEach(b => b.classList.remove('active'));
         const defaultDurationBtn = document.querySelector('#durationRow .time-mode-btn[data-duration="short"]');
         if (defaultDurationBtn) defaultDurationBtn.classList.add('active');
@@ -965,10 +1038,10 @@ function initPartnerModal() {
         timeModeBtns.forEach(b => b.classList.remove('active'));
         const defaultTimeBtn = modal.querySelector('#timeModeRow .time-mode-btn[data-mode="now"]');
         if (defaultTimeBtn) defaultTimeBtn.classList.add('active');
-        currentUrgency = 'now';
+        _modalUrgency = 'now';
         if (scheduledRow) scheduledRow.style.display = 'none';
         // 重置地点搜索状态
-        selectedLocationCoords = null;
+        _modalLocationCoords = null;
         suggestionIndex = -1;
         if (suggestionsBox) suggestionsBox.style.display = 'none';
         modal.style.display = 'flex';
@@ -977,7 +1050,7 @@ function initPartnerModal() {
     const closeModal = () => {
         modal.style.display = 'none';
         form?.reset();
-        selectedLocationCoords = null;
+        _modalLocationCoords = null;
         suggestionIndex = -1;
         if (suggestionsBox) suggestionsBox.style.display = 'none';
     };
@@ -994,6 +1067,8 @@ function initPartnerModal() {
         const description = document.getElementById('partnerDesc')?.value.trim();
         const location = document.getElementById('partnerLocation')?.value.trim();
         const budget = document.getElementById('partnerBudget')?.value.trim();
+        const slots = parseInt(document.getElementById('partnerSlots')?.value) || 1;
+        const contact = document.getElementById('partnerContact')?.value.trim();
         const editId = modal.getAttribute('data-edit-id');
 
         if (!category || !title) {
@@ -1001,8 +1076,13 @@ function initPartnerModal() {
             return;
         }
 
+        // 地点填了但未从下拉选中 → 提醒但不阻塞
+        if (location && !_modalLocationCoords) {
+            showToast('⚠️ 请从下拉建议中选择地点，否则帖子不会显示在地图上');
+        }
+
         let event_time = null;
-        if (currentUrgency === 'scheduled') {
+        if (_modalUrgency === 'scheduled') {
             const dateVal = document.getElementById('partnerDate')?.value;
             const timeVal = document.getElementById('partnerTimePicker')?.value;
             if (!dateVal || !timeVal) {
@@ -1013,7 +1093,6 @@ function initPartnerModal() {
         }
 
         const tags = [category];
-        if (budget) tags.push(budget);
 
         const btnText = editId ? '更新中...' : '发布中...';
         submitBtn.disabled = true;
@@ -1022,23 +1101,25 @@ function initPartnerModal() {
         try {
             if (editId) {
                 await updatePost(parseInt(editId), {
-                    type: currentDuration === 'long' ? 'forum' : 'event',
+                    type: _modalDuration === 'long' ? 'forum' : 'event',
                     title, content: description || title, tags,
-                    location: selectedLocationCoords || null,
+                    location: _modalLocationCoords || null,
                     location_name: location || null,
-                    urgency: currentUrgency,
-                    event_time,
+                    urgency: _modalDuration === 'long' ? 'long_term' : _modalUrgency,
+                    event_time: _modalDuration === 'long' ? null : event_time,
+                    slots, budget, contact,
                 });
                 modal.removeAttribute('data-edit-id');
                 showToast('组局已更新');
             } else {
                 await createPost({
-                    type: currentDuration === 'long' ? 'forum' : 'event',
+                    type: _modalDuration === 'long' ? 'forum' : 'event',
                     title, content: description || title, tags,
-                    location: selectedLocationCoords || null,
+                    location: _modalLocationCoords || null,
                     location_name: location || null,
-                    urgency: currentUrgency,
-                    event_time,
+                    urgency: _modalDuration === 'long' ? 'long_term' : _modalUrgency,
+                    event_time: _modalDuration === 'long' ? null : event_time,
+                    slots, budget, contact,
                 });
                 showToast('发布成功');
             }
@@ -1060,26 +1141,30 @@ function initPartnerModal() {
 // ============================================================
 // 页面入口
 // ============================================================
+let _partnerDataLoaded = false;
+
 export async function initPartnerPage() {
-    // 纯事件绑定，不依赖任何数据，立即执行
+    // 纯事件绑定，不依赖任何数据，立即执行（仅首次）
     initPartnerModal();
     initPostDetailModal();
 
-    // 桌面端：使用 grid 布局（filter + waterfall 在右侧面板中，配合 display: contents）
+    // 桌面端：使用 grid 布局
     _ensureRightPanel();
+}
 
-    // 数据加载 + 筛选栏初始化 → 并行发起
+/** 加载找搭子数据（仅在首次进入找搭子页面时调用） */
+export async function loadPartnerData() {
+    if (_partnerDataLoaded) return;
+    _partnerDataLoaded = true;
+
     const dataPromise = partnersData.length ? Promise.resolve(partnersData) : loadPostsFromAPI();
     const filtersPromise = initFilters();
 
-    // 瀑布流渲染：等数据回来就立刻画（不等筛选栏）
     const posts = await dataPromise;
     renderWaterfall();
 
-    // 筛选栏独立完成
     await filtersPromise;
 
-    // 地图延迟初始化：等数据 + AMap SDK 都就绪
     initPreviewMap();
 }
 

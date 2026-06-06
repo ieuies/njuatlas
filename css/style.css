@@ -1979,6 +1979,16 @@ body,
     color: var(--text-secondary);
 }
 
+.guide-campus-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--atlas-primary, #6B21A5);
+    color: #fff;
+}
+
 .guide-price {
     font-size: 0.82rem;
     font-weight: 700;
@@ -2128,6 +2138,12 @@ body,
     line-height: 1.5;
 }
 
+.profile-campus {
+    margin: 0 0 2px 0;
+    font-size: 0.85rem;
+    color: var(--atlas-primary, #6B21A5);
+    font-weight: 500;
+}
 .profile-email-line {
     margin: 0;
     font-size: 0.8rem;
@@ -2652,7 +2668,7 @@ body,
         width: calc(100% - 36px) !important;
         max-width: 1280px !important;
         margin: 0 auto !important;
-        padding: 18px 0 30px !important;
+        padding: 24px 0 30px !important;
         min-height: calc(100vh - var(--atlas-topbar) - 24px);
         align-items: start;
     }
@@ -2662,10 +2678,10 @@ body,
         grid-column: 1;
         grid-row: 1 / 3;
         position: sticky;
-        top: calc(var(--atlas-topbar) + 18px);
-        height: calc(100vh - var(--atlas-topbar) - 36px);
+        top: calc(var(--atlas-topbar) + 24px);
+        height: calc(100vh - var(--atlas-topbar) - 48px);
         min-height: 480px;
-        max-height: calc(100vh - var(--atlas-topbar) - 36px);
+        max-height: calc(100vh - var(--atlas-topbar) - 48px);
         margin: 0 !important;
         display: flex;
         flex-direction: column;
@@ -3482,12 +3498,392 @@ body,
     }
 }
 
-/* ---- 桌面端 AI 页面：撑满可用高度 ---- */
+/* ========== 最终解决方案：桌面端地图顶部严格对齐 + 恢复正确高度 ========== */
+
+/* 桌面端（≥769px） */
 @media (min-width: 769px) {
-    #aiPage.active-page {
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: calc(100vh - var(--atlas-topbar)) !important;
-        overflow: hidden !important;
+    #partnerPage.active-page {
+        display: grid !important;
+        grid-template-columns: 380px 1fr !important;
+        gap: 16px !important;
+        align-items: start !important;
+        width: 100% !important;
+        max-width: 1280px !important;
+        margin: 0 auto !important;
+        padding: 24px 0 30px !important;
     }
+
+    /* 地图卡片：恢复原有高度，去除sticky偏移，但保留固定高度 */
+    #partnerPage .map-preview-card {
+        grid-column: 1 / 2 !important;
+        grid-row: 1 / 3 !important;
+        position: relative !important;
+        top: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        min-height: 480px !important;
+        max-height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        display: flex;
+        flex-direction: column;
+        align-self: start !important;
+    }
+
+    /* 地图主体占满卡片剩余高度 */
+    .map-preview-card .map-preview-body {
+        flex: 1;
+        position: relative;
+        min-height: 0;
+    }
+
+    .map-preview-card .map-container,
+    .map-preview-card #previewMap {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* 右侧筛选栏顶部对齐 */
+    #partnerPage .partner-filter {
+        grid-column: 2 / 3 !important;
+        grid-row: 1 / 2 !important;
+        margin: 0 !important;
+        padding: 10px !important;
+        align-self: start !important;
+    }
+
+    /* 右侧瀑布流 */
+    #partnerPage .partner-waterfall {
+        grid-column: 2 / 3 !important;
+        grid-row: 2 / 3 !important;
+        margin: 0 !important;
+        align-self: start !important;
+    }
+}
+
+/* 移动端（≤768px）：保持高度和贴边 */
+@media (max-width: 768px) {
+    .content-area {
+        padding: 0 !important;
+    }
+    #partnerPage.active-page {
+        padding: 0 !important;
+        width: 100% !important;
+        gap: 0 !important;
+    }
+    .map-preview-card {
+        margin: 0 !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        box-shadow: none !important;
+        height: auto !important;
+    }
+    .map-preview-body {
+        height: calc(50vh - var(--atlas-topbar) - 20px) !important;
+        min-height: 220px !important;
+        width: 100% !important;
+    }
+    .map-preview-body .map-container,
+    .map-preview-body #previewMap {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    .map-preview-card .map-preview-header,
+    .map-preview-card .map-legend {
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+    }
+}
+/* =====================================================================
+   AI 助手侧栏样式（类似 DeepSeek）
+   ===================================================================== */
+
+/* AI 页面容器：flex 布局 */
+#aiPage.active-page {
+    padding: 0 !important;
+    background: transparent;
+}
+
+.ai-container {
+    display: flex;
+    height: calc(100vh - var(--atlas-topbar));
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* ────────── 侧栏样式 ────────── */
+.ai-sidebar {
+    width: 280px;
+    background: var(--atlas-card);
+    border-right: 1px solid var(--atlas-line);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease, width 0.3s ease;
+    flex-shrink: 0;
+    z-index: 10;
+    backdrop-filter: blur(16px);
+}
+
+.ai-sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--atlas-line);
+}
+
+.ai-new-chat-btn {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 28px;
+    border: 1px solid var(--atlas-line);
+    background: var(--bg-tertiary);
+    color: var(--atlas-ink);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.ai-new-chat-btn:hover {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    border-color: transparent;
+    transform: translateY(-1px);
+}
+
+.ai-conversation-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 8px;
+}
+
+.ai-conv-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 12px;
+    margin-bottom: 4px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.ai-conv-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--atlas-line);
+}
+
+.ai-conv-item.active {
+    background: rgba(107, 33, 165, 0.1);
+    border-color: var(--atlas-purple);
+}
+
+.ai-conv-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.ai-conv-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--atlas-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.ai-conv-preview {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-conv-time {
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.ai-conv-delete {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.ai-conv-item:hover .ai-conv-delete {
+    opacity: 1;
+}
+
+.ai-conv-delete:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+/* 侧栏折叠按钮 */
+.ai-sidebar-toggle {
+    position: absolute;
+    right: -12px;
+    top: 20px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    transition: all 0.2s;
+}
+
+.ai-sidebar-toggle:hover {
+    background: var(--atlas-purple);
+    color: #fff;
+}
+
+/* 聊天主体区域 */
+.ai-chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-width: 0;
+    background: transparent;
+}
+
+/* 移动端展开按钮 */
+.ai-sidebar-expand {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    color: var(--atlas-ink);
+    cursor: pointer;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+}
+
+.ai-sidebar-expand:hover {
+    background: var(--atlas-purple);
+    color: #fff;
+}
+
+.ai-chat-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+/* 折叠状态（桌面端） */
+.ai-sidebar.collapsed {
+    width: 0;
+    overflow: hidden;
+    border-right: none;
+}
+
+.ai-sidebar.collapsed .ai-sidebar-toggle i {
+    transform: rotate(180deg);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .ai-container {
+        height: calc(100vh - var(--atlas-topbar) - 66px);
+    }
+    
+    .ai-sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        z-index: 30;
+        transform: translateX(-100%);
+        box-shadow: var(--atlas-shadow);
+    }
+    
+    .ai-sidebar.open {
+        transform: translateX(0);
+    }
+    
+    .ai-sidebar-toggle {
+        display: none;
+    }
+    
+    .ai-sidebar-expand {
+        display: flex !important;
+    }
+    
+    .ai-sidebar:not(.open) + .ai-chat-main .ai-sidebar-expand {
+        display: flex;
+    }
+    
+    .ai-chat-wrapper {
+        padding: 0 12px;
+    }
+}
+
+/* 加载状态 */
+.ai-conv-loading,
+.ai-conv-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+}
+/* ========== 桌面端侧栏折叠后显示展开按钮 ========== */
+@media (min-width: 769px) {
+    /* 侧栏折叠时，显示聊天主区域的展开按钮 */
+    .ai-sidebar.collapsed + .ai-chat-main .ai-sidebar-expand {
+        display: flex !important;
+    }
+    
+    /* 侧栏未折叠时，隐藏展开按钮 */
+    .ai-sidebar:not(.collapsed) + .ai-chat-main .ai-sidebar-expand {
+        display: none;
+    }
+    
+    /* 折叠按钮图标旋转效果（可选） */
+    .ai-sidebar.collapsed .ai-sidebar-toggle i {
+        transform: rotate(180deg);
+    }
+}
+
+/* 确保展开按钮在桌面端默认隐藏（已在原样式中隐藏，这里加强） */
+.ai-sidebar-expand {
+    display: none;
 }

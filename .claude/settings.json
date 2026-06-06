@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(curl -s \"https://restapi.amap.com/v3/assistant/inputtips?key=97ac6e711cde17463af06c10b8b05f42&keywords=%E5%A4%A7%E7%B1%B3&city=%E5%8D%97%E4%BA%AC\")",
-      "Bash(curl -s \"https://restapi.amap.com/v3/assistant/inputtips?key=97ac6e711cde17463af06c10b8b05f42&keywords=%E5%A4%A7%E7%B1%B3&city=320100\")"
-    ]
-  }
-}

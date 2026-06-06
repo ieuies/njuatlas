@@ -1,120 +1,47 @@
 import { searchPlaces } from '../api.js';
+import { getUser } from '../auth.js';
 import { showToast } from '../utils.js';
 
-// 南大周边吃喝玩乐数据（大众点评/美团风格）
-const allSpots = [
-    {
-        name: '可一书店·咖啡馆',
-        desc: '文艺书店+精品咖啡，安静自习好去处，周末常有读书会活动',
-        image: 'https://picsum.photos/id/20/400/200',
-        type: '咖啡',
-        rating: '4.8',
-        price: '¥35/人',
-        address: '仙林大学城杉湖东路'
-    },
-    {
-        name: '金鹰湖滨天地',
-        desc: '购物餐饮电影院一站式，海底捞、喜茶、太二等品牌齐全',
-        image: 'https://picsum.photos/id/30/400/200',
-        type: '美食',
-        rating: '4.5',
-        price: '¥80/人',
-        address: '仙林学海路1号'
-    },
-    {
-        name: '羊山公园',
-        desc: '露营野餐放风筝，周末休闲好去处，湖景步道适合跑步',
-        image: 'https://picsum.photos/id/15/400/200',
-        type: '玩乐',
-        rating: '4.6',
-        price: '免费',
-        address: '仙林大道与九乡河路交叉口'
-    },
-    {
-        name: '仙林湖公园',
-        desc: '环湖步道日落绝美，适合散步拍照，秋季芦苇荡超出片',
-        image: 'https://picsum.photos/id/96/400/200',
-        type: '玩乐',
-        rating: '4.7',
-        price: '免费',
-        address: '仙林湖路与纬地路交叉口'
-    },
-    {
-        name: '南京大学星湖',
-        desc: '校内最美观景点，黑天鹅栖息地，樱花季必打卡',
-        image: 'https://picsum.photos/id/29/400/200',
-        type: '校园',
-        rating: '4.9',
-        price: '免费',
-        address: '南京大学仙林校区内'
-    },
-    {
-        name: '杜厦图书馆',
-        desc: '亚洲最美大学图书馆之一，学习氛围浓厚，五楼观景台视野绝佳',
-        image: 'https://picsum.photos/id/26/400/200',
-        type: '校园',
-        rating: '4.9',
-        price: '需校园卡',
-        address: '南京大学仙林校区'
-    },
-    {
-        name: '瑞幸咖啡（仙林店）',
-        desc: '性价比咖啡首选，生椰拿铁必点，自习刷夜好伴侣',
-        image: 'https://picsum.photos/id/63/400/200',
-        type: '咖啡',
-        rating: '4.3',
-        price: '¥18/人',
-        address: '仙林大学城文苑路'
-    },
-    {
-        name: '大众书局·南大店',
-        desc: '校园旁的小众书店，选书品味独特，有座位可阅读',
-        image: 'https://picsum.photos/id/24/400/200',
-        type: '玩乐',
-        rating: '4.5',
-        price: '免费入场',
-        address: '仙林文苑路9号'
-    },
-    {
-        name: '食堂四楼·馨园餐厅',
-        desc: '南大校内最高档食堂，麻辣香锅和石锅拌饭是招牌',
-        image: 'https://picsum.photos/id/42/400/200',
-        type: '美食',
-        rating: '4.2',
-        price: '¥20/人',
-        address: '南京大学仙林校区四食堂'
-    },
-    {
-        name: '南大和园美食街',
-        desc: '校门口小吃一条街，烤冷面、煎饼果子、奶茶应有尽有',
-        image: 'https://picsum.photos/id/62/400/200',
-        type: '美食',
-        rating: '4.0',
-        price: '¥15/人',
-        address: '仙林大道南大和园'
-    },
-    {
-        name: '万达茂（仙林）',
-        desc: '大型购物中心，IMAX影城、溜冰场、亲子乐园设施齐全',
-        image: 'https://picsum.photos/id/33/400/200',
-        type: '玩乐',
-        rating: '4.4',
-        price: '¥100/人',
-        address: '仙林大学城文苑路'
-    },
-    {
-        name: '星巴克（仙林金鹰店）',
-        desc: '两层大空间，靠窗位看街景，适合小组讨论和远程办公',
-        image: 'https://picsum.photos/id/60/400/200',
-        type: '咖啡',
-        rating: '4.3',
-        price: '¥38/人',
-        address: '仙林学海路金鹰一楼'
-    }
-];
+// ── 校区坐标（WGS-84） ──
+const CAMPUS_COORDS = {
+    '鼓楼': [118.780, 32.058],
+    '仙林': [118.954, 32.114],
+    '浦口': [118.652, 32.157],
+    '苏州': [120.39, 31.36],
+};
+const DEFAULT_CAMPUS = '鼓楼';
+
+// ── 分类 → { types: 高德 POI 类型编码, keyword: 搜索关键词 }
+// 基于高德 POI 分类编码：https://lbs.amap.com/api/webservice/download
+const CATEGORY_CONFIG = {
+    '美食':     { types: '050000',                          keyword: '' },
+    '咖啡饮品': { types: '050500|050600|050700|050900',      keyword: '' },  // 咖啡厅+茶艺馆+饮品冷饮+甜品烘焙
+    '休闲娱乐': { types: '080300|080600',                    keyword: '' },  // 休闲娱乐+电影院剧院
+    '运动健身': { types: '080100',                          keyword: '' },  // 运动场馆
+    '购物商圈': { types: '060100|061000',                    keyword: '' },  // 商场购物中心+特色商业街
+    '景点公园': { types: '110000|140000',                    keyword: '' },  // 风景名胜+文化场馆
+};
+const SEARCH_RADIUS = 5000;
 
 let currentGuideCat = 'all';
+let currentGuideCampus = 'all';
+let _guideCache = {};  // { '鼓楼': [...items], '仙林': [...items], ... }
 
+// ── 工具 ──
+function _getCampusLocation(campus) {
+    const coords = CAMPUS_COORDS[campus] || CAMPUS_COORDS[DEFAULT_CAMPUS];
+    return `${coords[0]},${coords[1]}`;
+}
+
+function _resolveCampus() {
+    if (currentGuideCampus !== 'all') return currentGuideCampus;
+    const user = getUser();
+    const c = user?.campus || '';
+    if (CAMPUS_COORDS[c]) return c;
+    return DEFAULT_CAMPUS;
+}
+
+// ── 渲染 ──
 function renderGuideGrid(items) {
     const container = document.getElementById('guideGrid');
     if (!container) return;
@@ -126,7 +53,7 @@ function renderGuideGrid(items) {
 
     container.innerHTML = items.map((item, idx) => `
         <div class="guide-card" data-guide-idx="${idx}">
-            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + Math.random()}" alt="${esc(item.name)}" loading="lazy">
+            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy">
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
@@ -134,6 +61,7 @@ function renderGuideGrid(items) {
                 </div>
                 <div class="guide-desc">${esc(item.desc)}</div>
                 <div class="guide-meta">
+                    ${item.campus ? `<span class="guide-campus-tag">📍 ${esc(item.campus)}校区</span>` : ''}
                     <span class="guide-type">${esc(item.type)}</span>
                     ${item.address ? `<span style="font-size:0.75rem;color:var(--text-tertiary);">📍 ${esc(item.address)}</span>` : ''}
                     ${item.price ? `<span class="guide-price">${esc(item.price)}</span>` : ''}
@@ -142,7 +70,6 @@ function renderGuideGrid(items) {
         </div>
     `).join('');
 
-    // 绑定点击事件
     container.querySelectorAll('.guide-card').forEach(card => {
         card.addEventListener('click', () => {
             const idx = parseInt(card.getAttribute('data-guide-idx'));
@@ -151,15 +78,96 @@ function renderGuideGrid(items) {
     });
 }
 
-function filterGuideItems(cat) {
-    currentGuideCat = cat;
-    document.querySelectorAll('.guide-chip').forEach(chip => {
-        chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === cat);
+// ── 数据获取（按校区缓存） ──
+async function _fetchCampusData(campus) {
+    if (_guideCache[campus]) return _guideCache[campus];
+
+    const location = _getCampusLocation(campus);
+    const allItems = [];
+
+    // 错开请求避免同时 6 个并发触发限流（stagger 100ms per category）
+    let delay = 0;
+    const promises = Object.entries(CATEGORY_CONFIG).map(async ([cat, cfg]) => {
+        const ms = delay; delay += 100;
+        if (ms > 0) await new Promise(r => setTimeout(r, ms));
+        try {
+            const r = await searchPlaces(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
+            if (r.status === '1' && Array.isArray(r.pois)) {
+                r.pois.forEach(poi => {
+                    allItems.push({
+                        name: poi.name,
+                        desc: poi.address || '',
+                        image: poi.photos?.[0]?.url || '',
+                        type: cat,
+                        campus: campus,
+                        rating: poi.biz_ext?.rating || '',
+                        price: poi.biz_ext?.cost ? `¥${poi.biz_ext.cost}/人` : '',
+                        address: poi.address || '',
+                    });
+                });
+            }
+        } catch (e) {
+            console.warn(`高德搜索 ${cat}（${campus}）失败:`, e.message);
+        }
     });
-    const filtered = cat === 'all' ? allSpots : allSpots.filter(s => s.type === cat);
-    renderGuideGrid(filtered);
+
+    await Promise.all(promises);
+
+    // 去重（按名称）
+    const seen = new Set();
+    const deduped = allItems.filter(item => {
+        if (seen.has(item.name)) return false;
+        seen.add(item.name);
+        return true;
+    });
+
+    // 按评分降序排列（高德 weight 排序 + 本地评分排序双重保障）
+    deduped.sort((a, b) => {
+        const ra = parseFloat(a.rating) || 0;
+        const rb = parseFloat(b.rating) || 0;
+        return rb - ra;
+    });
+
+    _guideCache[campus] = deduped;
+    return deduped;
 }
 
+// ── 筛选与应用 ──
+async function _applyGuideFilters() {
+    const container = document.getElementById('guideGrid');
+    if (container) container.innerHTML = '<div class="guide-loading">加载中...</div>';
+
+    const campus = _resolveCampus();
+    try {
+        const allItems = await _fetchCampusData(campus);
+        let items = allItems;
+        if (currentGuideCat !== 'all') {
+            items = items.filter(s => s.type === currentGuideCat);
+        }
+        renderGuideGrid(items);
+    } catch (e) {
+        console.error('指南数据加载失败:', e);
+        if (container) container.innerHTML = '<div class="guide-loading">加载失败，请稍后重试</div>';
+    }
+}
+
+function filterGuideItems(cat) {
+    currentGuideCat = cat;
+    document.querySelectorAll('#guideFilter .guide-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === cat);
+    });
+    _applyGuideFilters();
+}
+
+function _filterGuideCampus(campus) {
+    currentGuideCampus = campus;
+    document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === campus);
+    });
+    _applyGuideFilters();
+}
+
+// ── 详情弹窗 ──
 function openGuideDetail(item) {
     const modal = document.getElementById('guideDetailModal');
     if (!modal) return;
@@ -187,6 +195,7 @@ function initGuideModals() {
     });
 }
 
+// ── 筛选栏初始化 ──
 function initGuideFilter() {
     const filterBar = document.getElementById('guideFilter');
     if (!filterBar || filterBar.dataset.ready) return;
@@ -199,30 +208,34 @@ function initGuideFilter() {
     });
 }
 
+function initGuideCampusFilter() {
+    const filterBar = document.getElementById('guideCampusFilter');
+    if (!filterBar || filterBar.dataset.ready) return;
+    filterBar.dataset.ready = '1';
+
+    const user = getUser();
+    const userCampus = user?.campus || '';
+    if (userCampus && ['鼓楼', '仙林', '浦口', '苏州'].includes(userCampus)) {
+        currentGuideCampus = userCampus;
+        document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === userCampus);
+        });
+    }
+
+    filterBar.querySelectorAll('.guide-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const campus = chip.getAttribute('data-guide-campus');
+            _filterGuideCampus(campus);
+        });
+    });
+}
+
+// ── 入口 ──
 export async function loadGuideData() {
     initGuideModals();
     initGuideFilter();
-    try {
-        const searchResult = await searchPlaces('美食', '南京', null, 1, 8);
-        if (searchResult.status === '1' && Array.isArray(searchResult.pois)) {
-            const amapPois = searchResult.pois.slice(0, 4).map(poi => ({
-                name: poi.name,
-                desc: poi.address || '',
-                image: poi.photos?.[0]?.url || `https://picsum.photos/400/200?random=${poi.id}`,
-                type: '美食',
-                rating: (3.5 + Math.random() * 1.3).toFixed(1),
-                price: '¥' + (20 + Math.floor(Math.random() * 80)) + '/人',
-                address: poi.address
-            }));
-            // 合并高德结果到数据源头部
-            const merged = [...amapPois, ...allSpots];
-            filterGuideItems(currentGuideCat);
-            return;
-        }
-    } catch (e) {
-        console.warn('高德搜索失败，使用本地数据:', e.message);
-    }
-    filterGuideItems(currentGuideCat);
+    initGuideCampusFilter();
+    _applyGuideFilters();
 }
 
 export function initGuidePage() {

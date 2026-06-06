@@ -1,4 +1,4 @@
-import { chatRecommend } from '../api.js';
+import { chatRecommend, getConversationList, getConversationMessages, deleteConversation } from '../api.js';
 import { showToast } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
@@ -54,14 +54,13 @@ function renderQuickQuestions() {
     if (!container) return;
     container.innerHTML = '';
     const questions = generateRandomQuestions(5);
-    questions.forEach(function (q) {
+    questions.forEach(q => {
         const btn = document.createElement('button');
         btn.className = 'quick-q-btn';
         btn.textContent = q;
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', () => {
             const input = document.getElementById('chatInput');
-            if (!input) return;
-            input.value = q;
+            if (input) input.value = q;
             sendMessage();
         });
         container.appendChild(btn);
@@ -71,6 +70,40 @@ function renderQuickQuestions() {
 function hideWelcome() {
     const welcome = document.getElementById('aiWelcome');
     if (welcome) welcome.style.display = 'none';
+}
+
+function showWelcome() {
+    const welcome = document.getElementById('aiWelcome');
+    if (welcome) welcome.style.display = 'flex';
+}
+
+function clearChatMessages() {
+    const messagesDiv = document.getElementById('chatMessages');
+    if (!messagesDiv) return;
+    const welcome = messagesDiv.querySelector('.ai-welcome');
+    messagesDiv.innerHTML = '';
+    if (welcome) messagesDiv.appendChild(welcome);
+    hideWelcome();
+}
+
+function renderMessages(messages) {
+    const messagesDiv = document.getElementById('chatMessages');
+    if (!messagesDiv) return;
+    const welcome = messagesDiv.querySelector('.ai-welcome');
+    messagesDiv.innerHTML = '';
+    if (welcome) messagesDiv.appendChild(welcome);
+    hideWelcome();
+    if (!messages || messages.length === 0) {
+        showWelcome();
+        return;
+    }
+    messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `chat-message ${msg.role === 'user' ? 'chat-user' : 'chat-bot'}`;
+        div.textContent = msg.role === 'assistant' ? stripMarkdown(msg.content) : msg.content;
+        messagesDiv.appendChild(div);
+    });
+    scrollToBottom();
 }
 
 function showThinking() {
@@ -93,9 +126,7 @@ function removeThinking() {
 
 function scrollToBottom() {
     const div = document.getElementById('chatMessages');
-    if (div) {
-        requestAnimationFrame(function () { div.scrollTop = div.scrollHeight; });
-    }
+    if (div) requestAnimationFrame(() => div.scrollTop = div.scrollHeight);
 }
 
 function escapeHtml(str) {
@@ -105,6 +136,153 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// ==================== 侧栏相关 ====================
+
+async function loadConversationList() {
+    if (!isLoggedIn()) return;
+    const listContainer = document.getElementById('aiConversationList');
+    if (!listContainer) return;
+    try {
+        const data = await getConversationList();
+        const sessions = data.items || [];
+        if (sessions.length === 0) {
+            listContainer.innerHTML = '<div class="ai-conv-empty"><i class="fas fa-comment"></i> 暂无历史对话</div>';
+            return;
+        }
+        listContainer.innerHTML = sessions.map(session => `
+            <div class="ai-conv-item" data-session-id="${escapeHtml(session.session_id)}">
+                <div class="ai-conv-content">
+                    <div class="ai-conv-title">${escapeHtml(session.last_message?.substring(0, 30) || '新对话')}</div>
+                    <div class="ai-conv-preview">${escapeHtml(formatSessionTime(session.last_at))}</div>
+                </div>
+                <div class="ai-conv-time">${formatRelativeTime(session.last_at)}</div>
+                <button class="ai-conv-delete" data-session-id="${escapeHtml(session.session_id)}" title="删除会话"><i class="fas fa-trash-alt"></i></button>
+            </div>
+        `).join('');
+
+        listContainer.querySelectorAll('.ai-conv-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.ai-conv-delete')) return;
+                const sid = item.getAttribute('data-session-id');
+                if (sid) loadConversation(sid);
+            });
+        });
+        listContainer.querySelectorAll('.ai-conv-delete').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const sid = btn.getAttribute('data-session-id');
+                if (sid && confirm('确定要删除这个对话吗？')) await deleteConversationHandler(sid);
+            });
+        });
+        if (currentSessionId) highlightCurrentSession(currentSessionId);
+    } catch (err) {
+        console.warn('加载会话列表失败:', err);
+        listContainer.innerHTML = '<div class="ai-conv-empty">加载失败，请刷新重试</div>';
+    }
+}
+
+function formatSessionTime(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    return d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatRelativeTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins}分钟前`;
+    if (diffHours < 24) return `${diffHours}小时前`;
+    if (diffDays < 7) return `${diffDays}天前`;
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+}
+
+function highlightCurrentSession(sessionId) {
+    document.querySelectorAll('.ai-conv-item').forEach(item => {
+        const sid = item.getAttribute('data-session-id');
+        item.classList.toggle('active', sid === sessionId);
+    });
+}
+
+async function loadConversation(sessionId) {
+    if (!sessionId) return;
+    try {
+        const data = await getConversationMessages(sessionId);
+        const messages = data.messages || [];
+        currentSessionId = sessionId;
+        clearChatMessages();
+        if (messages.length === 0) showWelcome();
+        else renderMessages(messages);
+        highlightCurrentSession(sessionId);
+        if (window.innerWidth <= 768) closeMobileSidebar();
+    } catch (err) {
+        showToast('加载对话失败: ' + err.message);
+    }
+}
+
+async function deleteConversationHandler(sessionId) {
+    try {
+        await deleteConversation(sessionId);
+        showToast('对话已删除');
+        if (currentSessionId === sessionId) startNewChat();
+        await loadConversationList();
+    } catch (err) {
+        showToast('删除失败: ' + err.message);
+    }
+}
+
+function startNewChat() {
+    currentSessionId = null;
+    clearChatMessages();
+    showWelcome();
+    highlightCurrentSession(null);
+}
+
+async function refreshSidebar() {
+    await loadConversationList();
+}
+
+// 侧栏 UI 控制
+function initSidebarControls() {
+    const sidebar = document.getElementById('aiSidebar');
+    const toggleBtn = document.getElementById('aiSidebarToggle');
+    const expandBtn = document.getElementById('aiSidebarExpand');
+    const newChatBtn = document.getElementById('aiNewChatBtn');
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => sidebar?.classList.toggle('collapsed'));
+    }
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => sidebar?.classList.add('open'));
+    }
+    if (sidebar) {
+        sidebar.addEventListener('click', (e) => { if (e.target === sidebar) closeMobileSidebar(); });
+    }
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => {
+            startNewChat();
+            if (window.innerWidth <= 768) closeMobileSidebar();
+        });
+    }
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            closeMobileSidebar();
+            sidebar?.classList.remove('open');
+        }
+    });
+}
+
+function closeMobileSidebar() {
+    document.getElementById('aiSidebar')?.classList.remove('open');
+}
+
+// ==================== 发送消息 ====================
+
 async function sendMessage() {
     const input = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendChatBtn');
@@ -113,7 +291,6 @@ async function sendMessage() {
 
     const msg = input.value.trim();
     if (!msg) return;
-
     if (!isLoggedIn()) {
         showToast('请先登录使用AI助手');
         return;
@@ -128,12 +305,17 @@ async function sendMessage() {
     userMsg.textContent = msg;
     messagesDiv.appendChild(userMsg);
     scrollToBottom();
-
     showThinking();
 
     try {
         const res = await chatRecommend(msg, currentSessionId);
-        if (res.session_id) currentSessionId = res.session_id;
+        if (res.session_id) {
+            const newSession = currentSessionId !== res.session_id;
+            currentSessionId = res.session_id;
+            if (newSession) await loadConversationList();
+            else await refreshSidebar();
+            highlightCurrentSession(currentSessionId);
+        }
         removeThinking();
 
         const rawReply = res.reply || '抱歉，AI 暂时无法回答';
@@ -147,15 +329,15 @@ async function sendMessage() {
         if (res.candidates && res.candidates.length) {
             const candDiv = document.createElement('div');
             candDiv.className = 'chat-message chat-bot';
-            let html = '<div class="ai-candidates">';
-            html += '<div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>';
-            res.candidates.forEach(function (c) {
-                html += '<div class="ai-candidate-item">';
-                html += '<span class="ai-candidate-name">' + escapeHtml(c.name) + '</span>';
-                html += '<span class="ai-candidate-meta">';
-                html += '<span>⭐ ' + escapeHtml(c.rating) + '</span>';
-                html += '<span>💰 ' + escapeHtml(c.cost) + '</span>';
-                html += '</span></div>';
+            let html = '<div class="ai-candidates"><div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>';
+            res.candidates.forEach(c => {
+                html += `<div class="ai-candidate-item">
+                            <span class="ai-candidate-name">${escapeHtml(c.name)}</span>
+                            <span class="ai-candidate-meta">
+                                <span>⭐ ${escapeHtml(c.rating)}</span>
+                                <span>💰 ${escapeHtml(c.cost)}</span>
+                            </span>
+                         </div>`;
             });
             html += '</div>';
             candDiv.innerHTML = html;
@@ -164,6 +346,7 @@ async function sendMessage() {
 
         scrollToBottom();
         renderQuickQuestions();
+        await refreshSidebar();
     } catch (e) {
         removeThinking();
         const errDiv = document.createElement('div');
@@ -177,12 +360,9 @@ async function sendMessage() {
     }
 }
 
-/**
- * 通用粒子飘落特效：为指定容器 id 注入彩色粒子。
- * @param {string} containerId
- */
-export function initParticlesForContainer(containerId) {
-    const container = document.getElementById(containerId);
+// 粒子效果
+function initParticles() {
+    const container = document.getElementById('aiParticles');
     if (!container) return;
     container.innerHTML = '';
     const colors = ['#7c3aed','#8b5cf6','#a78bfa','#c084fc','#e9d5ff','#f472b6','#818cf8','#c4b5fd'];
@@ -191,31 +371,29 @@ export function initParticlesForContainer(containerId) {
     for (let i = 0; i < count; i++) {
         const p = document.createElement('div');
         p.className = 'ai-particle';
-        // 粒子初始垂直位置设在容器上方外，配合 overflow:hidden 做到从顶部外掉落
-        const startTop = -(5 + Math.random() * 20) + 'vh';
-        p.style.top = startTop;
-        p.style.left = Math.random() * 100 + '%';
-        p.style.width = (3 + Math.random() * 6) + 'px';
-        p.style.height = (3 + Math.random() * 6) + 'px';
+        p.style.top = `-${5 + Math.random() * 20}vh`;
+        p.style.left = `${Math.random() * 100}%`;
+        p.style.width = `${3 + Math.random() * 6}px`;
+        p.style.height = `${3 + Math.random() * 6}px`;
         p.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
         p.style.background = colors[Math.floor(Math.random() * colors.length)];
-        p.style.animationDuration = (8 + Math.random() * 14) + 's';
-        p.style.animationDelay = Math.random() * 10 + 's';
-        p.style.opacity = (0.15 + Math.random() * 0.35);
+        p.style.animationDuration = `${8 + Math.random() * 14}s`;
+        p.style.animationDelay = `${Math.random() * 10}s`;
+        p.style.opacity = 0.15 + Math.random() * 0.35;
         frag.appendChild(p);
     }
     container.appendChild(frag);
 }
 
+// 初始化
 export function initAIPage() {
     const sendBtn = document.getElementById('sendChatBtn');
     const input = document.getElementById('chatInput');
     if (!sendBtn || !input) return;
 
     sendBtn.onclick = sendMessage;
-
     if (input.dataset.aiReady !== 'true') {
-        input.addEventListener('keypress', function (e) {
+        input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendMessage();
@@ -224,8 +402,16 @@ export function initAIPage() {
         input.dataset.aiReady = 'true';
     }
 
+    initSidebarControls();
+    if (isLoggedIn()) loadConversationList();
     renderQuickQuestions();
-    initParticlesForContainer('aiParticles');
+    initParticles();
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(initParticles, 400);
+    });
 }
 
 window.initAIPage = initAIPage;

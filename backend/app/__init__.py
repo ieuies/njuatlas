@@ -27,7 +27,6 @@ def create_app():
         app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "..", "foodmap.db")
 
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-        "pool_pre_ping": True,
         "pool_recycle": 300,
     }
 

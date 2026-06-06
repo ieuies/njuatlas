@@ -51,6 +51,7 @@ class SingleNote:
         if model is not None:
             # 包装已有 ORM 实例
             self._m = model
+            self._is_new = False
         else:
             # 根据传入字段新建 ORM 实例（tags 支持 list → JSON 字符串转换）
             tags_raw = kwargs.pop("tags", [])
@@ -58,6 +59,7 @@ class SingleNote:
                 tags_raw = json.loads(tags_raw) if tags_raw.startswith("[") else []
             self._m = EventPost(**kwargs)
             self._m.tags_raw = tags_raw  # 暂存，等 save() 时写入 post_tags 表
+            self._is_new = True
 
         # 暂存待写入的标签名列表
         self._pending_tags = getattr(self._m, "tags_raw", [])
@@ -71,10 +73,13 @@ class SingleNote:
 
     # ── 持久化 ────────────────────────────────────────────────
     def save(self):
-        """将帖子写入数据库（新建或更新），并同步 post_tags 关联。"""
+        """将帖子写入数据库（新建或更新），并同步 post_tags 关联。
+
+        优化：利用 PostTag.post relationship 延迟解析 FK，避免中间 flush，
+        将 INSERT event_posts + INSERT tags + INSERT post_tags 合并为一次 commit。
+        """
         compute_hot(self._m)
         db.session.add(self._m)
-        db.session.flush()  # 先拿到 self._m.id，才能写 post_tags
 
         # 同步标签：仅在 _pending_tags 非空时处理（新建帖子或明确要改标签时）
         if self._pending_tags:
@@ -82,38 +87,66 @@ class SingleNote:
             self._pending_tags = []
 
         db.session.commit()
+        self._is_new = False
         return self
 
     def _sync_tags(self, tag_names):
-        """将标签名列表写入 post_tags 表。
+        """将标签名列表写入 post_tags 表（批量优化版）。
 
-        步骤：删掉旧关联 → 逐个 find-or-create 标签 → 写入新关联 → 更新 usage_count。
+        - 新帖：直接创建关联，所有标签 usage_count +1
+        - 编辑帖：先记下旧标签 → 删旧关联 → 新标签加计数，移除的旧标签减计数
+        所有操作在同一事务中，save() 末尾一次 commit 即可。
         """
-        # 删旧
-        PostTag.query.filter_by(post_id=self._m.id).delete()
+        tag_names = [n.strip() for n in tag_names if n.strip()]
+        if not tag_names:
+            return
 
+        tag_set = set(tag_names)
+
+        # 1. 处理旧关联（仅编辑已有帖子时需要）
+        old_tag_names = set()
+        if not self._is_new:
+            # 记下旧标签名（用于后续计数调整）
+            old_tags = PostTag.query.filter_by(post_id=self._m.id).all()
+            old_tag_names = {pt.tag.name for pt in old_tags if pt.tag}
+            # 删除旧关联
+            from sqlalchemy import delete
+            db.session.execute(delete(PostTag).where(PostTag.post_id == self._m.id))
+
+        # 2. 批量查找已有标签（1 次查询替代 N 次）
+        existing_tags = {t.name: t for t in Tag.query.filter(Tag.name.in_(tag_names)).all()}
+
+        # 3. 批量创建缺失标签
         for name in tag_names:
-            name = name.strip()
-            if not name:
-                continue
-            tag = Tag.query.filter_by(name=name).first()
-            if not tag:
-                tag = Tag(name=name, category="unknown")
-                db.session.add(tag)
-                db.session.flush()
-            # 避免重复关联
-            existing = PostTag.query.filter_by(post_id=self._m.id, tag_id=tag.id).first()
-            if not existing:
-                db.session.add(PostTag(post_id=self._m.id, tag_id=tag.id))
-            tag.usage_count = (tag.usage_count or 0) + 1
+            if name not in existing_tags:
+                t = Tag(name=name, category="unknown")
+                db.session.add(t)
+                existing_tags[name] = t
+
+        # 4. 批量写入 PostTag 关联 + 调整 usage_count
+        #    新增的标签 +1，移除的旧标签 -1，保留的不变
+        added = tag_set - old_tag_names
+        removed = old_tag_names - tag_set
+        for name in tag_names:
+            tag = existing_tags[name]
+            db.session.add(PostTag(post=self._m, tag=tag))
+            if name in added:
+                tag.usage_count = (tag.usage_count or 0) + 1
+        for name in removed:
+            t = Tag.query.filter_by(name=name).first()
+            if t:
+                t.usage_count = max(0, (t.usage_count or 0) - 1)
+
+        # 缓存已解析的标签名，供 to_dict 复用
+        self._cached_tag_names = tag_names
 
     def delete(self):
         """删除帖子及其所有关联数据。"""
         post_id = self._m.id
-        PostTag.query.filter_by(post_id=post_id).delete()
-        PostComment.query.filter_by(post_id=post_id).delete()
-        PostLike.query.filter_by(post_id=post_id).delete()
-        EventParticipant.query.filter_by(post_id=post_id).delete()
+        PostTag.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        PostComment.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        PostLike.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        EventParticipant.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         db.session.delete(self._m)
         db.session.commit()
 
@@ -261,14 +294,25 @@ class SingleNote:
         db.session.commit()
 
     # ── 序列化 ────────────────────────────────────────────────
-    def to_dict(self, current_user_id=None, include_place=False):
+    def to_dict(self, current_user_id=None, include_place=False,
+                _tags=None, _is_liked=None, _participation=None):
         """输出为 API 可用的 dict。
 
         current_user_id 用于填充 is_liked / is_participated 等当前用户状态。
+
+        批量预加载参数（由 NoteSystem.search 传入，避免 N+1 查询）：
+        - _tags:          预加载的标签名列表，传入时跳过 PostTag 查询
+        - _is_liked:      预加载的点赞状态，传入时跳过 PostLike 查询
+        - _participation: 预加载的报名状态，传入时跳过 EventParticipant 查询
         """
         m = self._m
-        # 从 post_tags 关联表取标签名
-        tag_names = [pt.tag.name for pt in PostTag.query.filter_by(post_id=m.id).all() if pt.tag]
+        # 标签：优先级 _tags > _cached_tag_names > 数据库查询
+        if _tags is not None:
+            tag_names = _tags
+        elif hasattr(self, '_cached_tag_names') and self._cached_tag_names is not None:
+            tag_names = list(self._cached_tag_names)
+        else:
+            tag_names = [pt.tag.name for pt in PostTag.query.filter_by(post_id=m.id).all() if pt.tag]
 
         result = {
             "id": m.id,
@@ -283,6 +327,9 @@ class SingleNote:
             "urgency": m.urgency,
             "location": m.location,
             "location_name": m.location_name,
+            "max_participants": m.max_participants,
+            "budget": m.budget,
+            "contact": m.contact,
             "tags": tag_names,
             "is_official": m.is_official,
             "view_count": m.view_count or 0,
@@ -294,16 +341,22 @@ class SingleNote:
             "updated_at": m.updated_at.isoformat() if m.updated_at else None,
         }
 
-        # 当前用户的状态
+        # 当前用户的状态（优先用预加载值，避免子查询）
         if current_user_id:
-            result["is_liked"] = PostLike.query.filter_by(
-                post_id=m.id, user_id=current_user_id
-            ).first() is not None
+            if _is_liked is not None:
+                result["is_liked"] = _is_liked
+            else:
+                result["is_liked"] = PostLike.query.filter_by(
+                    post_id=m.id, user_id=current_user_id
+                ).first() is not None
             result["is_owner"] = m.user_id == current_user_id
-            part = EventParticipant.query.filter_by(
-                post_id=m.id, user_id=current_user_id
-            ).first()
-            result["participation_status"] = part.status if part else None
+            if _participation is not None:
+                result["participation_status"] = _participation
+            else:
+                part = EventParticipant.query.filter_by(
+                    post_id=m.id, user_id=current_user_id
+                ).first()
+                result["participation_status"] = part.status if part else None
 
         # 可选：附带场所信息
         if include_place and m.place:
@@ -344,9 +397,10 @@ class NoteSystem:
         self.user_id = user_id
 
     # ── 工厂：创建 SingleNote ─────────────────────────────────
-    def create_post(self, *, title, content, type="forum", tags=None,
+    def create_post(self, *, title, content, post_type="forum", tags=None,
                     place_id=None, event_time=None, urgency=None,
                     location=None, location_name=None,
+                    max_participants=None, budget=None, contact=None,
                     cover_image=None, is_official=False):
         """创建一个新帖子，返回 SingleNote 包装对象。
 
@@ -355,7 +409,7 @@ class NoteSystem:
             data = note.to_dict(current_user_id=...)
         """
         note = SingleNote(
-            type=type,
+            type=post_type,
             title=title,
             content=content,
             user_id=self.user_id,
@@ -364,6 +418,9 @@ class NoteSystem:
             urgency=urgency,
             location=location,
             location_name=location_name,
+            max_participants=max_participants,
+            budget=budget,
+            contact=contact,
             cover_image=cover_image,
             is_official=is_official,
         )
@@ -380,9 +437,9 @@ class NoteSystem:
         return SingleNote(model=model)
 
     # ── 更新帖子 ──────────────────────────────────────────────
-    def update_post(self, post_id, *, title=None, content=None, tags=None,
+    def update_post(self, post_id, *, post_type=None, title=None, content=None, tags=None,
                     event_time=None, urgency=None, location=None, location_name=None,
-                    cover_image=None):
+                    max_participants=None, budget=None, contact=None, cover_image=None):
         """更新帖子字段（仅帖主可操作，调用方需自己校验权限）。"""
         note = self.get_post(post_id)
         if not note:
@@ -393,12 +450,23 @@ class NoteSystem:
             note._m.content = content
         if event_time is not None:
             note._m.event_time = event_time
+        if post_type is not None:
+            note._m.type = post_type
         if urgency is not None:
             note._m.urgency = urgency
+        # 如果从 event 改为 forum，清空活动时间
+        if note._m.type == "forum":
+            note._m.event_time = None
         if location is not None:
             note._m.location = location
         if location_name is not None:
             note._m.location_name = location_name
+        if max_participants is not None:
+            note._m.max_participants = max_participants
+        if budget is not None:
+            note._m.budget = budget
+        if contact is not None:
+            note._m.contact = contact
         if cover_image is not None:
             note._m.cover_image = cover_image
         if tags is not None:
@@ -460,10 +528,49 @@ class NoteSystem:
 
         pagination = q.paginate(page=page, per_page=page_size, error_out=False)
 
+        # ── 批量预加载关联数据，避免 N+1 查询 ──────────────────
+        post_ids = [m.id for m in pagination.items]
+
+        # 标签：1 次查询取所有帖子的标签名
+        tags_map = {}  # {post_id: [tag_name, ...]}
+        if post_ids:
+            pt_rows = (
+                PostTag.query
+                .filter(PostTag.post_id.in_(post_ids))
+                .all()
+            )
+            for pt in pt_rows:
+                if pt.tag:
+                    tags_map.setdefault(pt.post_id, []).append(pt.tag.name)
+
+        # 点赞 & 报名状态：仅当已登录时查询
+        likes_set = set()      # {post_id, ...}
+        parts_map = {}         # {post_id: status}
+        if post_ids and self.user_id:
+            likes = (
+                PostLike.query
+                .filter(PostLike.post_id.in_(post_ids), PostLike.user_id == self.user_id)
+                .all()
+            )
+            likes_set = {l.post_id for l in likes}
+
+            parts = (
+                EventParticipant.query
+                .filter(EventParticipant.post_id.in_(post_ids),
+                        EventParticipant.user_id == self.user_id)
+                .all()
+            )
+            parts_map = {p.post_id: p.status for p in parts}
+
         items = []
         for model in pagination.items:
             note = SingleNote(model=model)
-            items.append(note.to_dict(current_user_id=self.user_id))
+            items.append(note.to_dict(
+                current_user_id=self.user_id,
+                _tags=tags_map.get(model.id, []),
+                _is_liked=model.id in likes_set if self.user_id else None,
+                _participation=parts_map.get(model.id) if self.user_id else None,
+            ))
 
         return {
             "items": items,
