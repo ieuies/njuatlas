@@ -2603,7 +2603,6 @@ body,
 
     /* 筛选栏容器在右列第一行 */
     
-}
 
     /* 瀑布流在右列第二行 */
     #partnerPage .partner-waterfall {
@@ -2657,6 +2656,8 @@ body,
     .fab-create-group:active {
         transform: scale(0.96);
     }
+
+    .bottom-tab-bar { display: none !important; }
 }
 
 /* 移动端：筛 ? ?地图  ?卡片，纵向排 ?*/
@@ -2673,7 +2674,6 @@ body,
         display: contents !important;
     }
 
-    }
     #partnerPage .partner-filter,
     .partner-right-panel > .partner-filter {
         margin: 0 !important;
@@ -2899,7 +2899,6 @@ body,
     line-height: 1 !important;
 }
 
-}
 
 /* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致 ?*/
 .profile-tabs {
@@ -3381,9 +3380,9 @@ body,
         margin: 0 !important;
         padding: 0 !important;
         width: 100% !important;
-        height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        height: calc(100vh - var(--atlas-topbar) - 48px - 66px) !important;
         min-height: 480px !important;
-        max-height: calc(100vh - var(--atlas-topbar) - 48px) !important;
+        max-height: calc(100vh - var(--atlas-topbar) - 48px - 66px) !important;
         display: flex;
         flex-direction: column;
         align-self: start !important;
