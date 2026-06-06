@@ -4,7 +4,7 @@ import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { initProfilePage, refreshProfile } from './pages/profile.js';
 import { showHomePage } from './pages/home.js';
-import { initAIPage } from './pages/ai.js';
+import { initAIPage, initParticles } from './pages/ai.js';
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
@@ -76,6 +76,17 @@ function switchPage(pageId) {
         const tabPage = item.getAttribute('data-page');
         item.classList.toggle('active', tabPage === pageId);
     });
+
+    // 粒子特效：每个页面有自己的粒子容器
+    const particleMap = {
+        home: 'homeParticles',
+        partner: 'partnerParticles',
+        ai: 'aiParticles',
+        guide: 'guideParticles',
+        profile: 'profileParticles',
+    };
+    const particleId = particleMap[pageId];
+    if (particleId) initParticles(particleId);
 
     // 页面切换时的初始化
     if (pageId === 'guide') initGuidePage();
@@ -232,6 +243,23 @@ function init() {
     // 默认加载首页，同时预加载找搭子数据，用户登录后进入页面不需要再等首屏初始化。
     switchPage('home');
     initPartnerPage();
+
+    // 窗口大小改变时，刷新当前页面的粒子效果（带防抖）
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            const particleMap = {
+                home: 'homeParticles',
+                partner: 'partnerParticles',
+                ai: 'aiParticles',
+                guide: 'guideParticles',
+                profile: 'profileParticles',
+            };
+            const particleId = particleMap[currentPage];
+            if (particleId) initParticles(particleId);
+        }, 400);
+    });
 }
 
 // 全局事件

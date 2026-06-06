@@ -277,7 +277,11 @@ textarea { resize: vertical; min-height: 100px; }
 
 .page { display: none; }
 
-.page.active-page { display: block; }
+.page.active-page {
+    display: block;
+    position: relative;
+    overflow: hidden;
+}
 
 /* ========== 找搭子页面：分类筛选 ========== */
 .partner-filter {
@@ -1474,6 +1478,8 @@ body,
 
 .page.active-page {
     display: block;
+    position: relative;
+    overflow: hidden;
 }
 
 /* 桌面端只用顶部导航；底部导航只给移动端使用。 */
@@ -3858,4 +3864,47 @@ body,
     padding: 24px;
     color: var(--text-tertiary);
     font-size: 0.85rem;
+}
+/* ========== 桌面端侧栏折叠后显示展开按钮 ========== */
+@media (min-width: 769px) {
+    /* 侧栏折叠时，显示聊天主区域的展开按钮 */
+    .ai-sidebar.collapsed + .ai-chat-main .ai-sidebar-expand {
+        display: flex !important;
+    }
+    
+    /* 侧栏未折叠时，隐藏展开按钮 */
+    .ai-sidebar:not(.collapsed) + .ai-chat-main .ai-sidebar-expand {
+        display: none;
+    }
+    
+    /* 折叠按钮图标旋转效果（可选） */
+    .ai-sidebar.collapsed .ai-sidebar-toggle i {
+        transform: rotate(180deg);
+    }
+}
+
+/* 确保展开按钮在桌面端默认隐藏（已在原样式中隐藏，这里加强） */
+.ai-sidebar-expand {
+    display: none;
+}
+/* ========== 修复未登录时右上角登录按钮为圆形 ========== */
+.top-bar-right .login-round-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.85rem !important;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--accent)) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* 保持圆形的悬停效果 */
+.top-bar-right .login-round-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }

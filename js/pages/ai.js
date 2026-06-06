@@ -254,21 +254,37 @@ function initSidebarControls() {
     const expandBtn = document.getElementById('aiSidebarExpand');
     const newChatBtn = document.getElementById('aiNewChatBtn');
 
+    // 桌面端：折叠/展开按钮（侧栏内部的 X 按钮）
     if (toggleBtn) {
         toggleBtn.addEventListener('click', () => sidebar?.classList.toggle('collapsed'));
     }
+
+    // 桌面端：展开按钮（聊天区域左上角菜单按钮）
     if (expandBtn) {
-        expandBtn.addEventListener('click', () => sidebar?.classList.add('open'));
+        expandBtn.addEventListener('click', () => {
+            sidebar?.classList.remove('collapsed');
+            if (window.innerWidth <= 768) {
+                sidebar?.classList.remove('open');
+            }
+        });
     }
+
+    // 移动端：点击背景关闭侧栏
     if (sidebar) {
-        sidebar.addEventListener('click', (e) => { if (e.target === sidebar) closeMobileSidebar(); });
+        sidebar.addEventListener('click', (e) => {
+            if (e.target === sidebar) closeMobileSidebar();
+        });
     }
+
+    // 新建对话按钮
     if (newChatBtn) {
         newChatBtn.addEventListener('click', () => {
             startNewChat();
             if (window.innerWidth <= 768) closeMobileSidebar();
         });
     }
+
+    // 窗口大小变化时重置状态
     window.addEventListener('resize', () => {
         if (window.innerWidth > 768) {
             closeMobileSidebar();
@@ -361,8 +377,8 @@ async function sendMessage() {
 }
 
 // 粒子效果
-function initParticles() {
-    const container = document.getElementById('aiParticles');
+export function initParticles(containerId = 'aiParticles') {
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
     const colors = ['#7c3aed','#8b5cf6','#a78bfa','#c084fc','#e9d5ff','#f472b6','#818cf8','#c4b5fd'];
@@ -405,12 +421,12 @@ export function initAIPage() {
     initSidebarControls();
     if (isLoggedIn()) loadConversationList();
     renderQuickQuestions();
-    initParticles();
+    initParticles('aiParticles');
 
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(initParticles, 400);
+        resizeTimer = setTimeout(() => initParticles('aiParticles'), 400);
     });
 }
 
