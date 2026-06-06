@@ -241,56 +241,5 @@
 <script type="module" src="js/pages/guide.js"></script>
 <script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/app.js"></script>
-<script>
-    (function() {
-        // 桌面端侧栏折叠/展开逻辑
-        function initDesktopSidebar() {
-            const sidebar = document.getElementById('aiSidebar');
-            const toggleBtn = document.getElementById('aiSidebarToggle');
-            const expandBtn = document.getElementById('aiSidebarExpand');
-            
-            if (!sidebar || !toggleBtn || !expandBtn) return;
-            
-            // 只在桌面端（宽度 >= 769px）应用此逻辑，避免与移动端冲突
-            function isDesktop() {
-                return window.innerWidth >= 769;
-            }
-            
-            // 折叠侧栏
-            function collapseSidebar() {
-                if (isDesktop()) {
-                    sidebar.classList.add('collapsed');
-                }
-            }
-            
-            // 展开侧栏
-            function expandSidebar() {
-                if (isDesktop()) {
-                    sidebar.classList.remove('collapsed');
-                }
-            }
-            
-            // 绑定折叠按钮（侧栏内部的 X 按钮）
-            toggleBtn.addEventListener('click', collapseSidebar);
-            
-            // 绑定展开按钮（聊天主区域左上角的菜单按钮）
-            expandBtn.addEventListener('click', expandSidebar);
-            
-            // 监听窗口大小变化，当从桌面切换到移动端时，移除 collapsed 类避免样式错乱
-            window.addEventListener('resize', function() {
-                if (!isDesktop()) {
-                    sidebar.classList.remove('collapsed');
-                }
-            });
-        }
-        
-        // DOM 加载完成后执行
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initDesktopSidebar);
-        } else {
-            initDesktopSidebar();
-        }
-    })();
-</script>
 </body>
 </html>
