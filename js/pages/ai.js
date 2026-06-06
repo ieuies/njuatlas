@@ -361,8 +361,8 @@ async function sendMessage() {
 }
 
 // 粒子效果
-function initParticles() {
-    const container = document.getElementById('aiParticles');
+export function initParticles(containerId = 'aiParticles') {
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
     const colors = ['#7c3aed','#8b5cf6','#a78bfa','#c084fc','#e9d5ff','#f472b6','#818cf8','#c4b5fd'];
@@ -405,12 +405,12 @@ export function initAIPage() {
     initSidebarControls();
     if (isLoggedIn()) loadConversationList();
     renderQuickQuestions();
-    initParticles();
+    initParticles('aiParticles');
 
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(initParticles, 400);
+        resizeTimer = setTimeout(() => initParticles('aiParticles'), 400);
     });
 }
 
