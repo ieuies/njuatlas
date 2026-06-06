@@ -254,29 +254,20 @@ function initSidebarControls() {
     const expandBtn = document.getElementById('aiSidebarExpand');
     const newChatBtn = document.getElementById('aiNewChatBtn');
 
-    // 桌面端：折叠/展开按钮（侧栏内部的 X 按钮）
     if (toggleBtn) {
         toggleBtn.addEventListener('click', () => sidebar?.classList.toggle('collapsed'));
     }
 
-    // 桌面端：展开按钮（聊天区域左上角菜单按钮）
     if (expandBtn) {
         expandBtn.addEventListener('click', () => {
-            sidebar?.classList.remove('collapsed');
             if (window.innerWidth <= 768) {
-                sidebar?.classList.remove('open');
+                sidebar?.classList.add('open');
+            } else {
+                sidebar?.classList.remove('collapsed');
             }
         });
     }
 
-    // 移动端：点击背景关闭侧栏
-    if (sidebar) {
-        sidebar.addEventListener('click', (e) => {
-            if (e.target === sidebar) closeMobileSidebar();
-        });
-    }
-
-    // 新建对话按钮
     if (newChatBtn) {
         newChatBtn.addEventListener('click', () => {
             startNewChat();
@@ -284,15 +275,16 @@ function initSidebarControls() {
         });
     }
 
-    // 窗口大小变化时重置状态
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
+    // 点击侧边栏外部区域关闭（移动端）
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth > 768) return;
+        const isSidebar = sidebar?.contains(e.target);
+        const isExpandBtn = expandBtn?.contains(e.target);
+        if (sidebar?.classList.contains('open') && !isSidebar && !isExpandBtn) {
             closeMobileSidebar();
-            sidebar?.classList.remove('open');
         }
     });
 }
-
 function closeMobileSidebar() {
     document.getElementById('aiSidebar')?.classList.remove('open');
 }
