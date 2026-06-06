@@ -155,12 +155,23 @@
                     <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
                     <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
                 </div>
+                <!-- 校区筛选 -->
+                <div class="guide-filter" id="guideCampusFilter">
+                    <button data-guide-campus="all" class="guide-chip active">全部</button>
+                    <button data-guide-campus="鼓楼" class="guide-chip">🏫 鼓楼</button>
+                    <button data-guide-campus="仙林" class="guide-chip">🌳 仙林</button>
+                    <button data-guide-campus="浦口" class="guide-chip">🔬 浦口</button>
+                    <button data-guide-campus="苏州" class="guide-chip">🌊 苏州</button>
+                </div>
+                <!-- 分类筛选 -->
                 <div class="guide-filter" id="guideFilter">
                     <button data-guide-cat="all" class="guide-chip active">全部</button>
                     <button data-guide-cat="美食" class="guide-chip">🍜 美食</button>
-                    <button data-guide-cat="咖啡" class="guide-chip">☕ 咖啡饮品</button>
-                    <button data-guide-cat="玩乐" class="guide-chip">🎯 休闲玩乐</button>
-                    <button data-guide-cat="校园" class="guide-chip">🏫 校园风光</button>
+                    <button data-guide-cat="咖啡饮品" class="guide-chip">☕ 咖啡饮品</button>
+                    <button data-guide-cat="休闲娱乐" class="guide-chip">🎬 休闲娱乐</button>
+                    <button data-guide-cat="运动健身" class="guide-chip">🏃 运动健身</button>
+                    <button data-guide-cat="购物商圈" class="guide-chip">🛍 购物商圈</button>
+                    <button data-guide-cat="景点公园" class="guide-chip">🌳 景点公园</button>
                 </div>
                 <div id="guideGrid" class="guide-grid"><div class="guide-loading">加载精彩推荐中...</div></div>
             </div>
@@ -178,6 +189,7 @@
                                 </div>
                                 <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
                                 <p class="profile-email-line" id="profileEmailLine"></p>
+                                <p class="profile-campus" id="profileCampus"></p>
                                 <div class="profile-status-row">
                                     <span id="profileEmailVerified" class="profile-status"></span>
                                     <button id="sendVerifyEmailBtn" class="small-btn" style="display:none;">验证邮箱</button>
@@ -203,7 +215,7 @@
 
             <!-- 详情模态框等 -->
             <div id="guideDetailModal" class="modal"><div class="modal-card guide-detail-card"><button class="modal-close-btn" id="closeGuideDetailBtn"><i class="fas fa-times"></i></button><img id="guideDetailImg" class="guide-detail-img" src="" alt=""><h2 id="guideDetailName"></h2><div class="guide-detail-meta"><span id="guideDetailRating" class="guide-detail-rating"></span><span id="guideDetailPrice"></span><span id="guideDetailType"></span></div><p id="guideDetailDesc"></p><p id="guideDetailAddr" style="color:var(--text-tertiary);font-size:0.85rem;"></p></div></div>
-            <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-edit"></i> 编辑资料</h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg" id="editAvatarPreview"><i class="fas fa-user"></i></div><span class="avatar-hint">头像根据用户名自动生成</span></div><label>用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label>个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label>兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><hr style="margin:16px 0;border-color:var(--atlas-line);"><label>修改密码（留空则不修改）</label><input type="password" id="editOldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> 危险操作</p><p class="danger-zone-desc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> 注销账号</button></div></form></div></div>
+            <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-edit"></i> 编辑资料</h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg" id="editAvatarPreview"><i class="fas fa-user"></i></div><span class="avatar-hint">头像根据用户名自动生成</span></div><label>用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label>个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label>兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><label>所在校区</label><select id="editCampus"><option value="">不设置</option><option value="鼓楼">鼓楼</option><option value="仙林">仙林</option><option value="浦口">浦口</option><option value="苏州">苏州</option></select><hr style="margin:16px 0;border-color:var(--atlas-line);"><label>修改密码（留空则不修改）</label><input type="password" id="editOldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> 危险操作</p><p class="danger-zone-desc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> 注销账号</button></div></form></div></div>
             <div id="fullMapPage" class="page"><div class="full-map-header"><button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> 返回</button><h2>附近组局地图</h2></div><div class="full-map-container" id="fullMapContainer"><div class="map-container" id="fullMap"></div></div></div>
         </div>
     </main>
