@@ -420,8 +420,44 @@ async function refreshPreviewMarkers() {
 }
 
 // ============================================================
-// 全屏地图
+// 移动端地图折叠/展开  (桌面端无此交互)
 // ============================================================
+function initMobileMapToggle() {
+    if (window.innerWidth > 768) return;
+    const card = document.getElementById('mapPreviewCard');
+    if (!card || card._toggleReady) return;
+    card._toggleReady = true;
+
+    const header = card.querySelector('.map-preview-header');
+    if (!header) return;
+
+    // 注入折叠指示箭头
+    header.style.cursor = 'pointer';
+    const title = header.querySelector('.map-preview-title');
+    if (title && !title.querySelector('.map-toggle-chevron')) {
+        const chevron = document.createElement('span');
+        chevron.className = 'map-toggle-chevron';
+        chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
+        title.appendChild(chevron);
+    }
+
+    // 点击 header 展开/折叠
+    header.addEventListener('click', (e) => {
+        // 不拦截"全屏地图"按钮的点击
+        if (e.target.closest('#mapExpandBtn')) return;
+        const isExpanded = card.classList.toggle('map-expanded');
+        // 展开后 resize 地图，让它填满新出现的高度
+        if (isExpanded) {
+            requestAnimationFrame(() => {
+                if (previewMap) previewMap.resize();
+                // 延迟再 resize 一次，确保 CSS transition 结束后尺寸准确
+                setTimeout(() => previewMap?.resize(), 400);
+            });
+        }
+    });
+
+    // 点击"全屏地图"按钮保持原有行为，无需额外处理
+}
 async function initFullMapMarkers() {
     try {
         await ensureAMap();
@@ -1475,13 +1511,24 @@ function initPartnerModal() {
 // ============================================================
 let _partnerDataLoaded = false;
 
+let _partnerPageInitialized = false;
+
 export async function initPartnerPage() {
     // 纯事件绑定，不依赖任何数据，立即执行（仅首次）
     initPartnerModal();
     initPostDetailModal();
+    initMobileMapToggle();
 
     // 桌面端：使用 grid 布局
     _ensureRightPanel();
+
+    // 窗口缩放时更新地图折叠交互（仅首次绑定，后续复用 initMobileMapToggle idempotent）
+    if (!_partnerPageInitialized) {
+        _partnerPageInitialized = true;
+        window.addEventListener('resize', () => {
+            initMobileMapToggle();
+        });
+    }
 }
 
 /** 加载找搭子数据（仅在首次进入找搭子页面时调用） */
