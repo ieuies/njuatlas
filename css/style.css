@@ -3887,3 +3887,24 @@ body,
 .ai-sidebar-expand {
     display: none;
 }
+/* ========== 修复未登录时右上角登录按钮为圆形 ========== */
+.top-bar-right .login-round-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.85rem !important;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--accent)) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* 保持圆形的悬停效果 */
+.top-bar-right .login-round-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
