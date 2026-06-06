@@ -4,9 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>nju.atlas · 找搭子</title>
-    <!-- 高德地图 CDN 预连接：将 DNS+TCP+TLS 提前到页面空闲时完成 -->
+    <!-- 高德地图：预连接 + 后台预下载 JS，点击找搭子时免等待 -->
     <link rel="dns-prefetch" href="https://webapi.amap.com">
     <link rel="preconnect" href="https://webapi.amap.com" crossorigin>
+    <link rel="prefetch" href="https://webapi.amap.com/maps?v=2.0&key=97ac6e711cde17463af06c10b8b05f42" as="script">
+    <!-- 大模块后台预加载：动态 import 时直接走缓存 -->
+    <link rel="modulepreload" href="js/pages/partner.js">
+    <link rel="modulepreload" href="js/pages/guide.js">
+    <link rel="modulepreload" href="js/pages/profile.js">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <script>
         window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
