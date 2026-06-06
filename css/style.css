@@ -660,7 +660,7 @@ textarea { resize: vertical; min-height: 100px; }
     backdrop-filter: blur(6px);
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 3000;
 }
 
 .modal-card {
@@ -1013,7 +1013,7 @@ textarea { resize: vertical; min-height: 100px; }
     color: white;
     padding: 10px 24px;
     border-radius: 24px;
-    z-index: 2000;
+    z-index: 3100;
     font-size: 0.85rem;
     font-weight: 500;
     box-shadow: var(--shadow-lg);
@@ -2485,7 +2485,7 @@ body,
         height: 66px;
         padding: 4px 8px;
         transform: translateX(-50%) !important;
-        z-index: 2800;
+        z-index: 2000;
         border-top: 1px solid var(--atlas-line);
         background: var(--atlas-card);
         backdrop-filter: blur(18px);
