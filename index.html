@@ -131,6 +131,7 @@
                     <button data-category="游戏搭子" class="filter-chip">游戏搭子</button>
                     <button data-category="电影搭子" class="filter-chip">电影搭子</button>
                 </div>
+                <button class="map-fab-mobile" id="mapFabMobile" title="查看地图"><i class="fas fa-map"></i></button>
                 <div class="map-preview-card" id="mapPreviewCard">
                     <div class="map-preview-header">
                         <span class="map-preview-title"><i class="fas fa-map-marker-alt"></i> 附近组局</span>
@@ -236,5 +237,18 @@
 <div id="postDetailModal" class="modal"><div class="modal-card post-detail-card"><button class="modal-close-btn" id="closePostDetailBtn"><i class="fas fa-times"></i></button><div class="post-detail-header"><div class="post-detail-tags" id="detailTags"></div><h2 class="post-detail-title" id="detailTitle"></h2><div class="post-detail-meta"><span id="detailPublisher"></span><span id="detailTime"></span><span id="detailLocation"></span><span id="detailBudget"></span><span id="detailContact"></span></div></div><div class="post-detail-body" id="detailBody"></div><div class="post-detail-stats"><span>浏览 <span id="detailViewCount">0</span></span><span>点赞 <span id="detailLikeCount">0</span></span><span>评论 <span id="detailCommentCount">0</span></span><span>参与 <span id="detailParticipantCount">0</span></span></div><div class="post-detail-actions" id="detailActions"><button class="detail-action-btn" id="detailLikeBtn">点赞</button><button class="detail-action-btn primary" id="detailParticipateBtn" style="display:none;">我要参加</button><span id="detailOwnerActions" style="display:none;gap:8px;"><button class="detail-action-btn" id="detailEditBtn">✏️ 编辑</button><button class="detail-action-btn" id="detailDeleteBtn" style="color:var(--danger);border-color:var(--danger);">🗑️ 删除</button></span></div><div class="post-detail-section" id="detailParticipantsSection" style="display:none;"><h4>已报名</h4><div class="post-detail-participants" id="detailParticipants"></div></div><div class="post-detail-section"><h4>评论 (<span id="detailCommentTotal">0</span>)</h4><div class="post-detail-comments" id="detailComments"><div class="detail-comments-empty">暂无评论，来抢沙发吧~</div></div></div><div class="post-detail-comment-input"><textarea id="detailCommentInput" rows="2" placeholder="写下你的评论..."></textarea><button id="detailCommentSubmitBtn" class="primary-btn">发送</button></div></div></div>
 
 <script type="module" src="js/bundle.js"></script>
+<script>
+    /* 移动端地图召唤按钮 → 点击打开全屏地图 */
+    (function() {
+        var btn = document.getElementById('mapFabMobile');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            if (window.innerWidth > 768) return;
+            if (typeof window.switchPage === 'function') {
+                window.switchPage('fullMap');
+        }
+        });
+    })();
+</script>
 </body>
 </html>
