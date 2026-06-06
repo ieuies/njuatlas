@@ -1,7 +1,7 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
-import { initAIPage, initParticles } from './pages/ai.js';
+import { initAIPage } from './pages/ai.js';
 
 // ── 按需懒加载：大模块（partner 63KB / guide 10KB / profile 21KB）在首次导航时才下载 ──
 let _partnerMod = null;
@@ -81,17 +81,6 @@ async function switchPage(pageId) {
         const tabPage = item.getAttribute('data-page');
         item.classList.toggle('active', tabPage === pageId);
     });
-
-    // 粒子特效：每个页面有自己的粒子容器
-    const particleMap = {
-        home: 'homeParticles',
-        partner: 'partnerParticles',
-        ai: 'aiParticles',
-        guide: 'guideParticles',
-        profile: 'profileParticles',
-    };
-    const particleId = particleMap[pageId];
-    if (particleId) initParticles(particleId);
 
     // 页面切换时的初始化（大模块按需动态加载）
     if (pageId === 'guide') {
@@ -206,23 +195,200 @@ function initThemeToggle() {
     });
 }
 
-// ========== 首页像素方块 ==========
-function initPixelField() {
-    const field = document.getElementById('pixelField');
-    if (!field || field.dataset.ready === 'true') return;
+// ========== 首页粒子背景 ==========
+function initHomeParticles() {
+    const canvas = document.getElementById('homeParticleCanvas');
+    if (!canvas || canvas.dataset.ready === 'true') return;
+    canvas.dataset.ready = 'true';
 
-    // CSS Grid 就像在纸上画格子，这里用 64 个格子围住 NJUATLAS 标识。
-    const cellCount = 64;
-    for (let i = 0; i < cellCount; i += 1) {
-        const cell = document.createElement('span');
-        cell.className = 'pixel-cell';
-        cell.style.setProperty('--i', i);
-        cell.style.setProperty('--row', Math.floor(i / 8));
-        cell.style.setProperty('--col', i % 8);
-        cell.style.setProperty('--delay', `${(i % 10) * 0.08}s`);
-        field.appendChild(cell);
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let mouseX = -9999, mouseY = -9999, mouseOn = false;
+    let animId;
+
+    function resize() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
     }
-    field.dataset.ready = 'true';
+
+    function getColors() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        return isDark ? [180, 170, 220] : [140, 100, 210];
+    }
+
+    function initParticles() {
+        const w = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
+        const h = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+        const count = Math.floor(w * h / 3500);
+        particles = [];
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: Math.random() * w, y: Math.random() * h,
+                vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
+                r: Math.random() * 2 + 0.8,
+                phase: Math.random() * Math.PI * 2,
+            });
+        }
+    }
+
+    function render() {
+        const w = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
+        const h = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+        const [pr, pg, pb] = getColors();
+        const t = performance.now() * 0.001;
+
+        ctx.clearRect(0, 0, w, h);
+
+        for (const p of particles) {
+            // 有机漂移
+            p.vx += Math.sin(t * 0.7 + p.phase) * 0.015;
+            p.vy += Math.cos(t * 0.6 + p.phase) * 0.015;
+
+            // 鼠标排斥
+            if (mouseOn) {
+                const dx = p.x - mouseX, dy = p.y - mouseY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 120 && dist > 0.5) {
+                    const f = (1 - dist / 120) * 1.5;
+                    p.vx += (dx / dist) * f;
+                    p.vy += (dy / dist) * f;
+                }
+            }
+
+            p.vx *= 0.96; p.vy *= 0.96;
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+            if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+
+            const alpha = 0.4 + Math.sin(t * 0.5 + p.phase) * 0.15;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${pr},${pg},${pb},${alpha})`;
+            ctx.fill();
+        }
+
+        // 粒子连线
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 100) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = `rgba(${pr},${pg},${pb},${0.06 * (1 - dist / 100)})`;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        animId = requestAnimationFrame(render);
+    }
+
+    resize(); initParticles(); render();
+
+    // 鼠标监听挂在 #homePage 上（canvas 是 pointer-events:none）
+    const homePage = document.getElementById('homePage');
+    homePage.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+        mouseOn = true;
+    }, { passive: true });
+    homePage.addEventListener('mouseleave', () => { mouseOn = false; });
+    homePage.addEventListener('touchmove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.touches[0].clientX - rect.left;
+        mouseY = e.touches[0].clientY - rect.top;
+        mouseOn = true;
+    }, { passive: true });
+    homePage.addEventListener('touchend', () => { mouseOn = false; });
+
+    let rt;
+    window.addEventListener('resize', () => {
+        clearTimeout(rt);
+        rt = setTimeout(() => { if (animId) cancelAnimationFrame(animId); resize(); initParticles(); render(); }, 350);
+    });
+
+    canvas._cleanup = () => { if (animId) cancelAnimationFrame(animId); };
+}
+
+// ========== 移动端首页图片网格（6×7） ==========
+function initMobileGrid() {
+    const grid = document.getElementById('homeMobileGrid');
+    if (!grid || grid.dataset.ready === 'true') return;
+    grid.dataset.ready = 'true';
+
+    const imgs = [
+        'image/landmarks/beida.jpg',
+        'image/landmarks/exercise.jpg',
+        'image/landmarks/gate.jpg',
+        'image/landmarks/liberary.jpg',
+        'image/landmarks/meat.jpg',
+        'image/landmarks/nailong.jpg',
+        'image/landmarks/sushi.jpg',
+        'image/landmarks/zifeng.jpg',
+    ];
+
+    // 42个格子，随机取图
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+        cells.push(imgs[Math.floor(Math.random() * imgs.length)]);
+    }
+
+    const frag = document.createDocumentFragment();
+    cells.forEach(src => {
+        const div = document.createElement('div');
+        div.className = 'mg-cell';
+        div.style.backgroundImage = `url('${src}')`;
+        frag.appendChild(div);
+    });
+    grid.appendChild(frag);
+}
+
+// ========== 首页卡片网格（9行等大错位 + 翻转） ==========
+function initHomeCards() {
+    const grid = document.getElementById('homeCardGrid');
+    if (!grid || grid.dataset.ready === 'true') return;
+    grid.dataset.ready = 'true';
+
+    const landmarks = [
+        'image/landmarks/beida.jpg',
+        'image/landmarks/exercise.jpg',
+        'image/landmarks/gate.jpg',
+        'image/landmarks/liberary.jpg',
+        'image/landmarks/meat.jpg',
+        'image/landmarks/nailong.jpg',
+        'image/landmarks/sushi.jpg',
+        'image/landmarks/zifeng.jpg',
+    ];
+
+    // 6行，基础6列，突出行向左多伸
+    const rowCounts = [6, 7, 6, 9, 8, 6];
+    rowCounts.forEach(count => {
+        const row = document.createElement('div');
+        row.className = 'home-card-row';
+        for (let c = 0; c < count; c++) {
+            const img = landmarks[Math.floor(Math.random() * landmarks.length)];
+            const card = document.createElement('div');
+            card.className = 'home-flip-card';
+            card.innerHTML = `
+                <div class="home-flip-inner">
+                    <div class="home-flip-front"></div>
+                    <div class="home-flip-back" style="background-image:url('${img}')"></div>
+                </div>
+            `;
+            row.appendChild(card);
+        }
+        grid.appendChild(row);
+    });
 }
 
 // ========== FAB 按钮 ==========
@@ -257,7 +423,9 @@ function init() {
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件
     initNavigation();
     initThemeToggle();
-    initPixelField();
+    initHomeParticles();
+    initHomeCards();
+    initMobileGrid();
     initFabButton();
     initMapExpand();
     initFullMapPage();
@@ -265,22 +433,6 @@ function init() {
     // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
     switchPage('home');
 
-    // 窗口大小改变时，刷新当前页面的粒子效果（带防抖）
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-            const particleMap = {
-                home: 'homeParticles',
-                partner: 'partnerParticles',
-                ai: 'aiParticles',
-                guide: 'guideParticles',
-                profile: 'profileParticles',
-            };
-            const particleId = particleMap[currentPage];
-            if (particleId) initParticles(particleId);
-        }, 400);
-    });
 }
 
 // 全局事件

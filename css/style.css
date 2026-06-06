@@ -1,6 +1,6 @@
 /* =====================================================================
-   nju.atlas · 找搭 ? ?移动端竖屏设 ?
-   主色: #5B2E8C (南大 ?  辅色: #F472B6 (玫瑰 ?
+   nju.atlas · 找搭�?�?移动端竖屏设�?
+   主色: #5B2E8C (南大�?  辅色: #F472B6 (玫瑰�?
    ===================================================================== */
 
 /* ========== CSS 变量 ========== */
@@ -66,10 +66,10 @@
     }
 }
 
-/* 确保地图容器内部元素也填 ?*/
+/* 确保地图容器内部元素也填�?*/
 .map-container, #previewMap, #fullMap { width: 100% !important; height: 100% !important; display: block; }
 
-/* 保持手机端视觉上居中与窄屏限 ?*/
+/* 保持手机端视觉上居中与窄屏限�?*/
 @media (max-width: 480px) {
     .content-area, .page, .map-preview-card, .partner-waterfall, .guide-grid {
         max-width: 480px;
@@ -93,7 +93,7 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* ====== 全局滚动条美 ?====== */
+/* ====== 全局滚动条美�?====== */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -139,13 +139,13 @@ input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
 textarea { resize: vertical; min-height: 100px; }
 
 /* =====================================================================
-   移动端布局：主 ?+ 底部Tab + 悬浮元素
+   移动端布局：主�?+ 底部Tab + 悬浮元素
    ===================================================================== */
 .app-layout.mobile-layout {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    /* 使用视口宽度，避免两侧留 ?*/
+    /* 使用视口宽度，避免两侧留�?*/
     width: 100vw;
     max-width: 100vw;
     overflow-x: hidden;
@@ -161,7 +161,7 @@ textarea { resize: vertical; min-height: 100px; }
     padding-bottom: calc(var(--bottom-tab-height) + 16px);
 }
 
-/* ========== 顶部标题 ?========== */
+/* ========== 顶部标题�?========== */
 .top-bar {
     height: var(--topbar-height);
     display: flex;
@@ -283,7 +283,7 @@ textarea { resize: vertical; min-height: 100px; }
     overflow: hidden;
 }
 
-/* ========== 找搭子页面：分类筛 ?========== */
+/* ========== 找搭子页面：分类筛�?========== */
 .partner-filter {
     display: flex;
     flex-wrap: nowrap;
@@ -378,7 +378,7 @@ textarea { resize: vertical; min-height: 100px; }
     overflow: hidden;
 }
 
-/* 高德地图容器（必须有明确宽高 ?*/
+/* 高德地图容器（必须有明确宽高�?*/
 .map-container {
     width: 100%;
     height: 100%;
@@ -588,7 +588,7 @@ textarea { resize: vertical; min-height: 100px; }
     border: 1px solid var(--gray-200);
 }
 
-/* ========== 指南页面瀑布 ?========== */
+/* ========== 指南页面瀑布�?========== */
 .guide-grid {
     column-count: 2;
     column-gap: 12px;
@@ -660,7 +660,7 @@ textarea { resize: vertical; min-height: 100px; }
     backdrop-filter: blur(6px);
     justify-content: center;
     align-items: center;
-    z-index: 3000;
+    z-index: 1000;
 }
 
 .modal-card {
@@ -825,7 +825,7 @@ textarea { resize: vertical; min-height: 100px; }
     padding: 14px;
 }
 
-/* 时间模式选择 ?*/
+/* 时间模式选择�?*/
 .time-mode-row {
     display: flex;
     align-items: center;
@@ -1013,7 +1013,7 @@ textarea { resize: vertical; min-height: 100px; }
     color: white;
     padding: 10px 24px;
     border-radius: 24px;
-    z-index: 3100;
+    z-index: 2000;
     font-size: 0.85rem;
     font-weight: 500;
     box-shadow: var(--shadow-lg);
@@ -1066,18 +1066,16 @@ button {
     transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease;
     cursor: pointer;
 }
-/* 仅对明确的可点击按钮做按下缩放，避免影响地图、模态框等内部按 ?*/
+/* 仅对明确的可点击按钮做按下缩放，避免影响地图、模态框等内部按�?*/
 .filter-chip:active,
 .join-btn:active,
 .primary-btn:active,
 .secondary-btn:active,
 .small-btn:active,
 .detail-action-btn:active,
-.hero-primary-btn:active,
-.hero-secondary-btn:active,
 .fab-create-group:active { transform: scale(0.96); }
 
-/* 单列适配（小屏幕 ?*/
+/* 单列适配（小屏幕�?*/
 @media (max-width: 380px) {
     .partner-waterfall { column-count: 1; }
     .guide-grid { column-count: 1; }
@@ -1195,7 +1193,7 @@ button {
     margin: 0 0 10px 0;
 }
 
-/* 已报名用 ?*/
+/* 已报名用�?*/
 .post-detail-participants {
     display: flex;
     flex-wrap: wrap;
@@ -1349,7 +1347,7 @@ button {
     white-space: nowrap;
 }
 
-/* 回复输入 ?*/
+/* 回复输入�?*/
 .detail-reply-input-row {
     display: flex;
     gap: 6px;
@@ -1485,7 +1483,7 @@ body,
     overflow: hidden;
 }
 
-/* 桌面端只用顶部导航；底部导航只给移动端使用 ?*/
+/* 桌面端只用顶部导航；底部导航只给移动端使用�?*/
 .bottom-tab-bar {
     display: none !important;
 }
@@ -1589,9 +1587,7 @@ body,
 .primary-btn,
 .secondary-btn,
 .small-btn,
-.join-btn,
-.hero-primary-btn,
-.hero-secondary-btn {
+.join-btn {
     min-height: 44px;
     border-radius: 999px;
     transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
@@ -1607,8 +1603,7 @@ body,
 .logout-btn,
 .map-expand-btn,
 .secondary-btn,
-.small-btn,
-.hero-secondary-btn {
+.small-btn {
     border: 1px solid var(--atlas-line);
     background: var(--atlas-card);
     color: var(--atlas-ink);
@@ -1616,8 +1611,7 @@ body,
 }
 
 .primary-btn,
-.join-btn,
-.hero-primary-btn {
+.join-btn {
     border: 0;
     background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
     color: #fff;
@@ -1626,175 +1620,133 @@ body,
 .desktop-nav-item:hover,
 .theme-toggle-btn:hover,
 .login-round-btn:hover,
-.hero-primary-btn:hover,
-.hero-secondary-btn:hover,
 .partner-card:hover,
 .guide-card:hover,
-.feature-card:hover,
 .profile-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--atlas-shadow-strong);
 }
 
-.atlas-hero {
-    position: relative;
-    min-height: calc(100vh - var(--atlas-topbar));
-    padding: clamp(68px, 9vw, 110px) 20px 56px;
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-}
+/* =====================================================================
+   首页新版布局
+   桌面：左侧品牌 + 右侧卡片网格 + 底部功能
+   移动：品牌在上 + 功能卡片在下
+   ===================================================================== */
 
-.pixel-field {
-    position: absolute;
-    left: 50%;
-    top: 43%;
-    display: grid;
-    grid-template-columns: repeat(8, clamp(18px, 4vw, 42px));
-    grid-auto-rows: clamp(18px, 4vw, 42px);
-    gap: clamp(8px, 1.4vw, 15px);
-    transform: translate(-50%, -50%) rotate(-8deg);
-    opacity: 0.78;
-    pointer-events: none;
-    animation: pixelFieldDrift 12s ease-in-out infinite;
-}
+/* ── 旧版 hero 隐藏 ── */
+.atlas-hero,.hero-canvas,.hero-content,.hero-kicker,.hero-subtitle,.hero-actions,
+.hero-primary-btn,.hero-secondary-btn,.feature-strip { display: none !important; }
 
-.pixel-cell {
-    position: relative;
-    border-radius: 9px;
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6, #a78bfa);
-    box-shadow: 0 18px 42px rgba(124, 58, 237, 0.25);
-    animation: pixelFloat 4.8s ease-in-out infinite, pixelPulse 7.6s ease-in-out infinite;
-    animation-delay: var(--delay);
-    will-change: transform, opacity;
-}
+/* =====================================================================
+   首页新版布局
+   ===================================================================== */
 
-.pixel-cell::after {
-    content: "";
-    position: absolute;
-    inset: 2px;
-    border-radius: 7px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 55%);
-}
-
-.hero-content {
-    position: relative;
-    z-index: 1;
-    width: min(980px, 100%);
-    text-align: center;
-}
-
-.hero-kicker {
-    margin: 0 0 14px;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: clamp(0.72rem, 1.6vw, 0.95rem);
-    font-weight: 950;
-    letter-spacing: 0.18em;
-}
-
-.hero-content h1 {
-    margin: 0;
-    color: #fff;
-    font-size: clamp(3.2rem, 11vw, 7.8rem);
-    font-weight: 950;
-    letter-spacing: -0.09em;
-    line-height: 0.9;
-    text-shadow: 0 18px 50px rgba(20, 8, 36, 0.28);
-}
-
-.hero-subtitle {
-    margin: 22px auto 0;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: clamp(1rem, 2.6vw, 1.35rem);
-    font-weight: 800;
-}
-
-.hero-actions {
+.home-hero {
     display: flex;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 14px;
-    margin-top: 30px;
+    width: 100%;
+    height: calc(100vh - var(--atlas-topbar) - 155px);
+    min-height: 520px;
+    padding: 0 0 0 40px;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative; z-index: 2;
 }
 
-.hero-primary-btn,
-.hero-secondary-btn {
-    min-width: 144px;
+/* 移动端图片网格（桌面隐藏） */
+.home-mobile-grid { display: none; }
+
+/* 全屏粒子 canvas（z-index:0 置于内容下层，不拦截鼠标） */
+.home-particles {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 0; pointer-events: none;
+}
+
+/* 左侧品牌 */
+.home-brand {
+    flex: 0 0 auto;
+    min-width: 340px;
+    position: relative; display: flex; align-items: center; justify-content: center;
     padding: 0 24px;
-    font-size: 0.95rem;
-    font-weight: 950;
+}
+
+/* 右侧卡片区 */
+.home-card-area {
+    flex: 1;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 10px 14px 10px 0;
+    box-sizing: border-box;
+}
+.home-card-grid {
+    display: flex; flex-direction: column; gap: 6px;
+}
+.home-card-row {
+    display: flex; gap: 6px; justify-content: flex-end;
+}
+.home-brand-inner {
+    position: relative; z-index: 1; text-align: left;
+    padding: 30px 10px; max-width: 420px;
+}
+.home-brand-kicker { margin: 0 0 8px; font-size: 0.7rem; font-weight: 750; letter-spacing: 0.17em; color: var(--text-tertiary); }
+.home-brand-title { margin: 0 0 10px; font-size: clamp(3.6rem,6.5vw,6rem); font-weight: 950; letter-spacing: -0.07em; line-height: 1.04; color: var(--atlas-ink); }
+.home-brand-sub { margin: 0 0 26px; font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; }
+.home-brand-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.home-brand-btn { padding: 10px 22px; border-radius: 999px; font-size: 0.84rem; font-weight: 700; cursor: pointer; border: none; transition: var(--transition-fast); }
+.home-brand-btn.primary { background: var(--atlas-purple); color: #fff; }
+.home-brand-btn.primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.home-brand-btn.secondary { background: transparent; color: var(--atlas-ink); border: 1.5px solid var(--atlas-line); }
+.home-brand-btn.secondary:hover { background: var(--bg-tertiary); }
+/* 卡片 + 3D 翻转 */
+.home-flip-card {
+    width: 107px; height: 107px; flex: 0 0 107px;
     cursor: pointer;
+    perspective: 600px;
+}
+.home-flip-inner {
+    position: relative; width: 100%; height: 100%;
+    transition: transform 0.4s ease;
+    transform-style: preserve-3d;
+}
+.home-flip-card:hover .home-flip-inner {
+    transform: rotateY(180deg);
+}
+.home-flip-front,
+.home-flip-back {
+    position: absolute; inset: 0; border-radius: 6px; overflow: hidden;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.home-flip-front {
+    background: var(--atlas-card); border: 1px solid var(--atlas-line);
+}
+.home-flip-back {
+    transform: rotateY(180deg);
+    background-size: cover; background-position: center;
 }
 
-.hero-primary-btn {
-    background: linear-gradient(135deg, #fff, #ead7ff);
-    color: #3a155b;
+/* 底部功能 */
+.home-features {
+    display: grid; grid-template-columns: repeat(4,1fr); gap: 14px;
+    width: 100%; max-width: 1100px; margin: 0 auto;
+    padding: 0 24px 16px; box-sizing: border-box;
+    position: relative; z-index: 2;
 }
+.home-feat-card { padding: 12px 16px; border-radius: 12px; background: var(--atlas-card); border: 1px solid var(--atlas-line); cursor: pointer; transition: all 0.25s ease; }
+.home-feat-card:hover { transform: translateY(-3px); box-shadow: var(--atlas-shadow-strong); }
+.home-feat-num { display: inline-block; font-size: 0.65rem; font-weight: 900; color: var(--atlas-purple); background: rgba(124,58,237,0.08); padding: 2px 8px; border-radius: 999px; margin-bottom: 6px; }
+.home-feat-card h3 { margin: 0 0 4px; font-size: 0.9rem; font-weight: 800; color: var(--atlas-ink); }
+.home-feat-card p { margin: 0; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.45; }
 
-.hero-secondary-btn {
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.28);
-}
-
-.feature-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 18px;
-    width: min(1120px, calc(100% - 40px));
-    margin: -20px auto 0;
-    padding: 24px 0 56px;
-    position: relative;
-    z-index: 1;
-}
-
-.feature-card,
-.partner-card,
-.guide-card,
-.profile-card,
-.profile-stat,
-.modal-card,
-.map-preview-card,
-.full-map-container {
-    border: 0 !important;
-    border-radius: 18px;
-    background: var(--atlas-card) !important;
-    box-shadow: var(--atlas-shadow);
-    backdrop-filter: blur(16px);
-}
-
-.feature-card {
-    min-height: 200px;
-    padding: 24px;
-}
-
-.feature-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 28px;
-    margin-bottom: 18px;
-    border-radius: 999px;
-    background: rgba(124, 58, 237, 0.1);
-    color: var(--atlas-purple);
-    font-weight: 950;
-    font-size: 0.8rem;
-}
-
-.feature-card h3 {
-    margin: 0 0 10px;
-    color: var(--atlas-ink);
-    font-size: 1.1rem;
-    font-weight: 800;
-}
-
-.feature-card p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.75;
-}
+/* 夜间 */
+:root[data-theme="dark"] .home-brand-kicker { color: rgba(255,255,255,0.5); }
+:root[data-theme="dark"] .home-brand-title { color: #fff; text-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+:root[data-theme="dark"] .home-brand-sub { color: rgba(255,255,255,0.6); }
+:root[data-theme="dark"] .home-brand-btn.primary { background: linear-gradient(135deg,#fff,#ead7ff); color: #3a155b; }
+:root[data-theme="dark"] .home-brand-btn.secondary { color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.18); }
+:root[data-theme="dark"] .home-brand-btn.secondary:hover { background: rgba(255,255,255,0.07); }
+:root[data-theme="dark"] .home-flip-front { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.07); }
+:root[data-theme="dark"] .home-feat-card { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.07); }
+:root[data-theme="dark"] .home-feat-card h3 { color: #e8e4f0; }
+:root[data-theme="dark"] .home-feat-card p { color: rgba(255,255,255,0.5); }
+:root[data-theme="dark"] .home-feat-num { color: #a78bfa; background: rgba(167,139,250,0.12); }
 
 #partnerPage,
 #guidePage,
@@ -1848,7 +1800,7 @@ body,
     column-count: auto !important;
 }
 
-/* ====== 吃喝玩乐指南（大众点 ?美团风格 ?====== */
+/* ====== 吃喝玩乐指南（大众点�?美团风格�?====== */
 .guide-header {
     text-align: center;
     margin-bottom: 16px;
@@ -2160,7 +2112,7 @@ body,
     margin-top: 6px;
 }
 
-/* 数据统计 ?*/
+/* 数据统计�?*/
 .profile-stats-row {
     display: flex;
     justify-content: space-around;
@@ -2234,7 +2186,7 @@ body,
     box-shadow: 0 4px 12px rgba(107, 33, 165, 0.25);
 }
 
-/* Tab 内容 ?*/
+/* Tab 内容�?*/
 .profile-tab-content {
     min-height: 200px;
 }
@@ -2245,7 +2197,7 @@ body,
     color: var(--text-tertiary);
 }
 
-/* 内容卡片（用 ?Tab 内） */
+/* 内容卡片（用�?Tab 内） */
 .profile-content-card {
     background: var(--atlas-card);
     border-radius: 14px;
@@ -2338,7 +2290,7 @@ body,
     background: var(--bg-primary);
 }
 
-/* 危险操作 ?*/
+/* 危险操作�?*/
 .danger-zone {
     padding: 12px 0 0;
 }
@@ -2396,22 +2348,6 @@ body,
     color: #fff;
 }
 
-@keyframes pixelFloat {
-    0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-12px) scale(1.04); }
-}
-
-@keyframes pixelFieldDrift {
-    0%, 100% { translate: 0 0; }
-    35% { translate: 16px -9px; }
-    70% { translate: -12px 10px; }
-}
-
-@keyframes pixelPulse {
-    0%, 100% { opacity: 0.58; }
-    45% { opacity: 0.96; }
-}
-
 @media (max-width: 768px) {
     :root {
         --atlas-topbar: 58px;
@@ -2427,7 +2363,7 @@ body,
         display: none !important;
     }
 
-    /* 移动端退出按钮缩 ?*/
+    /* 移动端退出按钮缩�?*/
     .logout-btn {
         width: 28px !important;
         height: 28px !important;
@@ -2444,26 +2380,57 @@ body,
         font-size: 1.35rem;
     }
 
-    .atlas-hero {
-        min-height: calc(100vh - var(--atlas-topbar));
-        padding: 52px 16px 36px;
+    /* 首页移动端 */
+    .home-hero {
+        flex-direction: column;
+        height: auto; min-height: auto; max-height: none;
+        padding: 0; gap: 0; overflow: visible;
     }
-
-    .hero-content h1 {
-        font-size: clamp(3rem, 15vw, 4.1rem);
+    .home-particles { display: none; }
+    /* 移动端图片网格背景 */
+    .home-mobile-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        grid-template-rows: repeat(7, 1fr);
+        height: 50vh;
+        min-height: 280px;
+        -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+        mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
     }
-
-    .pixel-field {
-        grid-template-columns: repeat(8, 20px);
-        grid-auto-rows: 20px;
-        gap: 10px;
+    .home-mobile-grid .mg-cell {
+        background-size: cover;
+        background-position: center;
     }
+    .home-brand {
+        flex: none; width: 100%; text-align: center;
+        margin-top: -18vh;
+        position: relative; z-index: 3;
+    }
+    .home-brand-inner { text-align: center; padding: 10px 0; max-width: none; }
+    .home-brand-title { font-size: 2.6rem; }
+    .home-brand-actions { justify-content: center; }
+    .home-card-area { display: none !important; }
+    .home-features {
+        grid-template-columns: 1fr 1fr; gap: 10px;
+        padding: 20px 16px 24px;
+        position: relative; z-index: 3;
+    }
+    .home-feat-card { padding: 14px 15px; }
+    .home-feat-card h3 { font-size: 0.84rem; }
+    .home-feat-card p { font-size: 0.7rem; }
 
-    .feature-strip {
-        grid-template-columns: 1fr;
-        width: calc(100% - 28px);
-        margin: -10px auto 36px;
-        gap: 12px;
+    /* 找搭子主体与功能栏边框间距 */
+    .partner-filter {
+        margin: 8px 12px 0 !important;
+        border-radius: 14px !important;
+    }
+    .partner-waterfall {
+        margin: 0 12px !important;
+        padding-bottom: 16px;
+    }
+    .map-preview-card {
+        margin: 8px 12px 0 !important;
+        border-radius: 14px !important;
     }
 
     #partnerPage,
@@ -2485,7 +2452,7 @@ body,
         height: 66px;
         padding: 4px 8px;
         transform: translateX(-50%) !important;
-        z-index: 2000;
+        z-index: 2800;
         border-top: 1px solid var(--atlas-line);
         background: var(--atlas-card);
         backdrop-filter: blur(18px);
@@ -2527,7 +2494,7 @@ body,
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    /* 移动端个人中 ?*/
+    /* 移动端个人中�?*/
     .profile-header-top {
         flex-direction: column;
         align-items: center;
@@ -2568,17 +2535,14 @@ body,
    styles without scattering overrides through the file.
    ===================================================================== */
 
-/* ====== 首页背景：日间带柔光白，夜间深色 ====== */
+/* ====== 首页背景：日间浅色，夜间深色 ====== */
 #homePage,
-#homePage.active-page,
-.atlas-hero {
+#homePage.active-page {
     position: relative;
     min-height: calc(100vh - var(--atlas-topbar));
     background: linear-gradient(180deg, #fefdfe 0%, #f8f6fa 30%, #f3eff8 100%) !important;
-    background-image: none !important;
 }
 
-/* 柔光光效 ?*/
 #homePage::before {
     content: "" !important;
     display: block !important;
@@ -2588,77 +2552,18 @@ body,
     transform: translateX(-50%);
     width: min(900px, 100vw);
     height: 500px;
-    background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.10) 0%, rgba(168, 85, 247, 0.04) 40%, transparent 70%);
+    background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.03) 40%, transparent 70%);
     pointer-events: none;
     z-index: 0;
 }
 
-.atlas-hero::before,
-.atlas-hero::after,
-#homePage::after {
-    display: none !important;
-    content: none !important;
-}
-
-/* 首页保留 NJUATLAS 背后的方块阵 ?*/
-.pixel-field {
-    display: grid !important;
-}
-
-/* 夜间模式 */
 :root[data-theme="dark"] #homePage,
-:root[data-theme="dark"] #homePage.active-page,
-:root[data-theme="dark"] .atlas-hero {
-    background: linear-gradient(180deg, #14101e 0%, #1a1528 50%, #0f0f18 100%) !important;
-    background-image: none !important;
+:root[data-theme="dark"] #homePage.active-page {
+    background: linear-gradient(180deg, #14101e 0%, #1a1528 40%, #0f0f18 100%) !important;
 }
 
 :root[data-theme="dark"] #homePage::before {
-    background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.14) 0%, rgba(107, 33, 165, 0.06) 40%, transparent 70%);
-}
-
-/* ====== Hero 文字颜色：日间黑，夜间白 ====== */
-.hero-kicker {
-    color: #4a3f5c !important;
-}
-.hero-subtitle {
-    color: #5e5270 !important;
-}
-.hero-content h1 {
-    color: #1a1228 !important;
-    text-shadow: none !important;
-}
-
-:root[data-theme="dark"] .hero-kicker {
-    color: rgba(255, 255, 255, 0.78) !important;
-}
-:root[data-theme="dark"] .hero-subtitle {
-    color: rgba(255, 255, 255, 0.78) !important;
-}
-:root[data-theme="dark"] .hero-content h1 {
-    color: #fff !important;
-    text-shadow: 0 18px 50px rgba(20, 8, 36, 0.28) !important;
-}
-
-/* 日间 Hero Primary 按钮 */
-.hero-primary-btn {
-    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft)) !important;
-    color: #fff !important;
-}
-.hero-secondary-btn {
-    background: var(--atlas-card) !important;
-    color: var(--atlas-ink) !important;
-    border: 1px solid var(--atlas-line) !important;
-}
-
-:root[data-theme="dark"] .hero-primary-btn {
-    background: linear-gradient(135deg, #fff, #ead7ff) !important;
-    color: #3a155b !important;
-}
-:root[data-theme="dark"] .hero-secondary-btn {
-    background: rgba(255, 255, 255, 0.16) !important;
-    color: #fff !important;
-    border-color: rgba(255, 255, 255, 0.28) !important;
+    background: radial-gradient(ellipse at 50% 40%, rgba(168,85,247,0.12) 0%, rgba(107,33,165,0.05) 40%, transparent 70%);
 }
 
 /* 找搭子桌面布局 */
@@ -2692,14 +2597,14 @@ body,
         z-index: 1;
     }
 
-    /* 筛选栏在右列第一 ?*/
+    /* 筛选栏在右列第一�?*/
     #partnerPage .partner-filter {
         grid-column: 2;
         grid-row: 1;
         margin: 0 !important;
     }
 
-    /* 瀑布流在右列第二 ?*/
+    /* 瀑布流在右列第二�?*/
     #partnerPage .partner-waterfall {
         grid-column: 2;
         grid-row: 2;
@@ -2725,7 +2630,7 @@ body,
         height: 100% !important;
     }
 
-    /* 桌面端：瀑布流双 ?*/
+    /* 桌面端：瀑布流双�?*/
     .partner-waterfall {
         display: grid !important;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -2734,7 +2639,7 @@ body,
         align-content: start;
     }
 
-    /* 桌面 ?fab 按钮靠右，避免遮挡地 ?*/
+    /* 桌面�?fab 按钮靠右，避免遮挡地�?*/
     .fab-create-group {
         left: auto;
         right: 28px;
@@ -2753,7 +2658,7 @@ body,
     }
 }
 
-/* 移动端：筛 ? ?地图  ?卡片，纵向排 ?*/
+/* 移动端：筛�?�?地图 �?卡片，纵向排�?*/
 @media (max-width: 768px) {
     #partnerPage.active-page {
         display: flex !important;
@@ -2946,7 +2851,7 @@ body,
     white-space: nowrap;
 }
 
-/* 发起者删除按钮（红色边框 ?*/
+/* 发起者删除按钮（红色边框�?*/
 .partner-brief-card .owner-delete-btn {
     background: transparent !important;
     color: var(--danger) !important;
@@ -2968,7 +2873,7 @@ body,
     }
 }
 
-/* 顶部导航最终对齐：新增 AI 助手后，所有按钮固定同一高度并按中文基线居中 ?*/
+/* 顶部导航最终对齐：新增 AI 助手后，所有按钮固定同一高度并按中文基线居中�?*/
 .desktop-nav {
     align-items: center !important;
 }
@@ -2992,7 +2897,7 @@ body,
     line-height: 1 !important;
 }
 
-/* 对齐修正：搭子分类按钮文字要在胶囊中垂直居中，不能贴着上沿 ?*/
+/* 对齐修正：搭子分类按钮文字要在胶囊中垂直居中，不能贴着上沿�?*/
 .partner-filter .filter-chip {
     height: 52px !important;
     min-height: 52px !important;
@@ -3004,7 +2909,7 @@ body,
     vertical-align: middle !important;
 }
 
-/* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致 ?*/
+/* 个人中心四个 tab 四等分，避免“我的活动”等按钮宽度不一致�?*/
 .profile-tabs {
     display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -3024,7 +2929,7 @@ body,
     white-space: nowrap;
 }
 
-/* 退出按钮只做紧凑图标按钮，避免被全局按钮规则撑成大白圆 ?*/
+/* 退出按钮只做紧凑图标按钮，避免被全局按钮规则撑成大白圆�?*/
 .topbar-user {
     height: 40px !important;
     min-height: 40px !important;
@@ -3060,7 +2965,7 @@ body,
 }
 
 /* =====================================================================
-   AI 助手聊天页面  ?专属样式
+   AI 助手聊天页面 �?专属样式
    ===================================================================== */
 
 /* 关键：让 AI 页面撑满 content-area，用 flex 布局而非 block */
@@ -3071,47 +2976,6 @@ body,
     height: auto !important;
     overflow: hidden !important;
     position: relative !important;
-}
-
-/* ---- 粒子飘落背景 ---- */
-.ai-particles {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-}
-
-.ai-particle {
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    border-radius: 2px;
-    background: rgba(168, 85, 247, 0.35);
-    opacity: 0.35;
-    animation: aiParticleFall linear infinite;
-    will-change: transform, opacity;
-}
-
-:root[data-theme="dark"] .ai-particle {
-    opacity: 0.5;
-}
-
-@keyframes aiParticleFall {
-    0% {
-        transform: translateY(0) rotate(0deg) scale(0.8);
-        opacity: 0;
-    }
-    5% {
-        opacity: 0.55;
-    }
-    75% {
-        opacity: 0.4;
-    }
-    100% {
-        transform: translateY(110vh) rotate(720deg) scale(1.15);
-        opacity: 0;
-    }
 }
 
 /* ---- 聊天容器 ---- */
@@ -3128,7 +2992,7 @@ body,
     padding: 0 16px;
 }
 
-/* ---- 消息滚动 ?---- */
+/* ---- 消息滚动�?---- */
 .ai-chat-messages {
     flex: 1;
     min-height: 0;
@@ -3141,7 +3005,7 @@ body,
     gap: 10px;
 }
 
-/* ---- 欢迎 ?---- */
+/* ---- 欢迎�?---- */
 .ai-welcome {
     display: flex;
     flex-direction: column;
@@ -3316,7 +3180,7 @@ body,
     gap: 8px;
 }
 
-/* ---- 推荐问题 ?---- */
+/* ---- 推荐问题�?---- */
 .ai-quick-row {
     display: flex;
     flex-wrap: wrap;
@@ -3429,7 +3293,7 @@ body,
     transform: none;
 }
 
-/* ---- 移动 ?AI 页面适配 ---- */
+/* ---- 移动�?AI 页面适配 ---- */
 @media (max-width: 768px) {
     #aiPage.active-page {
         min-height: calc(100vh - var(--atlas-topbar) - 66px) !important;
@@ -3501,9 +3365,9 @@ body,
     }
 }
 
-/* ========== 最终解决方案：桌面端地图顶部严格对 ?+ 恢复正确高度 ========== */
+/* ========== 最终解决方案：桌面端地图顶部严格对�?+ 恢复正确高度 ========== */
 
-/* 桌面端（ ?69px ?*/
+/* 桌面端（�?69px�?*/
 @media (min-width: 769px) {
     #partnerPage.active-page {
         display: grid !important;
@@ -3557,7 +3421,7 @@ body,
         align-self: start !important;
     }
 
-    /* 右侧瀑布 ?*/
+    /* 右侧瀑布�?*/
     #partnerPage .partner-waterfall {
         grid-column: 2 / 3 !important;
         grid-row: 2 / 3 !important;
@@ -3566,7 +3430,7 @@ body,
     }
 }
 
-/* 移动端（ ?68px）：地图默认折叠为按钮条，点击展开 */
+/* 移动端（�?68px）：地图默认折叠为按钮条，点击展开 */
 @media (max-width: 768px) {
     .content-area {
         padding: 0 !important;
@@ -3577,7 +3441,7 @@ body,
         gap: 0 !important;
     }
 
-    /* 地图卡片：默认紧凑折 ?*/
+    /* 地图卡片：默认紧凑折�?*/
     .map-preview-card {
         margin: 0 !important;
         border-radius: 0 !important;
@@ -3626,7 +3490,7 @@ body,
         50% { box-shadow: 0 6px 24px rgba(107,33,165,0.38); }
     }
 
-    /* 展开状态：标题栏恢复普通样 ?*/
+    /* 展开状态：标题栏恢复普通样�?*/
     .map-preview-card.map-expanded .map-preview-header {
         cursor: pointer;
         user-select: none;
@@ -3656,7 +3520,7 @@ body,
         display: none;
     }
 
-    /* 地图主体：默认折叠为 0，展开时出 ?*/
+    /* 地图主体：默认折叠为 0，展开时出�?*/
     .map-preview-body {
         height: 0 !important;
         min-height: 0 !important;
@@ -3675,7 +3539,7 @@ body,
         height: 100% !important;
     }
 
-    /* 图例默认隐藏，展开时显 ?*/
+    /* 图例默认隐藏，展开时显�?*/
     .map-preview-card .map-legend {
         display: none;
         padding-left: 14px !important;
@@ -3686,7 +3550,7 @@ body,
     }
 }
 /* =====================================================================
-   AI 助手侧栏样式（类 ?DeepSeek ?
+   AI 助手侧栏样式（类�?DeepSeek�?
    ===================================================================== */
 
 /* AI 页面容器：flex 布局 */
@@ -3945,7 +3809,7 @@ body,
     }
 }
 
-/* 加载状 ?*/
+/* 加载状�?*/
 .ai-conv-loading,
 .ai-conv-empty {
     text-align: center;
@@ -3971,7 +3835,7 @@ body,
     }
 }
 
-/* 桌面端默认隐藏展开按钮（仅在侧栏折叠时由兄弟选择器覆盖为 flex ?*/
+/* 桌面端默认隐藏展开按钮（仅在侧栏折叠时由兄弟选择器覆盖为 flex�?*/
 @media (min-width: 769px) {
     .ai-sidebar-expand {
         display: none;
@@ -3993,19 +3857,19 @@ body,
     box-shadow: var(--shadow-md) !important;
 }
 
-/* 保持圆形的悬停效 ?*/
+/* 保持圆形的悬停效�?*/
 .top-bar-right .login-round-btn:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
 }
 
-/* ========== 移动端地图召唤按钮（纯图标圆形，右侧悬浮 ?========== */
+/* ========== 移动端地图召唤按钮（纯图标圆形，右侧悬浮�?========== */
 .map-fab-mobile {
     display: none;
 }
 
 @media (max-width: 768px) {
-    /* 隐藏原本的地图卡 ?*/
+    /* 隐藏原本的地图卡�?*/
     .map-preview-card {
         display: none !important;
     }
@@ -4037,46 +3901,8 @@ body,
         box-shadow: 0 2px 10px rgba(107, 33, 165, 0.24);
     }
 
-    /* 发起组局按钮往上挪一点，避免被地图按钮遮 ?*/
+    /* 发起组局按钮往上挪一点，避免被地图按钮遮�?*/
     .fab-create-group {
         bottom: calc(var(--bottom-tab-height) + 20px) !important;
-    }
-}
-/* 移动端 AI 侧边栏展开按钮 */
-    .ai-sidebar-expand {
-        display: flex !important;
-        position: absolute;
-        left: 12px;
-        top: 12px;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: var(--atlas-card);
-        border: 1px solid var(--atlas-line);
-        color: var(--atlas-ink);
-        align-items: center;
-        justify-content: center;
-        z-index: 35;
-        backdrop-filter: blur(8px);
-        cursor: pointer;
-        box-shadow: var(--shadow-sm);
-    }
-    .ai-sidebar-expand:hover {
-        background: var(--atlas-purple);
-        color: #fff;
-    }
-    .ai-chat-main {
-        position: relative;
-    }
-    .ai-chat-wrapper {
-        padding-top: 52px;
-    }
-@media (min-width: 769px) {
-    #partnerPage .partner-filter {
-        flex-wrap: wrap !important;
-        overflow-x: visible !important;
-    }
-    #partnerPage .partner-filter .filter-chip {
-        flex-shrink: 1 !important;
     }
 }

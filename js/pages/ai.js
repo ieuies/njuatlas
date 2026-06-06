@@ -368,31 +368,6 @@ async function sendMessage() {
     }
 }
 
-// 粒子效果
-export function initParticles(containerId = 'aiParticles') {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = '';
-    const colors = ['#7c3aed','#8b5cf6','#a78bfa','#c084fc','#e9d5ff','#f472b6','#818cf8','#c4b5fd'];
-    const count = window.innerWidth < 600 ? 20 : 32;
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < count; i++) {
-        const p = document.createElement('div');
-        p.className = 'ai-particle';
-        p.style.top = `-${5 + Math.random() * 20}vh`;
-        p.style.left = `${Math.random() * 100}%`;
-        p.style.width = `${3 + Math.random() * 6}px`;
-        p.style.height = `${3 + Math.random() * 6}px`;
-        p.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
-        p.style.background = colors[Math.floor(Math.random() * colors.length)];
-        p.style.animationDuration = `${8 + Math.random() * 14}s`;
-        p.style.animationDelay = `${Math.random() * 10}s`;
-        p.style.opacity = 0.15 + Math.random() * 0.35;
-        frag.appendChild(p);
-    }
-    container.appendChild(frag);
-}
-
 // 移动端软键盘适配：使用 visualViewport API 避免键盘遮挡输入框
 function initViewportAdaptation() {
     const container = document.getElementById('aiPage');
@@ -445,13 +420,6 @@ export function initAIPage() {
     initViewportAdaptation();
     if (isLoggedIn()) loadConversationList();
     renderQuickQuestions();
-    initParticles('aiParticles');
-
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => initParticles('aiParticles'), 400);
-    });
 }
 
 window.initAIPage = initAIPage;
