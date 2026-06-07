@@ -4063,6 +4063,12 @@ body,
     }
     .scroll-arrow-left  { left: 4px; }
     .scroll-arrow-right { right: 4px; }
+    /* 移动端隐藏左右箭头：仅保留触控滑动体验 */
+    .scroll-arrow {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
 }
 /* ========== 强制修复移动端 Toast 被底部栏遮挡 ========== */
 @media (max-width: 768px) {
