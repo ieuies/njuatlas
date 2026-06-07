@@ -105,7 +105,7 @@ export async function searchPlaces(keyword, city = '南京', location = null, pa
 export async function chatRecommend(message, sessionId = null, city = '南京') {
     const body = { message, city };
     if (sessionId) body.session_id = sessionId;
-    return request('/llm/chat_recommend', 'POST', body);
+    return request('/llm/chat_recommend', 'POST', body, true, 30000);
 }
 
 // ── 帖子系统（搭子论坛） ──

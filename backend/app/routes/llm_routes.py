@@ -113,7 +113,7 @@ def chat_recommend():
     candidates = []
     candidates_text = ""
     if is_food_request:
-        search_result = search_places(user_message, city=city, page=1, page_size=10)
+        search_result = search_places(user_message, city=city, page=1, page_size=10, types="050000")
         if search_result.get("status") == "1":
             for poi in search_result.get("pois", [])[:5]:
                 candidates.append({
@@ -158,7 +158,7 @@ def chat_recommend():
     messages.append({"role": "user", "content": user_content})
 
     try:
-        reply = chat_with_llm(messages, temperature=0.7, max_tokens=800)
+        reply = chat_with_llm(messages, temperature=0.7, max_tokens=500)
         _save_conversation_message(user_id, session_id, "user", user_message)
         _save_conversation_message(user_id, session_id, "assistant", reply)
         db.session.commit()
