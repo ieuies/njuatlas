@@ -4,24 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>nju.atlas · 找搭子</title>
-    <!-- 高德地图：预连接 + 后台预下载 JS，点击找搭子时免等待 -->
+    <!-- 高德地图预连接 -->
     <link rel="dns-prefetch" href="https://webapi.amap.com">
     <link rel="preconnect" href="https://webapi.amap.com" crossorigin>
     <link rel="prefetch" href="https://webapi.amap.com/maps?v=2.0&key=97ac6e711cde17463af06c10b8b05f42" as="script">
-    <!-- 大模块后台预加载：动态 import 时直接走缓存 -->
     <link rel="modulepreload" href="js/pages/partner.js">
     <link rel="modulepreload" href="js/pages/guide.js">
     <link rel="modulepreload" href="js/pages/profile.js">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <script>
-        window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
-    </script>
-    <!-- 高德地图 JSAPI 安全密钥（SDK 由 partner.js 按需动态加载） -->
+    <script> window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {}; </script>
     <script type="text/javascript">
-        window._AMapSecurityConfig = {
-            securityJsCode: "367ebc1de103bfdca104452e48447318"
-        };
+        window._AMapSecurityConfig = { securityJsCode: "367ebc1de103bfdca104452e48447318" };
     </script>
+    <!-- Cropper.js 裁剪库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <!-- Font Awesome & 主样式 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -30,6 +28,7 @@
 <div class="app-layout mobile-layout">
     <main class="main-content">
 
+        <!-- 顶部栏 -->
         <header class="top-bar">
             <div class="top-bar-left">
                 <button class="brand-mark" data-page="home" type="button">NJUATLAS</button>
@@ -59,10 +58,8 @@
             <!-- 首页 -->
             <div id="homePage" class="page active-page">
                 <canvas class="home-particles" id="homeParticleCanvas" aria-hidden="true"></canvas>
-                <!-- 移动端图片网格背景 -->
                 <div class="home-mobile-grid" id="homeMobileGrid"></div>
                 <div class="home-hero" id="homeHero">
-                    <!-- 左侧品牌标识 -->
                     <div class="home-brand">
                         <div class="home-brand-inner">
                             <p class="home-brand-kicker">NANJING UNIVERSITY</p>
@@ -74,67 +71,32 @@
                             </div>
                         </div>
                     </div>
-                    <!-- 右侧卡片网格 -->
                     <div class="home-card-area">
-                        <div class="home-card-grid" id="homeCardGrid">
-                            <!-- JS 动态生成 -->
-                        </div>
+                        <div class="home-card-grid" id="homeCardGrid"></div>
                     </div>
                 </div>
-                <!-- 底部功能简介 -->
                 <div class="home-features">
-                    <div class="home-feat-card" data-page="partner">
-                        <span class="home-feat-num">01</span>
-                        <h3>找搭子</h3>
-                        <p>按分类浏览饭搭子、运动搭子、学习搭子等，一键加入感兴趣的活动。</p>
-                    </div>
-                    <div class="home-feat-card" data-page="guide">
-                        <span class="home-feat-num">02</span>
-                        <h3>吃喝玩乐</h3>
-                        <p>收录南大周边餐饮、娱乐、学习场所，支持分类筛选与 AI 推荐。</p>
-                    </div>
-                    <div class="home-feat-card" data-page="profile">
-                        <span class="home-feat-num">03</span>
-                        <h3>个人空间</h3>
-                        <p>管理个人资料，查看发布的组局、评论、收藏与活动记录。</p>
-                    </div>
-                    <div class="home-feat-card" data-page="fullMap">
-                        <span class="home-feat-num">04</span>
-                        <h3>组局地图</h3>
-                        <p>高德地图展示附近组局分布，点击标记查看详情并快速参与。</p>
-                    </div>
+                    <div class="home-feat-card" data-page="partner"><span class="home-feat-num">01</span><h3>找搭子</h3><p>按分类浏览饭搭子、运动搭子、学习搭子等，一键加入感兴趣的活动。</p></div>
+                    <div class="home-feat-card" data-page="guide"><span class="home-feat-num">02</span><h3>吃喝玩乐</h3><p>收录南大周边餐饮、娱乐、学习场所，支持分类筛选与 AI 推荐。</p></div>
+                    <div class="home-feat-card" data-page="profile"><span class="home-feat-num">03</span><h3>个人空间</h3><p>管理个人资料，查看发布的组局、评论、收藏与活动记录。</p></div>
+                    <div class="home-feat-card" data-page="fullMap"><span class="home-feat-num">04</span><h3>组局地图</h3><p>高德地图展示附近组局分布，点击标记查看详情并快速参与。</p></div>
                 </div>
             </div>
 
-            <!-- ========== AI 助手页面（新增侧栏） ========== -->
+            <!-- AI 助手页面 -->
             <div id="aiPage" class="page">
                 <div class="ai-container">
-                    <!-- 侧栏：历史对话列表 -->
                     <aside class="ai-sidebar" id="aiSidebar">
-                        <div class="ai-sidebar-header">
-                            <button class="ai-new-chat-btn" id="aiNewChatBtn">
-                                <i class="fas fa-plus"></i> 新对话
-                            </button>
-                        </div>
-                        <button class="ai-sidebar-toggle" id="aiSidebarToggle" aria-label="折叠侧栏">
-                            <i class="fas fa-chevron-left"></i>
-                        </button>
-                        <div class="ai-conversation-list" id="aiConversationList">
-                            <div class="ai-conv-loading">加载历史对话...</div>
-                        </div>
+                        <div class="ai-sidebar-header"><button class="ai-new-chat-btn" id="aiNewChatBtn"><i class="fas fa-plus"></i> 新对话</button></div>
+                        <button class="ai-sidebar-toggle" id="aiSidebarToggle" aria-label="折叠侧栏"><i class="fas fa-chevron-left"></i></button>
+                        <div class="ai-conversation-list" id="aiConversationList"><div class="ai-conv-loading">加载历史对话...</div></div>
                     </aside>
-
-                    <!-- 聊天主体区域 -->
                     <div class="ai-chat-main">
-                        <button class="ai-sidebar-expand" id="aiSidebarExpand" style="display: none;">
-                            <i class="fas fa-bars"></i>
-                        </button>
+                        <button class="ai-sidebar-expand" id="aiSidebarExpand" style="display: none;"><i class="fas fa-bars"></i></button>
                         <div class="ai-chat-wrapper">
                             <div class="ai-chat-messages" id="chatMessages">
                                 <div class="ai-welcome" id="aiWelcome">
-                                    <div class="ai-welcome-avatar">
-                                        <img src="image/aihelper.png" alt="AI助手">
-                                    </div>
+                                    <div class="ai-welcome-avatar"><img src="image/aihelper.png" alt="AI助手"></div>
                                     <h3>你好，我是南大图谱 AI 助手</h3>
                                     <p>可以问我南大周边吃喝玩乐的问题~</p>
                                     <p class="ai-welcome-hint">试试点击下方推荐问题，或直接输入</p>
@@ -144,9 +106,7 @@
                             <div class="ai-input-row">
                                 <div class="ai-input-wrapper">
                                     <input type="text" id="chatInput" placeholder="输入你的问题，如「南大附近有什么好吃的」" maxlength="500" autocomplete="off">
-                                    <button id="sendChatBtn" class="ai-send-btn" type="button" title="发送">
-                                        <i class="fas fa-paper-plane"></i>
-                                    </button>
+                                    <button id="sendChatBtn" class="ai-send-btn" type="button" title="发送"><i class="fas fa-paper-plane"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -190,11 +150,7 @@
 
             <!-- 指南页面 -->
             <div id="guidePage" class="page">
-                <div class="guide-header">
-                    <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
-                    <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
-                </div>
-                <!-- 校区筛选 -->
+                <div class="guide-header"><h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2><p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p></div>
                 <div class="guide-filter" id="guideCampusFilter">
                     <button data-guide-campus="all" class="guide-chip active">全部</button>
                     <button data-guide-campus="鼓楼" class="guide-chip">🏫 鼓楼</button>
@@ -202,7 +158,6 @@
                     <button data-guide-campus="浦口" class="guide-chip">🔬 浦口</button>
                     <button data-guide-campus="苏州" class="guide-chip">🌊 苏州</button>
                 </div>
-                <!-- 分类筛选 -->
                 <div class="guide-filter" id="guideFilter">
                     <button data-guide-cat="all" class="guide-chip active">全部</button>
                     <button data-guide-cat="美食" class="guide-chip">🍜 美食</button>
@@ -215,10 +170,18 @@
                 <div id="guideGrid" class="guide-grid"><div class="guide-loading">加载精彩推荐中...</div></div>
             </div>
 
-            <!-- 个人中心页面 -->
+            <!-- 个人中心页面（已集成封面裁剪） -->
             <div id="profilePage" class="page">
                 <div class="profile-shell">
                     <section class="profile-header-card">
+                        <div class="profile-cover-container" id="profileCoverContainer">
+                            <div class="profile-cover" id="profileCover" style="background-image: url('');">
+                                <button class="cover-edit-btn" id="coverEditBtn" title="更换封面">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                                <input type="file" id="coverFileInput" accept="image/jpeg,image/png,image/webp" style="display: none;">
+                            </div>
+                        </div>
                         <div class="profile-header-top">
                             <div class="profile-avatar-lg" id="profileAvatarLarge"><i class="fas fa-user"></i></div>
                             <div class="profile-header-info">
@@ -227,6 +190,7 @@
                                     <button id="editProfileBtn" class="profile-edit-btn" title="编辑资料"><i class="fas fa-pen"></i></button>
                                 </div>
                                 <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
+                                <div class="profile-tags-wrapper" id="profileTags" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0 4px;"></div>
                                 <p class="profile-email-line" id="profileEmailLine"></p>
                                 <p class="profile-campus" id="profileCampus"></p>
                                 <div class="profile-status-row">
@@ -252,10 +216,26 @@
                 </div>
             </div>
 
-            <!-- 详情模态框等 -->
+            <!-- 各种模态框 -->
             <div id="guideDetailModal" class="modal"><div class="modal-card guide-detail-card"><button class="modal-close-btn" id="closeGuideDetailBtn"><i class="fas fa-times"></i></button><img id="guideDetailImg" class="guide-detail-img" src="" alt=""><h2 id="guideDetailName"></h2><div class="guide-detail-meta"><span id="guideDetailRating" class="guide-detail-rating"></span><span id="guideDetailPrice"></span><span id="guideDetailType"></span></div><p id="guideDetailDesc"></p><p id="guideDetailAddr" style="color:var(--text-tertiary);font-size:0.85rem;"></p></div></div>
             <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-edit"></i> 编辑资料</h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg" id="editAvatarPreview"><i class="fas fa-user"></i></div><span class="avatar-hint">头像根据用户名自动生成</span></div><label>用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label>个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label>兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><label>所在校区</label><select id="editCampus"><option value="">不设置</option><option value="鼓楼">鼓楼</option><option value="仙林">仙林</option><option value="浦口">浦口</option><option value="苏州">苏州</option></select><hr style="margin:16px 0;border-color:var(--atlas-line);"><label>修改密码（留空则不修改）</label><input type="password" id="editOldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> 危险操作</p><p class="danger-zone-desc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> 注销账号</button></div></form></div></div>
             <div id="fullMapPage" class="page"><div class="full-map-header"><button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> 返回</button><h2>附近组局地图</h2></div><div class="full-map-container" id="fullMapContainer"><div class="map-container" id="fullMap"></div></div></div>
+
+            <!-- 图片裁剪模态框（新增） -->
+            <div id="cropModal" class="modal" style="display: none;">
+                <div class="modal-card crop-modal-card">
+                    <button class="modal-close-btn" id="closeCropModalBtn"><i class="fas fa-times"></i></button>
+                    <h3>调整封面图片</h3>
+                    <div class="crop-image-container">
+                        <img id="cropImage" src="" alt="裁剪图片" style="max-width: 100%;">
+                    </div>
+                    <div class="crop-actions">
+                        <button id="cropConfirmBtn" class="primary-btn">确认裁剪</button>
+                        <button id="cropCancelBtn" class="secondary-btn">取消</button>
+                    </div>
+                    <p class="crop-hint">拖拽或缩放图片，选择要显示的区域</p>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -288,17 +268,12 @@
 <script type="module" src="js/pages/home.js"></script>
 <script type="module" src="js/pages/ai.js"></script>
 <script type="module" src="js/app.js"></script>
-<!-- partner.js / guide.js / profile.js 按需动态加载，见 app.js -->
 <script>
-    /* 移动端地图召唤按钮 → 点击打开全屏地图 */
     (function() {
         var btn = document.getElementById('mapFabMobile');
-        if (!btn) return;
-        btn.addEventListener('click', function() {
+        if (btn) btn.addEventListener('click', function() {
             if (window.innerWidth > 768) return;
-            if (typeof window.switchPage === 'function') {
-                window.switchPage('fullMap');
-        }
+            if (typeof window.switchPage === 'function') window.switchPage('fullMap');
         });
     })();
 </script>

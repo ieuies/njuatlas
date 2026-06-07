@@ -4157,3 +4157,157 @@ body,
         }
     }
 }
+/* ========== 个人主页封面 ========== */
+.profile-cover-container {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 18px 18px 0 0;
+}
+
+.profile-cover {
+    position: relative;
+    width: 100%;
+    height: 130px;
+    background-size: cover;
+    background-position: center;
+    background-color: var(--atlas-purple-soft);
+    transition: background-image 0.2s;
+    border-radius: 18px 18px 0 0;
+}
+
+/* 编辑封面按钮（相机图标） */
+.cover-edit-btn {
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
+    border: none;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    z-index: 5;
+}
+
+.cover-edit-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
+}
+
+/* 移动端封面高度略矮 */
+@media (max-width: 768px) {
+    .profile-cover {
+        height: 100px;
+    }
+    .cover-edit-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+        bottom: 6px;
+        right: 8px;
+    }
+}
+.profile-tag-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--bg-tertiary);
+    color: var(--primary);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.profile-tag-placeholder {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+}
+/* ========== 封面裁剪模态框（双端适配） ========== */
+.crop-modal-card {
+    max-width: 90vw;
+    width: auto;
+    padding: 20px;
+    border-radius: 24px;
+}
+.crop-image-container {
+    max-height: 60vh;
+    overflow: hidden;
+    margin: 16px 0;
+    background: #00000010;
+    border-radius: 12px;
+}
+.crop-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 16px;
+}
+.crop-hint {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: 12px;
+}
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .crop-modal-card {
+        width: 95vw;
+        padding: 16px;
+    }
+    .crop-image-container {
+        max-height: 50vh;
+    }
+    .crop-actions button {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+    }
+}
+/* 封面容器小优化（确保圆角） */
+.profile-cover-container {
+    border-radius: 18px 18px 0 0;
+    overflow: hidden;
+}
+/* ========== 封面裁剪模态框 ========== */
+.crop-modal-card {
+    max-width: 90vw;
+    width: auto;
+    padding: 20px;
+    border-radius: 24px;
+}
+.crop-image-container {
+    max-height: 60vh;
+    overflow: hidden;
+    margin: 16px 0;
+    background: #00000010;
+    border-radius: 12px;
+}
+.crop-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 16px;
+}
+.crop-hint {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: 12px;
+}
+@media (max-width: 768px) {
+    .crop-modal-card {
+        width: 95vw;
+        padding: 16px;
+    }
+    .crop-image-container {
+        max-height: 50vh;
+    }
+}
+.profile-cover-container {
+    border-radius: 18px 18px 0 0;
+    overflow: hidden;
+}
