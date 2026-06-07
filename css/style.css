@@ -4064,3 +4064,48 @@ body,
     .scroll-arrow-left  { left: 4px; }
     .scroll-arrow-right { right: 4px; }
 }
+/* ========== 强制修复移动端 Toast 被底部栏遮挡 ========== */
+@media (max-width: 768px) {
+    /* 1. 降低底部栏层级 + 提高 Toast 层级 */
+    .bottom-tab-bar {
+        z-index: 800 !important;
+    }
+
+    .toast {
+        position: fixed !important;
+        bottom: calc(66px + 24px) !important;   /* 底部栏高度 66px + 24px 安全距离 */
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 9999 !important;               /* 极高优先级 */
+        max-width: 85% !important;
+        white-space: normal !important;
+        text-align: center !important;
+        padding: 12px 20px !important;
+        font-size: 0.85rem !important;
+        border-radius: 40px !important;
+        box-shadow: 0 8px 28px rgba(0,0,0,0.2) !important;
+        pointer-events: none !important;
+        background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft)) !important;
+        color: white !important;
+    }
+
+    /* 2. 确保所有模态框不受底部栏影响 */
+    .modal {
+        z-index: 8000 !important;
+    }
+
+    /* 3. 额外保护：防止全屏地图等特殊页面中的 Toast 也被挡 */
+    #fullMapPage .toast,
+    .ai-chat-main .toast {
+        bottom: calc(66px + 24px) !important;
+    }
+}
+
+/* 针对安全区域（全面屏）进一步优化 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    @media (max-width: 768px) {
+        .toast {
+            bottom: calc(66px + 24px + env(safe-area-inset-bottom)) !important;
+        }
+    }
+}
