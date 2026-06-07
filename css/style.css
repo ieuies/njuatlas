@@ -1704,12 +1704,21 @@ body,
     cursor: pointer;
     perspective: 600px;
 }
+.home-flip-card {
+    /* 初始隐藏，等待入场动画 */
+    opacity: 0;
+    transform: translateY(12px);
+    will-change: opacity, transform;
+}
 .home-flip-inner {
     position: relative; width: 100%; height: 100%;
     transition: transform 0.4s ease;
     transform-style: preserve-3d;
 }
 .home-flip-card:hover .home-flip-inner {
+    transform: rotateY(180deg);
+}
+.home-flip-card.flipped .home-flip-inner {
     transform: rotateY(180deg);
 }
 .home-flip-front,
@@ -1723,6 +1732,30 @@ body,
 .home-flip-back {
     transform: rotateY(180deg);
     background-size: cover; background-position: center;
+}
+
+/* 入场动画：淡入 + 上浮 */
+.home-flip-card.enter {
+    animation-name: homeCardUpFade;
+    /* 更快的入场动画 */
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(.2,.9,.3,1);
+    animation-fill-mode: forwards;
+}
+
+@keyframes homeCardUpFade {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-flip-card,
+    .home-flip-card.enter {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
 }
 
 /* 底部功能 */

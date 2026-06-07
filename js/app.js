@@ -389,6 +389,45 @@ function initHomeCards() {
         }
         grid.appendChild(row);
     });
+    // 添加交错入场动画：随机顺序、较快的间隔
+    // 使用 Fisher-Yates 洗牌，让出现顺序更随机
+    const cards = Array.from(grid.querySelectorAll('.home-flip-card'));
+    for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    // 更快的间隔：30ms，每个卡片动画时长由 CSS 控制
+    const STAGGER_MS = 30;
+    cards.forEach((el, idx) => {
+        const delay = idx * STAGGER_MS;
+        setTimeout(() => el.classList.add('enter'), delay);
+    });
+
+    // 为每个卡片添加指针进入/离开逻辑：经过立即翻转，离开延迟翻回
+    const MIN_VISIBLE_MS = 200; // 最小翻转可见时长
+    const LEAVE_DELAY_MS = 200;  // 鼠标离开后延迟翻回
+    cards.forEach(card => {
+        let enterTime = 0;
+        let leaveTimer = null;
+
+        card.addEventListener('pointerenter', () => {
+            // 进入时立即显示翻转状态
+            if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+            card.classList.add('flipped');
+            enterTime = Date.now();
+        });
+
+        card.addEventListener('pointerleave', () => {
+            // 确保至少保持 MIN_VISIBLE_MS 再翻回
+            const elapsed = Date.now() - enterTime;
+            const remaining = Math.max(0, MIN_VISIBLE_MS - elapsed);
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(() => {
+                card.classList.remove('flipped');
+                leaveTimer = null;
+            }, remaining + LEAVE_DELAY_MS);
+        });
+    });
 }
 
 // ========== FAB 按钮 ==========
