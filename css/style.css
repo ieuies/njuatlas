@@ -1787,9 +1787,10 @@ body,
 #partnerPage,
 #guidePage,
 #profilePage {
-    width: min(1180px, calc(100% - 40px)) !important;
-    margin: 0 auto !important;
-    padding: 24px 0 96px;
+        width: min(1180px, calc(100% - 40px)) !important;
+        margin: 0 auto !important;
+        /* 在移动端底部导航存在时增加额外底部内边距，避免内容被遮挡 */
+        padding: 24px 0 calc(96px + var(--atlas-bottombar));
 }
 
 .partner-filter {
@@ -2474,7 +2475,8 @@ body,
     #guidePage,
     #profilePage {
         width: calc(100% - 24px) !important;
-        padding-bottom: 92px;
+        /* 适配移动端底栏，增加底部空间 */
+        padding-bottom: calc(92px + var(--atlas-bottombar));
     }
 
     .bottom-tab-bar {
@@ -2572,11 +2574,18 @@ body,
    styles without scattering overrides through the file.
    ===================================================================== */
 
+/* 底部导航高度变量（用于确保页面在移动端不会被底栏遮挡） */
+:root {
+    --atlas-bottombar: 66px;
+}
+
 /* ====== 首页背景：日间浅色，夜间深色 ====== */
 #homePage,
 #homePage.active-page {
     position: relative;
+    /* 保留原有视口高度，同时为底部导航预留内边距，避免内容被遮挡 */
     min-height: calc(100vh - var(--atlas-topbar));
+    padding-bottom: var(--atlas-bottombar);
     background: linear-gradient(180deg, #fefdfe 0%, #f8f6fa 30%, #f3eff8 100%) !important;
 }
 
