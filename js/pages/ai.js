@@ -4,6 +4,9 @@ import { isLoggedIn } from '../auth.js';
 
 let currentSessionId = null;
 
+// 发送锁：上一次请求未完成时忽略新的发送
+let isSending = false;
+
 function stripMarkdown(text) {
     return text
         .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -304,7 +307,12 @@ async function sendMessage() {
         return;
     }
 
+    // 加锁：禁用所有发送入口（按钮 + 快捷键 + 快捷问题）
+    isSending = true;
     sendBtn.disabled = true;
+    input.disabled = true;
+    document.querySelectorAll('.quick-q-btn').forEach(b => b.disabled = true);
+
     input.value = '';
     hideWelcome();
 
@@ -363,7 +371,11 @@ async function sendMessage() {
         messagesDiv.appendChild(errDiv);
         scrollToBottom();
     } finally {
+        // 释放锁
+        isSending = false;
         sendBtn.disabled = false;
+        input.disabled = false;
+        document.querySelectorAll('.quick-q-btn').forEach(b => b.disabled = false);
         input.focus();
     }
 }
