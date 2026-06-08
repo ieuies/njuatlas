@@ -146,6 +146,7 @@ def chat_recommend():
         ("麻辣", "050100"),
         ("饺子", "050100"),
         ("面馆", "050100"),
+        ("面食", "050100"),
         ("饭馆", "050100"),
         ("菜馆", "050100"),
         ("日料", "050200"),      # 外国餐厅
@@ -216,6 +217,71 @@ def chat_recommend():
             clean = clean.replace(noise, " ")
         clean = " ".join(clean.split()).strip()
         return clean if len(clean) >= 2 else message
+
+    def _type_matches_search(message, name, type_str):
+        """根据用户消息中的食物关键词、POI 名称和高德 type 字段，判断该 POI 是否匹配。
+        返回 True 表示匹配（应保留），False 表示不匹配（应过滤掉）。
+        """
+        if not type_str:
+            return True  # 没有 type 信息时不过滤，让 AI 自己判断
+        if not message:
+            return True
+        type_lower = type_str.lower()
+        msg_lower = message.lower()
+        # 从 FOOD_TYPE_MAP 中找到匹配的关键词，再看 type 字段是否包含对应的分类名
+        for keyword, type_code in FOOD_TYPE_MAP:
+            if keyword in msg_lower:
+                # 根据 type_code 推断高德 type 字符串中应该包含的中文分类名
+                type_name_map = {
+                    "050000": ["餐饮", "美食"],
+                    "050100": ["中餐", "中餐厅", "川菜", "湘菜", "火锅", "麻辣", "面馆", "面食", "食堂"],
+                    "050200": ["外国", "日料", "韩餐", "西餐"],
+                    "050300": ["快餐", "小吃"],
+                    "050500": ["冷饮", "茶饮", "奶茶", "饮品"],
+                    "050600": ["糕饼", "面包", "蛋糕", "甜品"],
+                    "050700": ["甜品", "甜点"],
+                    "050800": ["茶餐厅", "港式"],
+                    "051000": ["咖啡", "咖啡厅"],
+                    "051100": ["茶馆", "茶艺"],
+                }
+                expected = type_name_map.get(type_code, [])
+                # 如果 type 中包含任何期望的分类名，则匹配
+                if expected and any(exp in type_lower for exp in expected):
+                    pass  # type 匹配，继续检查 name
+                else:
+                    # 如果 type 不包含期望分类，但有名称兜底则放行（例如高德把面馆标成中餐厅）
+                    # 同时检查名称是否包含关键词
+                    name_keywords = {
+                        "面馆": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
+                        "面包": ["面包", "烘焙", "糕饼"],
+                        "咖啡": ["咖啡", "coffee"],
+                        "奶茶": ["奶茶", "茶饮", "茶", "饮品"],
+                        "火锅": ["火锅", "焖锅"],
+                        "饺子": ["饺子", "水饺"],
+                        "川菜": ["川菜", "麻辣"],
+                    }
+                    name_lower = name.lower()
+                    for nk, nvs in name_keywords.items():
+                        if nk in msg_lower:
+                            if any(nv in name_lower for nv in nvs):
+                                return True  # 名称中包含关键词，放行
+                    return False  # type 和 name 都不匹配，过滤
+                # 继续往下检查，看 name 是否也匹配
+                name_keywords = {
+                    "面馆": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
+                    "面包": ["面包", "烘焙", "糕饼"],
+                }
+                name_lower = name.lower()
+                for nk, nvs in name_keywords.items():
+                    if nk in msg_lower:
+                        if any(nv in name_lower for nv in nvs):
+                            return True  # 名称匹配
+                        # type 通过了但名称不匹配 → 仍要检查
+                        # 例如搜面馆，type 是中餐厅但名称叫"状元楼西苑餐厅" → 不应该通过
+                        if not any(exp in type_lower for exp in expected):
+                            return False
+                return True
+        return True  # 用户消息没有匹配到任何 FOOD_TYPE_MAP 关键词，不过滤
 
     candidates = []
     candidates_text = ""
@@ -317,6 +383,7 @@ def chat_recommend():
                     "name": poi.get("name", "未知"),
                     "address": poi.get("address", "未知"),
                     "location": poi_loc,
+                    "type": poi.get("type", ""),
                     "rating": raw_rating or "暂无评分",
                     "cost": poi.get("biz_ext", {}).get("cost", "暂无价格"),
                     "distance_m": dist_m,
@@ -337,20 +404,44 @@ def chat_recommend():
 
             raw_candidates.sort(key=_candidate_score, reverse=True)
 
-            # 取排序后的前 5 家
-            for c in raw_candidates[:5]:
-                dist_str = ""
-                if c["distance_m"] is not None:
-                    d = c["distance_m"]
-                    dist_str = f"{d}m" if d < 1000 else f"{d / 1000:.1f}km"
-                candidates.append({
-                    "name": c["name"],
-                    "address": c["address"],
-                    "location": c["location"],
-                    "rating": c["rating"],
-                    "cost": c["cost"],
-                    "distance_text": dist_str,
-                })
+            # 取排序后的候选，用 type + name 做硬过滤，只保留匹配的
+            for c in raw_candidates:
+                if _type_matches_search(user_message, c["name"], c["type"]):
+                    dist_str = ""
+                    if c["distance_m"] is not None:
+                        d = c["distance_m"]
+                        dist_str = f"{d}m" if d < 1000 else f"{d / 1000:.1f}km"
+                    candidates.append({
+                        "name": c["name"],
+                        "address": c["address"],
+                        "location": c["location"],
+                        "type": c["type"],
+                        "rating": c["rating"],
+                        "cost": c["cost"],
+                        "distance_text": dist_str,
+                    })
+                    if len(candidates) >= 5:
+                        break
+            # 如果过滤后候选不足 2 家，放宽过滤条件补充一些（避免空列表）
+            if len(candidates) < 2:
+                for c in raw_candidates:
+                    already_added = any(x["name"] == c["name"] for x in candidates)
+                    if not already_added:
+                        dist_str = ""
+                        if c["distance_m"] is not None:
+                            d = c["distance_m"]
+                            dist_str = f"{d}m" if d < 1000 else f"{d / 1000:.1f}km"
+                        candidates.append({
+                            "name": c["name"],
+                            "address": c["address"],
+                            "location": c["location"],
+                            "type": c["type"],
+                            "rating": c["rating"],
+                            "cost": c["cost"],
+                            "distance_text": dist_str,
+                        })
+                        if len(candidates) >= 5:
+                            break
         if candidates:
             candidates_text = "以下是高德地图搜索到的南京真实餐厅信息（供参考）：\n"
             for index, candidate in enumerate(candidates, 1):
@@ -358,7 +449,8 @@ def chat_recommend():
                 candidates_text += (
                     f"{index}. {candidate['name']} - {candidate['address']} - "
                     f"{dist_text}"
-                    f"评分{candidate['rating']} - 人均{candidate['cost']}\n"
+                    f"评分{candidate['rating']} - 人均{candidate['cost']} - "
+                    f"高德分类：{candidate['type']}\n"
                 )
         else:
             candidates_text = "（高德地图未搜到相关餐厅，请根据自己的知识推荐）"
@@ -370,12 +462,18 @@ def chat_recommend():
         "核心设定：\n"
         "1. 你只推荐南京市范围内的餐厅和场所。问到其他城市就老实说「我只熟南京这一片，别的地方你问问别人～」\n"
         "2. 你不是万能助手。别人聊编程、数学、政治、养生，你就说「这个我不太懂诶，不如聊聊南京哪家鸭血粉丝汤好喝？」\n"
-        "3. 推荐餐厅时只能使用高德地图搜到的真实数据。你拥有的信息仅包括：店名、地址、评分、人均价格。你无法获取顾客评论、菜品图片、菜单、排队情况等。如果用户问你要评论、要具体菜品、要菜单——直接说「这个我查不到，我只有评分和人均，你可以去大众点评看看真实评价」，不要自己编造。\n"
+        "3. 推荐餐厅时只能使用高德地图搜到的真实数据。你拥有的信息仅包括：店名、地址、评分、人均价格、高德分类。你无法获取顾客评论、菜品图片、菜单、排队情况等。如果用户问你要评论、要具体菜品、要菜单——直接说「这个我查不到，我只有评分和人均，你可以去大众点评看看真实评价」，不要自己编造。\n"
         "4. 如果用户缺少关键信息（想去哪个区？人均预算？几个人？），友好追问一两句，不要一口气问太多。\n"
         "5. 推荐1-2家即可，简单说理由。输出纯文本，不加 Markdown。\n"
         "6. 不要用「种草」「安利」「必吃」「绝绝子」这种营销口吻。推荐理由用「同学们常去」「评分不错」「性价比高」这种日常表达。\n"
         "7. 打招呼、闲聊、问天气、说「谢谢」之类，就正常聊天，不要硬扯到推荐上。\n"
         f"{preference_text}\n"
+        "8. 对于候选结果中的场所，你要根据它们的「名称」和「高德分类」来判断是否真的符合用户的需求。"
+        "如果用户要找某一类场所（例如咖啡厅、奶茶店、川菜馆），但某个候选场所的名称和分类明显不符合（例如叫「某某食品店」、"
+        "「某某茶行」、分类是「银行」「便利店」等），你就应该把它从推荐列表中排除，"
+        "并在回复中如实说明「这家xx本质上不是xx店，不推荐给你」或类似表达。宁可推荐少一些，也不要推荐不合适的店铺。\n"
+        "9. 如果用户问「好吃的xx」（例如「好吃的咖啡厅」），你应该意识到「吃」这个动词用错了——咖啡厅是喝的不是吃的。"
+        "用幽默的方式指出：「是不是想说好喝的咖啡厅呀？」然后再做推荐。同理，用户说「好喝的川菜馆」也要纠正为「好吃的」。\n"
         "\n"
         "如果用户第一次来聊天，可以主动打招呼：「嘿，我是小南！在南大附近找吃的随时问我～」"
     )

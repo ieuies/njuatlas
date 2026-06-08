@@ -379,12 +379,14 @@ async function sendMessage() {
             let html = '<div class="ai-candidates"><div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>';
             res.candidates.forEach(c => {
                 const distStr = c.distance_text || '';
+                const typeStr = c.type || '';
                 html += `<div class="ai-candidate-item">
                             <span class="ai-candidate-name">${escapeHtml(c.name)}</span>
                             <span class="ai-candidate-meta">
                                 <span>${distStr ? `📍 ${escapeHtml(distStr)}` : ''}</span>
                                 <span>⭐ ${escapeHtml(c.rating)}</span>
                                 <span>💰 ${escapeHtml(c.cost)}</span>
+                                ${typeStr ? `<span>🏷️ ${escapeHtml(typeStr)}</span>` : ''}
                             </span>
                          </div>`;
             });
