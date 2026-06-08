@@ -221,67 +221,58 @@ def chat_recommend():
     def _type_matches_search(message, name, type_str):
         """根据用户消息中的食物关键词、POI 名称和高德 type 字段，判断该 POI 是否匹配。
         返回 True 表示匹配（应保留），False 表示不匹配（应过滤掉）。
+        判断逻辑：如果用户消息中有明确的类型关键词（如面馆、西餐等），
+        则要求候选的名称中也包含相应的关键词才能通过。type 仅作辅助参考。
         """
         if not type_str:
             return True  # 没有 type 信息时不过滤，让 AI 自己判断
         if not message:
             return True
-        type_lower = type_str.lower()
         msg_lower = message.lower()
-        # 从 FOOD_TYPE_MAP 中找到匹配的关键词，再看 type 字段是否包含对应的分类名
+        name_lower = name.lower()
+
+        # 名称关键词映射：用户搜索词 → 期望出现在店名中的关键词
+        name_keywords = {
+            "面馆": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
+            "面食": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
+            "面包": ["面包", "烘焙", "糕饼"],
+            "面包房": ["面包", "烘焙", "糕饼"],
+            "咖啡": ["咖啡", "coffee"],
+            "咖啡厅": ["咖啡", "coffee"],
+            "奶茶": ["奶茶", "茶饮", "茶", "饮品", "水"],
+            "火锅": ["火锅", "焖锅"],
+            "饺子": ["饺子", "水饺"],
+            "饺子馆": ["饺子", "水饺"],
+            "川菜": ["川菜", "麻辣"],
+            "西餐": ["西餐", "牛排", "披萨", "意面", "沙拉", "brunch", "汉堡", "炸鸡", "轻食"],
+            "日料": ["日料", "日本", "寿司", "刺身", "居酒屋", "拉面", "日式"],
+            "韩餐": ["韩餐", "韩国", "韩式", "烤肉", "拌饭"],
+            "烧烤": ["烧烤", "烤串", "烤肉", "烧肉"],
+            "甜品": ["甜品", "甜点", "蛋糕"],
+            "甜点": ["甜品", "甜点", "蛋糕"],
+            "小吃": ["小吃", "炸", "串"],
+        }
+
+        # 从 FOOD_TYPE_MAP 中找到匹配的关键词
+        matched_keyword = None
         for keyword, type_code in FOOD_TYPE_MAP:
             if keyword in msg_lower:
-                # 根据 type_code 推断高德 type 字符串中应该包含的中文分类名
-                type_name_map = {
-                    "050000": ["餐饮", "美食"],
-                    "050100": ["中餐", "中餐厅", "川菜", "湘菜", "火锅", "麻辣", "面馆", "面食", "食堂"],
-                    "050200": ["外国", "日料", "韩餐", "西餐"],
-                    "050300": ["快餐", "小吃"],
-                    "050500": ["冷饮", "茶饮", "奶茶", "饮品"],
-                    "050600": ["糕饼", "面包", "蛋糕", "甜品"],
-                    "050700": ["甜品", "甜点"],
-                    "050800": ["茶餐厅", "港式"],
-                    "051000": ["咖啡", "咖啡厅"],
-                    "051100": ["茶馆", "茶艺"],
-                }
-                expected = type_name_map.get(type_code, [])
-                # 如果 type 中包含任何期望的分类名，则匹配
-                if expected and any(exp in type_lower for exp in expected):
-                    pass  # type 匹配，继续检查 name
-                else:
-                    # 如果 type 不包含期望分类，但有名称兜底则放行（例如高德把面馆标成中餐厅）
-                    # 同时检查名称是否包含关键词
-                    name_keywords = {
-                        "面馆": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
-                        "面包": ["面包", "烘焙", "糕饼"],
-                        "咖啡": ["咖啡", "coffee"],
-                        "奶茶": ["奶茶", "茶饮", "茶", "饮品"],
-                        "火锅": ["火锅", "焖锅"],
-                        "饺子": ["饺子", "水饺"],
-                        "川菜": ["川菜", "麻辣"],
-                    }
-                    name_lower = name.lower()
-                    for nk, nvs in name_keywords.items():
-                        if nk in msg_lower:
-                            if any(nv in name_lower for nv in nvs):
-                                return True  # 名称中包含关键词，放行
-                    return False  # type 和 name 都不匹配，过滤
-                # 继续往下检查，看 name 是否也匹配
-                name_keywords = {
-                    "面馆": ["面", "面条", "拉面", "燃面", "拌面", "汤面"],
-                    "面包": ["面包", "烘焙", "糕饼"],
-                }
-                name_lower = name.lower()
-                for nk, nvs in name_keywords.items():
-                    if nk in msg_lower:
-                        if any(nv in name_lower for nv in nvs):
-                            return True  # 名称匹配
-                        # type 通过了但名称不匹配 → 仍要检查
-                        # 例如搜面馆，type 是中餐厅但名称叫"状元楼西苑餐厅" → 不应该通过
-                        if not any(exp in type_lower for exp in expected):
-                            return False
-                return True
-        return True  # 用户消息没有匹配到任何 FOOD_TYPE_MAP 关键词，不过滤
+                matched_keyword = keyword
+                break
+
+        if matched_keyword is None:
+            return True  # 没有匹配到 FOOD_TYPE_MAP 关键词，不过滤
+
+        # 检查名称中是否包含对应关键词
+        for nk, nvs in name_keywords.items():
+            if nk in msg_lower:
+                if any(nv in name_lower for nv in nvs):
+                    return True  # 名称匹配，通过
+                return False  # 名称不匹配，过滤
+
+        # 没有在 name_keywords 中匹配到，但 FOOD_TYPE_MAP 匹配了（如"餐厅"等泛关键词）
+        # 此时不过滤，让 AI 根据完整信息判断
+        return True
 
     candidates = []
     candidates_text = ""

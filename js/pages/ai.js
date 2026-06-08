@@ -116,7 +116,7 @@ function showThinking() {
     const div = document.createElement('div');
     div.className = 'chat-message chat-thinking';
     div.id = 'aiThinkingMsg';
-    div.innerHTML = '<span class="chat-thinking-dot"></span><span class="chat-thinking-dot"></span><span class="chat-thinking-dot"></span>';
+    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon">🤔</span><span class="thinking-text">小南正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
     messagesDiv.appendChild(div);
     scrollToBottom();
     return div;
