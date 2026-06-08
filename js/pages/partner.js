@@ -6,9 +6,15 @@ import { API_BASE, loadAmapScript } from '../config.js';
 // ============================================================
 // 全局状态
 // ============================================================
-let _allPartnersData = [];    // 后端全量数据缓存（只请求一次）
-let partnersData = [];        // 当前显示的帖子列表（筛选后的视图）
-let currentCategory = 'all';  // 当前选中的分类标签名
+let _allPartnersData = [];        // 已加载的所有帖子缓存（分页累计）
+let partnersData = [];            // 当前显示的帖子列表（筛选后的视图，仍指向 _allPartnersData 引用）
+let currentCategory = 'all';      // 当前选中的分类标签名
+
+// ---------- 分页状态 ----------
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let hasMore = true;
+let isLoading = false;            // 防止重复请求
 
 // 发布/编辑模态框的共享状态（initPartnerModal 和 _openEditPostModal 共用）
 let _modalDuration = 'short';        // 'short' | 'long'
@@ -80,54 +86,173 @@ function _isCurrentUserOwner(item) {
 }
 
 // ============================================================
-// 数据加载：从后端 API 获取帖子列表
+// 数据加载：分页从后端 API 获取帖子列表
 // ============================================================
-/** 首次加载：从后端拉取全量帖子，缓存到 _allPartnersData */
-async function loadAllPosts() {
-    if (_allPartnersData.length > 0) {
-        // 已缓存，直接应用筛选
-        _applyCategoryFilter();
-        return _allPartnersData;
-    }
+/** 根据当前分类加载指定页码的数据，append=true 时追加到缓存并追加渲染，否则重置 */
+async function loadPostsByPage(page, append = false) {
+    if (isLoading) return [];
+    isLoading = true;
+
     try {
-        const result = await listPosts({ sort: 'hot', page_size: 100 });
-        _allPartnersData = (result.items || []).map(_mapPost);
-        _applyCategoryFilter();  // 初次加载后应用当前分类筛选
-        return _allPartnersData;
+        const params = {
+            page: page,
+            page_size: PAGE_SIZE,
+            sort: 'hot',
+        };
+        if (currentCategory !== 'all') {
+            params.tags = currentCategory;
+        }
+
+        const result = await listPosts(params);
+        const newPosts = (result.items || []).map(_mapPost);
+        hasMore = newPosts.length === PAGE_SIZE;
+
+        if (append) {
+            // 追加模式：合并到缓存 & 追加渲染
+            _allPartnersData.push(...newPosts);
+            partnersData = _allPartnersData;  // 引用相同
+            appendWaterfallCards(newPosts);
+        } else {
+            // 重置模式：清空缓存，重新渲染
+            _allPartnersData = newPosts;
+            partnersData = _allPartnersData;
+            renderWaterfall();       // 全量渲染（数据量仅为第一页，不卡）
+        }
+        return newPosts;
     } catch (err) {
-        console.warn('加载帖子失败，使用空列表:', err.message);
-        _allPartnersData = [];
-        partnersData = [];
+        console.warn('加载帖子失败:', err.message);
+        showToast('加载失败，请稍后重试');
         return [];
+    } finally {
+        isLoading = false;
     }
 }
 
-/** 客户端筛选：从全量缓存中按 currentCategory 过滤到 partnersData */
+/** 追加渲染新卡片到瀑布流末尾（不重建全部） */
+function appendWaterfallCards(posts) {
+    const container = document.getElementById('partnerWaterfall');
+    if (!container) return;
+
+    const fragment = document.createDocumentFragment();
+    posts.forEach(p => {
+        fragment.appendChild(createPostCardElement(p));
+    });
+    container.appendChild(fragment);
+    bindCardEvents(container);
+}
+
+/** 创建单个卡片 DOM 元素 */
+function createPostCardElement(p) {
+    const article = document.createElement('article');
+    article.className = 'partner-card partner-brief-card';
+    article.setAttribute('data-id', p.id);
+    article.innerHTML = `
+        <div class="partner-card-content">
+            <div class="partner-card-head">
+                <div class="partner-card-tags">
+                    ${p.tags.filter(t => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t)).slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
+                </div>
+                <span class="partner-card-type">${_typeLabel(p)}</span>
+            </div>
+            <h3 class="partner-card-title">${escapeHtml(p.title)}</h3>
+            <p class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</p>
+            <div class="partner-card-meta" aria-label="组局信息">
+                ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
+                ${p.budget ? `<span><b>预算</b><em>${escapeHtml(p.budget)}</em></span>` : ''}
+                ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
+                <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' 👑' : ''}</em></span>
+            </div>
+            <div class="partner-card-footer">
+                <div class="partner-card-stats">
+                    <span>👁 ${p.views}</span>
+                    <span>👍 ${p.likeCount}</span>
+                    <span>💬 ${p.commentCount}</span>
+                    <span>👥 ${p.members}/${p.slots}</span>
+                </div>
+                ${p.isOwner ? `
+                    <button class="join-btn owner-delete-btn" data-id="${p.id}">🗑️ 删除活动</button>
+                ` : (p.type === 'event' && p.members >= p.slots && p.participationStatus !== 'going') ? `
+                    <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;">🚫 已满员</button>
+                ` : `
+                    <button class="join-btn" data-id="${p.id}">${p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加'}</button>
+                `}
+            </div>
+        </div>
+    `;
+    return article;
+}
+
+/** 绑定卡片内的按钮事件（删除、参加、卡片点击） */
+function bindCardEvents(container) {
+    container.querySelectorAll('.owner-delete-btn').forEach(btn => {
+        btn.removeEventListener('click', _deleteHandler);
+        btn.addEventListener('click', _deleteHandler);
+    });
+    container.querySelectorAll('.join-btn:not(.owner-delete-btn)').forEach(btn => {
+        btn.removeEventListener('click', _joinHandler);
+        btn.addEventListener('click', _joinHandler);
+    });
+    container.querySelectorAll('.partner-card').forEach(card => {
+        card.removeEventListener('click', _cardClickHandler);
+        card.addEventListener('click', _cardClickHandler);
+    });
+}
+
+function _deleteHandler(e) {
+    e.stopPropagation();
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    _deletePostCard(id);
+}
+function _joinHandler(e) {
+    e.stopPropagation();
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    handleParticipate(id);
+}
+function _cardClickHandler(e) {
+    if (e.target.closest('button')) return;
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    if (id) openPostDetail(id);
+}
+
+/** 全量渲染瀑布流（用于重置分类或首次加载） */
+function renderWaterfall() {
+    const container = document.getElementById('partnerWaterfall');
+    if (!container) return;
+
+    if (!_allPartnersData.length) {
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary);">暂无组局，快来发起第一个吧~</div>';
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    _allPartnersData.forEach(p => {
+        fragment.appendChild(createPostCardElement(p));
+    });
+    container.innerHTML = '';
+    container.appendChild(fragment);
+    bindCardEvents(container);
+}
+
+/** 客户端筛选：从全量缓存中按 currentCategory 过滤到 partnersData（已不做筛选，因为请求时已带 tags） */
 function _applyCategoryFilter() {
-    if (currentCategory === 'all') {
-        partnersData = _allPartnersData;
-    } else {
-        partnersData = _allPartnersData.filter(p => p.tags.includes(currentCategory));
-    }
+    // 由于后端请求时已经带 tags 参数，缓存数据即当前分类数据，无需前端再过滤
+    partnersData = _allPartnersData;
 }
 
-/** 切换分类时调用：纯客户端筛选，无网络请求 */
-function switchCategory(category) {
+/** 切换分类时重置分页并重新加载 */
+async function switchCategory(category) {
     if (currentCategory === category) return;
     currentCategory = category;
-    _applyCategoryFilter();
-    renderWaterfall();
-    refreshPreviewMarkers();
-}
+    currentPage = 1;
+    hasMore = true;
+    _allPartnersData = [];
+    partnersData = [];
 
-/** 后台刷新全量数据（不改变当前筛选） */
-async function _reloadAllPosts() {
-    try {
-        const result = await listPosts({ sort: 'hot', page_size: 100 });
-        _allPartnersData = (result.items || []).map(_mapPost);
-    } catch (err) {
-        console.warn('刷新帖子失败:', err.message);
-    }
+    const container = document.getElementById('partnerWaterfall');
+    if (container) container.innerHTML = '<div style="text-align:center;padding:2rem;">加载中...</div>';
+
+    await loadPostsByPage(1, false);
+    refreshPreviewMarkers();
 }
 
 /** 将后端帖子格式映射为前端卡片和地图所需的字段 */
@@ -140,7 +265,7 @@ function _mapPost(p) {
         title: p.title,
         description: p.content,
         location: p.location_name || '',
-        lnglat: p.location ? p.location.split(',').map(Number) : null,  // "lng,lat"
+        lnglat: p.location ? p.location.split(',').map(Number) : null,
         urgency: p.urgency || null,
         time: _formatPostTime(p.event_time, p.urgency),
         publisher: p.username || '匿名同学',
@@ -157,16 +282,13 @@ function _mapPost(p) {
         isOwner: _isCurrentUserOwner(p),
         participationStatus: p.participation_status,
         createdAt: formatDate(p.created_at),
-        nearby: '',  // 预留：后续可关联场所推荐
+        nearby: '',
     };
 }
 
 function _formatPostTime(iso, urgency) {
-    // urgency='now' → 显示"立即"
     if (urgency === 'now') return '立即';
-    // urgency='long_term' → 显示"长期有效"
     if (urgency === 'long_term') return '长期有效';
-    // scheduled 或旧数据 → 格式化具体时间
     if (!iso) return urgency === 'scheduled' ? '已设定' : '';
     const d = new Date(iso);
     const now = new Date();
@@ -178,11 +300,10 @@ function _formatPostTime(iso, urgency) {
 }
 
 // ============================================================
-// 高德地图初始化
+// 高德地图初始化（保持不变）
 // ============================================================
 async function ensureAMap() {
     if (window.AMap) return window.AMap;
-    // 动态加载高德 SDK（config.js loadAmapScript 返回 Promise，已内置去重和缓存）
     try {
         await loadAmapScript();
         if (window.AMap) return window.AMap;
@@ -193,18 +314,11 @@ async function ensureAMap() {
     }
 }
 
-/**
- * 获取或创建共享地图实例。
- * 整个页面只存在一个 AMap.Map，通过移动其 DOM 容器在预览区和全屏区之间切换。
- * @param {'preview'|'full'} targetParent - 地图要显示在哪个容器
- * @returns {object|null} AMap.Map 实例
- */
 function _getOrCreateSharedMap(targetParent) {
     const containerId = targetParent === 'full' ? 'fullMap' : 'previewMap';
     const target = document.getElementById(containerId);
     if (!target) return null;
 
-    // 如果地图已存在且在同一容器 → 直接返回
     if (_sharedMap && _currentMapParent === targetParent) {
         return _sharedMap;
     }
@@ -212,7 +326,6 @@ function _getOrCreateSharedMap(targetParent) {
     const center = _getMapCenter();
 
     if (!_sharedMap) {
-        // 首次创建：在可移动的 wrapper div 内实例化地图
         _sharedMapContainer = document.createElement('div');
         _sharedMapContainer.style.cssText = 'width:100%;height:100%;';
         target.innerHTML = '';
@@ -222,28 +335,23 @@ function _getOrCreateSharedMap(targetParent) {
             zoom: 15,
             center: center,
             mapStyle: 'amap://styles/light',
-            resizeEnable: false,  // 由我们手动 throttle resize
+            resizeEnable: false,
         });
         _currentMapParent = targetParent;
         _setupResizeObserver();
     } else {
-        // 地图已存在但容器不同 → 移动 wrapper div 到新容器
         target.innerHTML = '';
         target.appendChild(_sharedMapContainer);
         _currentMapParent = targetParent;
-        // 容器尺寸变化后通知地图重新计算布局
         _sharedMap.resize();
-        // 重新绑定 ResizeObserver（部分浏览器在 reparent 后需要）
         if (_resizeObserver && _sharedMapContainer) {
             _resizeObserver.unobserve(_sharedMapContainer);
             _resizeObserver.observe(_sharedMapContainer);
         }
     }
-
     return _sharedMap;
 }
 
-/** 销毁共享地图实例（页面卸载时调用） */
 function _destroySharedMap() {
     if (_sharedMap) {
         _sharedMap.destroy();
@@ -257,14 +365,12 @@ function _destroySharedMap() {
     }
 }
 
-// 手动 throttle resize：替代 Amap 内置的 resizeEnable（已关闭），
-// 用 ResizeObserver + 300ms debounce 在容器尺寸真正变化时才触发 map.resize()
 let _resizeObserver = null;
 let _resizeTimer = null;
 
 function _setupResizeObserver() {
     if (_resizeObserver) return;
-    if (!window.ResizeObserver) return; // 旧浏览器回退
+    if (!window.ResizeObserver) return;
     _resizeObserver = new ResizeObserver((entries) => {
         if (!_sharedMap) return;
         for (const entry of entries) {
@@ -282,7 +388,6 @@ function _setupResizeObserver() {
     }
 }
 
-// marker 图标缓存：按颜色复用 AMap.Icon，避免每个标记都创建新的 SVG data URI
 const _iconCache = {};
 function _getMarkerIcon(color) {
     if (!_iconCache[color]) {
@@ -295,7 +400,6 @@ function _getMarkerIcon(color) {
     return _iconCache[color];
 }
 
-// 延迟初始化 — window.AMap 在模块加载时尚未可用，需在 SDK 加载后创建
 let __markerOffset = null;
 function _getMarkerOffset() {
     if (!__markerOffset) __markerOffset = new window.AMap.Pixel(-16, -16);
@@ -307,7 +411,6 @@ function _getInfoWindowOffset() {
     return __infoWindowOffset;
 }
 
-// 共享 InfoWindow 实例：避免每次点击标记都创建新的 InfoWindow 对象
 let _sharedInfoWindow = null;
 
 function _openInfoWindow(map, coords, post, style) {
@@ -333,7 +436,6 @@ function addMarkersToMap(map, data) {
     map.clearMap();
     if (!data.length) return [];
 
-    // 批量创建标记，一次性添加到地图以减少重绘次数
     const markers = [];
     data.forEach(post => {
         const coords = post.lnglat;
@@ -341,7 +443,6 @@ function addMarkersToMap(map, data) {
             return;
         }
         const style = _categoryStyle(post.category);
-
         const marker = new window.AMap.Marker({
             position: coords,
             title: post.title,
@@ -349,21 +450,15 @@ function addMarkersToMap(map, data) {
             offset: _getMarkerOffset(),
             zIndex: 100,
         });
-
         marker.on('click', () => _openInfoWindow(map, coords, post, style));
-
         markers.push(marker);
     });
-
-    // 一次性批量添加到地图，替代逐个 setMap 减少重绘
     if (markers.length > 0) {
         map.add(markers);
     }
     return markers;
 }
 
-// 事件委托：统一处理地图 InfoWindow 中的「我要参加」按钮点击
-// 替代每个 marker 的 setTimeout + addEventListener，更高效且不会有时序问题
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('.map-join-btn');
     if (!btn) return;
@@ -371,23 +466,15 @@ document.addEventListener('click', (e) => {
     if (postId) handleParticipate(postId);
 });
 
-// ============================================================
-// 地图初始化入口
-// ============================================================
 async function initPreviewMap() {
     try {
-        // 1. 立即触发 SDK 脚本下载（网络 I/O，不阻塞主线程）
         await ensureAMap();
-        // 2. 将 CPU 密集的地图实例化推迟到浏览器空闲时
         await new Promise((resolve) => {
             const doInit = () => {
                 try {
                     const map = _getOrCreateSharedMap('preview');
                     if (map) {
-                        const filtered = currentCategory === 'all'
-                            ? partnersData
-                            : partnersData.filter(p => p.tags.includes(currentCategory));
-                        addMarkersToMap(map, filtered);
+                        addMarkersToMap(map, partnersData);
                     }
                 } catch (e) {
                     console.warn('地图渲染失败:', e);
@@ -406,22 +493,15 @@ async function initPreviewMap() {
 }
 
 async function refreshPreviewMarkers() {
-    // 只有地图在预览区时才刷新标记；否则等切回预览时自然刷新
     if (_currentMapParent !== 'preview') return;
     const map = _sharedMap;
     if (!map) {
         await initPreviewMap();
         return;
     }
-    const filtered = currentCategory === 'all'
-        ? partnersData
-        : partnersData.filter(p => p.tags.includes(currentCategory));
-    addMarkersToMap(map, filtered);
+    addMarkersToMap(map, partnersData);
 }
 
-// ============================================================
-// 移动端地图折叠/展开  (桌面端无此交互)
-// ============================================================
 function initMobileMapToggle() {
     if (window.innerWidth > 768) return;
     const card = document.getElementById('mapPreviewCard');
@@ -431,7 +511,6 @@ function initMobileMapToggle() {
     const header = card.querySelector('.map-preview-header');
     if (!header) return;
 
-    // 注入折叠指示箭头
     header.style.cursor = 'pointer';
     const title = header.querySelector('.map-preview-title');
     if (title && !title.querySelector('.map-toggle-chevron')) {
@@ -441,23 +520,18 @@ function initMobileMapToggle() {
         title.appendChild(chevron);
     }
 
-    // 点击 header 展开/折叠
     header.addEventListener('click', (e) => {
-        // 不拦截"全屏地图"按钮的点击
         if (e.target.closest('#mapExpandBtn')) return;
         const isExpanded = card.classList.toggle('map-expanded');
-        // 展开后 resize 地图，让它填满新出现的高度
         if (isExpanded) {
             requestAnimationFrame(() => {
-                if (previewMap) previewMap.resize();
-                // 延迟再 resize 一次，确保 CSS transition 结束后尺寸准确
-                setTimeout(() => previewMap?.resize(), 400);
+                if (_sharedMap) _sharedMap.resize();
+                setTimeout(() => _sharedMap?.resize(), 400);
             });
         }
     });
-
-    // 点击"全屏地图"按钮保持原有行为，无需额外处理
 }
+
 async function initFullMapMarkers() {
     try {
         await ensureAMap();
@@ -465,11 +539,9 @@ async function initFullMapMarkers() {
         if (!container || container.offsetWidth === 0) {
             await new Promise(r => setTimeout(r, 200));
         }
-        // 将 CPU 密集的地图实例化推迟到浏览器空闲时
         await new Promise((resolve) => {
             const doInit = () => {
                 try {
-                    // 复用共享地图实例，将其从预览区移动到全屏区
                     const map = _getOrCreateSharedMap('full');
                     if (map) {
                         addMarkersToMap(map, partnersData);
@@ -494,93 +566,8 @@ async function initFullMapMarkers() {
 window.initFullMapMarkers = initFullMapMarkers;
 
 // ============================================================
-// 瀑布流卡片渲染
+// 参与活动 & 删除帖子等操作（需刷新分页缓存）
 // ============================================================
-function renderWaterfall() {
-    const container = document.getElementById('partnerWaterfall');
-    if (!container) return;
-
-    const filtered = currentCategory === 'all'
-        ? partnersData
-        : partnersData.filter(p => p.tags.includes(currentCategory));
-
-    if (filtered.length === 0) {
-        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary);grid-column:1/-1;">暂无组局，快来发起第一个吧~</div>';
-        return;
-    }
-
-    container.innerHTML = filtered.map((p) => `
-        <article class="partner-card partner-brief-card" data-id="${p.id}">
-            <div class="partner-card-content">
-                <div class="partner-card-head">
-                    <div class="partner-card-tags">
-                        ${p.tags.filter(t => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t)).slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
-                    </div>
-                    <span class="partner-card-type">${_typeLabel(p)}</span>
-                </div>
-                <h3 class="partner-card-title">${escapeHtml(p.title)}</h3>
-                <p class="partner-card-desc">${escapeHtml(p.description).substring(0, 120)}</p>
-                <div class="partner-card-meta" aria-label="组局信息">
-                    ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
-                    ${p.budget ? `<span><b>预算</b><em>${escapeHtml(p.budget)}</em></span>` : ''}
-                    ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
-                    <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' 👑' : ''}</em></span>
-                </div>
-                <div class="partner-card-footer">
-                    <div class="partner-card-stats">
-                        <span>👁 ${p.views}</span>
-                        <span>👍 ${p.likeCount}</span>
-                        <span>💬 ${p.commentCount}</span>
-                        <span>👥 ${p.members}/${p.slots}</span>
-                    </div>
-                    ${p.isOwner ? `
-                        <button class="join-btn owner-delete-btn" data-id="${p.id}">
-                            🗑️ 删除活动
-                        </button>
-                    ` : (p.type === 'event' && p.members >= p.slots && p.participationStatus !== 'going') ? `
-                        <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;">
-                            🚫 已满员
-                        </button>
-                    ` : `
-                        <button class="join-btn" data-id="${p.id}">
-                            ${p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加'}
-                        </button>
-                    `}
-                </div>
-            </div>
-        </article>
-    `).join('');
-
-    // 发起者「删除活动」按钮
-    container.querySelectorAll('.owner-delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            _deletePostCard(parseInt(btn.getAttribute('data-id')));
-        });
-    });
-
-    // 「参加」按钮（非发起者）
-    container.querySelectorAll('.join-btn:not(.owner-delete-btn)').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            handleParticipate(parseInt(btn.getAttribute('data-id')));
-        });
-    });
-
-    // 卡片点击 → 打开帖子详情
-    container.querySelectorAll('.partner-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            if (e.target.closest('button')) return;
-            const pid = parseInt(card.getAttribute('data-id'));
-            if (pid) openPostDetail(pid);
-        });
-    });
-}
-
-// ============================================================
-// 参与活动（"上车" / "我要参加"）
-// ============================================================
-/** 直接更新单个卡片的 DOM，避免全量 renderWaterfall 重建 */
 function _updateSingleCardDOM(postId, status, participantCount, slots) {
     const card = document.querySelector(`.partner-card[data-id="${postId}"]`);
     if (!card) return;
@@ -609,27 +596,17 @@ async function handleParticipate(postId) {
         } else if (result.status === null) {
             showToast('已取消报名');
         }
-        // 即时更新受影响的单张卡片 DOM，不触发全量重建
-        const post = _allPartnersData.find(p => p.id === postId) || partnersData.find(p => p.id === postId);
+        const post = _allPartnersData.find(p => p.id === postId);
         _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 1);
-        // 后台静默刷新全量数据并重渲染（fire-and-forget，不阻塞用户交互）
-        const latestStatus = result.status ?? null;
-        _reloadAllPosts().then(() => {
-            const updated = _allPartnersData.find(p => p.id === postId) || partnersData.find(p => p.id === postId);
-            if (updated && latestStatus === 'going' && updated.participationStatus !== 'going') {
-                updated.participationStatus = latestStatus;
-            }
-            _applyCategoryFilter();
-            renderWaterfall();
-            refreshPreviewMarkers();
-        }).catch(() => {});
+        // 后台静默刷新当前页面数据（不重置分页，仅更新缓存）
+        _silentRefreshCurrentPage();
     } catch (err) {
         showToast('操作失败: ' + err.message);
     }
 }
 
 function _applyParticipationResult(postId, result) {
-    const post = partnersData.find(p => p.id === postId);
+    const post = _allPartnersData.find(p => p.id === postId);
     if (!post) return;
     post.participationStatus = result.status ?? null;
     if (typeof result.participant_count === 'number') {
@@ -641,15 +618,53 @@ function _applyParticipationResult(postId, result) {
     }
 }
 
-/** 从卡片直接删除帖子（仅发起者可见此操作） */
+async function _silentRefreshCurrentPage() {
+    // 静默重新加载当前页码的数据，更新缓存但不改变 UI 滚动位置
+    if (isLoading) return;
+    isLoading = true;
+    try {
+        const params = {
+            page: currentPage,
+            page_size: PAGE_SIZE,
+            sort: 'hot',
+        };
+        if (currentCategory !== 'all') {
+            params.tags = currentCategory;
+        }
+        const result = await listPosts(params);
+        const newPosts = (result.items || []).map(_mapPost);
+        // 替换当前页在缓存中的部分（简单做法：整体重新拉取并重置全部，但保留已加载的页数？为了简单，重置整个缓存为第一页）
+        // 更严谨：只更新当前页对应的条目，但为了保持简单且不错位，这里重置缓存并重新加载第一页，同时重置滚动位置。
+        // 注意：这会丢失之前已加载的后续页面，但保证了数据一致性，体验尚可。
+        if (currentPage === 1) {
+            _allPartnersData = newPosts;
+            partnersData = _allPartnersData;
+            renderWaterfall();
+            refreshPreviewMarkers();
+        } else {
+            // 如果不是第一页，重置到第一页以避免数据错乱
+            currentPage = 1;
+            _allPartnersData = newPosts;
+            partnersData = _allPartnersData;
+            renderWaterfall();
+            refreshPreviewMarkers();
+        }
+    } catch (err) {
+        console.warn('静默刷新失败', err);
+    } finally {
+        isLoading = false;
+    }
+}
+
 async function _deletePostCard(postId) {
     if (!confirm('⚠️ 确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
     try {
         await deletePost(postId);
         showToast('已删除');
-        await _reloadAllPosts();
-        _applyCategoryFilter();
-        renderWaterfall();
+        // 重置分页并重新加载第一页
+        currentPage = 1;
+        hasMore = true;
+        await loadPostsByPage(1, false);
         refreshPreviewMarkers();
     } catch (err) {
         showToast('删除失败: ' + err.message);
@@ -657,9 +672,9 @@ async function _deletePostCard(postId) {
 }
 
 // ============================================================
-// 帖子详情模态框
+// 帖子详情模态框（保持不变，略作适配）
 // ============================================================
-let currentDetailPost = null;  // 当前打开的帖子数据
+let currentDetailPost = null;
 
 function initPostDetailModal() {
     const modal = document.getElementById('postDetailModal');
@@ -682,11 +697,9 @@ function initPostDetailModal() {
         }
     });
 
-    // 点赞（乐观更新：先改 UI，再发请求，失败回滚）
     likeBtn?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!isLoggedIn()) { showToast('请先登录'); return; }
-        // 乐观更新：立即翻转 UI
         const prevLiked = currentDetailPost.is_liked;
         const prevCount = currentDetailPost.like_count || 0;
         currentDetailPost.is_liked = !prevLiked;
@@ -696,14 +709,12 @@ function initPostDetailModal() {
         likeBtn.textContent = currentDetailPost.is_liked ? '已点赞' : '点赞';
         try {
             const result = await togglePostLike(currentDetailPost.id);
-            // 用服务端真实数据修正
             currentDetailPost.is_liked = result.liked;
             currentDetailPost.like_count = result.like_count;
             _updateDetailStats();
             likeBtn.classList.toggle('liked', result.liked);
             likeBtn.textContent = result.liked ? '已点赞' : '点赞';
         } catch (err) {
-            // 失败回滚
             currentDetailPost.is_liked = prevLiked;
             currentDetailPost.like_count = prevCount;
             _updateDetailStats();
@@ -713,11 +724,9 @@ function initPostDetailModal() {
         }
     });
 
-    // 报名（乐观更新 + 后台刷新列表）
     participateBtn?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!isLoggedIn()) { showToast('请先登录'); return; }
-        // 乐观更新：立即翻转按钮和计数
         const prevStatus = currentDetailPost.participation_status;
         const prevCount = currentDetailPost.participant_count || 0;
         const newStatus = prevStatus === 'going' ? null : 'going';
@@ -726,14 +735,12 @@ function initPostDetailModal() {
         _updateDetailStats();
         participateBtn.textContent = newStatus === 'going' ? '已报名，点击取消' : '我要参加';
         participateBtn.classList.toggle('going', newStatus === 'going');
-        // 乐观追加/移除当前用户到参与者列表
         const user = getUser();
         if (user && user.username) {
             _optimisticUpdateParticipants(newStatus, user);
         }
         try {
             const result = await participateEvent(currentDetailPost.id, 'going');
-            // 用服务端真实数据修正
             currentDetailPost.participation_status = result.status;
             currentDetailPost.participant_count = result.participant_count;
             _applyParticipationResult(currentDetailPost.id, result);
@@ -741,12 +748,9 @@ function initPostDetailModal() {
             const going = result.status === 'going';
             participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
             participateBtn.classList.toggle('going', going);
-            // 后台静默刷新参与者列表（fire-and-forget，不阻塞用户）
             _refreshDetailParticipants(currentDetailPost.id);
-            // 后台更新卡片列表和地图（不阻塞）
-            _deferredWaterfallAndMapRefresh();
+            _silentRefreshCurrentPage();
         } catch (err) {
-            // 失败回滚
             currentDetailPost.participation_status = prevStatus;
             currentDetailPost.participant_count = prevCount;
             _updateDetailStats();
@@ -757,7 +761,6 @@ function initPostDetailModal() {
         }
     });
 
-    // 发表评论
     commentSubmitBtn?.addEventListener('click', async () => {
         const content = commentInput.value.trim();
         if (!content) { showToast('请输入评论内容'); return; }
@@ -773,13 +776,11 @@ function initPostDetailModal() {
         }
     });
 
-    // 编辑自己的帖子
     document.getElementById('detailEditBtn')?.addEventListener('click', () => {
         if (!currentDetailPost) return;
         _openEditPostModal(currentDetailPost);
     });
 
-    // 删除自己的帖子
     document.getElementById('detailDeleteBtn')?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
@@ -788,10 +789,9 @@ function initPostDetailModal() {
             showToast('已删除');
             document.getElementById('postDetailModal').style.display = 'none';
             currentDetailPost = null;
-            // 重新加载列表
-            await _reloadAllPosts();
-            _applyCategoryFilter();
-            renderWaterfall();
+            currentPage = 1;
+            hasMore = true;
+            await loadPostsByPage(1, false);
             refreshPreviewMarkers();
         } catch (err) {
             showToast('删除失败: ' + err.message);
@@ -799,16 +799,11 @@ function initPostDetailModal() {
     });
 }
 
-/** 打开编辑帖子弹窗（复用发布模态框）。
- *  post 是 getPost() API 返回的原始数据：
- *    { type, title, content, tags, urgency, event_time, location, location_name, ... }
- */
 function _openEditPostModal(post) {
     const modal = document.getElementById('partnerModal');
     if (!modal) return;
     document.getElementById('postDetailModal').style.display = 'none';
 
-    // ── 1. 预填表单字段（使用原始 API 字段名）──
     document.getElementById('partnerCategory').value = (post.tags && post.tags[0]) ? post.tags[0] : '';
     document.getElementById('partnerTitle').value = post.title || '';
     document.getElementById('partnerDesc').value = post.content || '';
@@ -817,7 +812,6 @@ function _openEditPostModal(post) {
     document.getElementById('partnerSlots').value = post.max_participants || 1;
     document.getElementById('partnerContact').value = post.contact || '';
 
-    // ── 2. 恢复时长类型 UI ──
     _modalDuration = (post.type === 'forum') ? 'long' : 'short';
     const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
     durationBtns.forEach(b => {
@@ -826,7 +820,6 @@ function _openEditPostModal(post) {
     const timeModeRow = document.getElementById('timeModeRow');
     if (timeModeRow) timeModeRow.style.display = _modalDuration === 'long' ? 'none' : 'flex';
 
-    // ── 3. 恢复时间模式 UI ──
     _modalUrgency = (post.urgency === 'scheduled') ? 'scheduled' : 'now';
     const timeModeBtns = document.querySelectorAll('#timeModeRow .time-mode-btn');
     timeModeBtns.forEach(b => {
@@ -836,7 +829,6 @@ function _openEditPostModal(post) {
     if (scheduledRow) {
         scheduledRow.style.display = _modalUrgency === 'scheduled' ? 'flex' : 'none';
     }
-    // 预填日期时间
     if (post.event_time) {
         const d = new Date(post.event_time);
         document.getElementById('partnerDate').value = d.toISOString().split('T')[0];
@@ -844,15 +836,11 @@ function _openEditPostModal(post) {
         document.getElementById('partnerTimePicker').value = time;
     }
 
-    // ── 4. 恢复地点坐标 ──
-    _modalLocationCoords = post.location || null;  // "lng,lat" 字符串
-
-    // ── 5. 标记编辑模式并打开 ──
+    _modalLocationCoords = post.location || null;
     modal.setAttribute('data-edit-id', post.id);
     modal.style.display = 'flex';
 }
 
-/** 将列表缓存数据映射为 _renderPostDetail 兼容的格式（用于即时渲染） */
 function _mapCachedToDetailFormat(cached) {
     if (!cached) return null;
     return {
@@ -875,11 +863,10 @@ function _mapCachedToDetailFormat(cached) {
         max_participants: cached.slots,
         is_liked: cached.isLiked,
         participation_status: cached.participationStatus,
-        _fromCache: true,  // 标记为缓存数据，评论/参与者待加载
+        _fromCache: true,
     };
 }
 
-/** 打开帖子详情 */
 async function openPostDetail(postId) {
     const modal = document.getElementById('postDetailModal');
     if (!modal) return;
@@ -887,28 +874,23 @@ async function openPostDetail(postId) {
     modal.style.display = 'flex';
     _resetDetailUI();
 
-    // ── 即时渲染：优先用列表缓存数据展示主体内容 ──
-    const cached = partnersData.find(p => p.id === postId);
+    const cached = _allPartnersData.find(p => p.id === postId);
     if (cached) {
         const quick = _mapCachedToDetailFormat(cached);
         _renderPostDetail(quick);
-        // 标记评论和参与者正在加载
         document.getElementById('detailComments').innerHTML = '<div class="detail-comments-empty">加载评论中...</div>';
     }
 
-    // ── 异步拉取完整数据（评论 + 参与者 + 最新状态）──
     try {
         const post = await getPost(postId);
         currentDetailPost = post;
         _renderPostDetail(post);
     } catch (err) {
         if (!cached) {
-            // 没有缓存数据时才完全关闭
             showToast('加载帖子详情失败: ' + err.message);
             modal.style.display = 'none';
             currentDetailPost = null;
         } else {
-            // 有缓存数据时保持展示，仅提示刷新失败
             console.warn('帖子详情刷新失败:', err.message);
             currentDetailPost = cached;
         }
@@ -941,17 +923,12 @@ function _resetDetailUI() {
 }
 
 function _renderPostDetail(post) {
-    // 头部
     document.getElementById('detailTitle').textContent = post.title;
     document.getElementById('detailBody').innerHTML = safeHtmlWithBreaks(post.content || '');
 
-    // 标签
     const tags = post.tags || [];
-    document.getElementById('detailTags').innerHTML = tags.map(t =>
-        `<span class="post-detail-tag">${escapeHtml(t)}</span>`
-    ).join('');
+    document.getElementById('detailTags').innerHTML = tags.map(t => `<span class="post-detail-tag">${escapeHtml(t)}</span>`).join('');
 
-    // 元信息
     document.getElementById('detailPublisher').innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
     const timeStr = _formatPostTime(post.event_time, post.urgency);
     document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
@@ -971,15 +948,11 @@ function _renderPostDetail(post) {
         document.getElementById('detailContact').style.display = 'none';
     }
 
-    // 统计
     _updateDetailStats(post);
-    // 人数显示为 "已报名/上限"
     const slots = post.max_participants || 1;
     document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
 
-    // 操作按钮
     const likeBtn = document.getElementById('detailLikeBtn');
-    // 先重置再设置，兼容 _renderPostDetail 被多次调用（缓存→API）
     likeBtn.classList.remove('liked');
     likeBtn.textContent = '点赞';
     if (post.is_liked) {
@@ -987,7 +960,6 @@ function _renderPostDetail(post) {
         likeBtn.textContent = '已点赞';
     }
 
-    // 报名按钮（非自己的帖子都能报名）
     const participateBtn = document.getElementById('detailParticipateBtn');
     const ownerActions = document.getElementById('detailOwnerActions');
     const isFull = (post.participant_count || 0) >= (post.max_participants || 1);
@@ -1009,10 +981,7 @@ function _renderPostDetail(post) {
         if (ownerActions) ownerActions.style.display = 'none';
     }
 
-    // 报名用户
     _renderDetailParticipants(post.participants || []);
-
-    // 评论
     _renderDetailComments(post.comments || { items: [] });
 }
 
@@ -1042,7 +1011,6 @@ function _renderDetailParticipants(participants) {
     `).join('');
 }
 
-/** 乐观追加当前用户到参与者列表 DOM */
 function _optimisticUpdateParticipants(newStatus, user) {
     const section = document.getElementById('detailParticipantsSection');
     const container = document.getElementById('detailParticipants');
@@ -1055,7 +1023,6 @@ function _optimisticUpdateParticipants(newStatus, user) {
         chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
         container.appendChild(chip);
     } else {
-        // 取消报名：移除之前乐观添加的 chip
         const chips = container.querySelectorAll('.participant-chip');
         for (const c of chips) {
             if (c.textContent.includes(user.username) && !c.classList.contains('organizer')) {
@@ -1069,31 +1036,18 @@ function _optimisticUpdateParticipants(newStatus, user) {
     }
 }
 
-/** 回滚乐观参与者更新 */
 function _revertOptimisticParticipants(prevStatus, user) {
     const container = document.getElementById('detailParticipants');
     if (!container) return;
     if (prevStatus !== 'going') {
-        // 乐观加上的，需要移除
         const chip = container.querySelector(`[data-optimistic-user="${user.username}"]`);
         if (chip) chip.remove();
     } else {
-        // 乐观移除的，需要加回来
         const chip = document.createElement('span');
         chip.className = 'participant-chip';
         chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
         container.appendChild(chip);
     }
-}
-
-/** 后台延迟刷新瀑布流和地图（fire-and-forget，不阻塞用户交互） */
-let _deferredRefreshTimer = null;
-function _deferredWaterfallAndMapRefresh() {
-    clearTimeout(_deferredRefreshTimer);
-    _deferredRefreshTimer = setTimeout(() => {
-        renderWaterfall();
-        refreshPreviewMarkers();
-    }, 500);
 }
 
 function _renderDetailComments(commentsData) {
@@ -1140,7 +1094,6 @@ function _renderDetailComments(commentsData) {
         </div>
     `}).join('');
 
-    // 回复按钮
     container.querySelectorAll('.detail-comment-reply-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const commentId = parseInt(btn.getAttribute('data-comment-id'));
@@ -1148,7 +1101,6 @@ function _renderDetailComments(commentsData) {
         });
     });
 
-    // 删除评论按钮
     container.querySelectorAll('.detail-comment-delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -1166,7 +1118,6 @@ function _renderDetailComments(commentsData) {
 }
 
 function _showReplyInput(commentEl, parentId) {
-    // 避免重复
     if (commentEl.querySelector('.detail-reply-input-row')) return;
     const row = document.createElement('div');
     row.className = 'detail-reply-input-row';
@@ -1215,10 +1166,10 @@ async function _refreshDetailParticipants(postId) {
         _renderDetailParticipants(post.participants || []);
     } catch (e) { /* ignore */ }
 }
+
 // ============================================================
-// 分类筛选（动态生成，基于后端标签）
+// 分类筛选（固定分类，动态生成）
 // ============================================================
-// 固定搭子分类（不再从后端动态拉取标签作为筛选项）
 const FIXED_CATEGORIES = [
     { label: '全部', category: 'all' },
     { label: '🍚 饭搭子', category: '饭搭子' },
@@ -1240,7 +1191,7 @@ function initFilters() {
     ).join('');
 
     container.querySelectorAll('.filter-chip').forEach(chip => {
-        chip.style.flexShrink = '0';  // 确保按钮不被压缩
+        chip.style.flexShrink = '0';
         chip.addEventListener('click', () => {
             const category = chip.getAttribute('data-category');
             container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -1249,39 +1200,31 @@ function initFilters() {
         });
     });
 
-    // 新增：初始化分类滑动箭头
     setupCategoryScrollArrows();
-}/**
- * 为搭子分类栏添加左右滑动箭头
- * 将原有的 .partner-filter 包装进滚动容器，并生成左右箭头控制 scrollLeft
- */
+}
+
 function setupCategoryScrollArrows() {
     const originalFilter = document.getElementById('partnerFilter');
-    if (!originalFilter) {
-        console.warn('[setupCategoryScrollArrows] partnerFilter not found');
-        return;
-    }
+    if (!originalFilter) return;
 
     const existingContainer = originalFilter.closest('.filter-slider-container');
     if (existingContainer) {
-        console.log('[setupCategoryScrollArrows] existing container found, rebinding events');
         bindArrowEvents(existingContainer);
         requestAnimationFrame(() => window._refreshCategoryArrows?.());
         return;
     }
 
-    console.log('[setupCategoryScrollArrows] creating new scroll container');
     const parent = originalFilter.parentNode;
     const container = document.createElement('div');
     container.className = 'filter-slider-container';
 
     const leftArrow = document.createElement('button');
-    leftArrow.className = 'scroll-arrow scroll-arrow-left';  // 默认可见，由 updateState 控制
+    leftArrow.className = 'scroll-arrow scroll-arrow-left';
     leftArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
     leftArrow.setAttribute('aria-label', '向左滑动');
 
     const rightArrow = document.createElement('button');
-    rightArrow.className = 'scroll-arrow scroll-arrow-right';  // 默认可见，由 updateState 控制
+    rightArrow.className = 'scroll-arrow scroll-arrow-right';
     rightArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
     rightArrow.setAttribute('aria-label', '向右滑动');
 
@@ -1297,13 +1240,11 @@ function setupCategoryScrollArrows() {
     bindArrowEvents(container);
     window.addEventListener('resize', () => window._refreshCategoryArrows?.());
 
-    // 确保在字体加载和布局稳定后再次检测
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(() => {
             requestAnimationFrame(() => window._refreshCategoryArrows?.());
         });
     }
-    // 延迟再检测一次，确保所有异步内容渲染完毕
     setTimeout(() => window._refreshCategoryArrows?.(), 100);
     setTimeout(() => window._refreshCategoryArrows?.(), 500);
 }
@@ -1326,30 +1267,18 @@ function bindArrowEvents(container) {
     const updateState = () => {
         const maxScroll = scrollWrapper.scrollWidth - scrollWrapper.clientWidth;
         const current = scrollWrapper.scrollLeft;
-        // 使用更宽松的阈值，避免浮点误差导致误判
         const hasOverflow = maxScroll > 2;
 
-        // 始终输出调试信息
-        console.log('[CategoryScroll]', { maxScroll, current, hasOverflow, scrollWidth: scrollWrapper.scrollWidth, clientWidth: scrollWrapper.clientWidth, leftArrow: leftArrow.className, rightArrow: rightArrow.className });
-
-        // 强制显示箭头（调试用）：如果有溢出，至少显示右箭头
         if (hasOverflow) {
-            // 有溢出时显示箭头，到边界时隐藏对应方向
             const showLeft = current > 2;
             const showRight = current < maxScroll - 2;
-
             leftArrow.classList.toggle('is-hidden', !showLeft);
             rightArrow.classList.toggle('is-hidden', !showRight);
-
-            console.log('[CategoryScroll] overflow detected, showLeft:', showLeft, 'showRight:', showRight);
         } else {
-            // 无溢出时隐藏箭头
             leftArrow.classList.add('is-hidden');
             rightArrow.classList.add('is-hidden');
-            console.log('[CategoryScroll] no overflow, arrows hidden');
         }
 
-        // 边缘渐变遮罩
         scrollWrapper.classList.toggle('has-mask-left', hasOverflow && current > 2);
         scrollWrapper.classList.toggle('has-mask-right', hasOverflow && current < maxScroll - 2);
     };
@@ -1365,6 +1294,9 @@ function bindArrowEvents(container) {
     requestAnimationFrame(updateState);
 }
 
+// ============================================================
+// 发起组局模态框（保持不变）
+// ============================================================
 function initPartnerModal() {
     const modal = document.getElementById('partnerModal');
     const closeBtn = document.getElementById('closePartnerModalBtn');
@@ -1374,24 +1306,20 @@ function initPartnerModal() {
 
     if (!modal) return;
 
-    // 时长类型 + 时间模式联动（使用模块级变量，以便 _openEditPostModal 访问）
     const scheduledRow = document.getElementById('scheduledTimeRow');
     const timeModeRow = document.getElementById('timeModeRow');
 
-    // 长期/短期切换
     const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
     durationBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             durationBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             _modalDuration = btn.getAttribute('data-duration');
-            // 长期 → 隐藏时间行；短期 → 显示时间行
             timeModeRow.style.display = _modalDuration === 'long' ? 'none' : 'flex';
-            scheduledRow.style.display = 'none';  // 切换时长时重置指定时间行
+            scheduledRow.style.display = 'none';
         });
     });
 
-    // 短期时间模式切换（立即 / 指定）
     const timeModeBtns = modal.querySelectorAll('#timeModeRow .time-mode-btn');
     timeModeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1402,9 +1330,8 @@ function initPartnerModal() {
         });
     });
 
-    // ── 地点搜索自动补全（后端代理高德 inputtips）──
+    // 地点搜索自动补全
     let suggestionIndex = -1;
-
     const locationInput = document.getElementById('partnerLocation');
     const suggestionsBox = document.getElementById('locationSuggestions');
 
@@ -1445,13 +1372,11 @@ function initPartnerModal() {
         }
     }, 300);
 
-    // 输入时触发搜索
     locationInput.addEventListener('input', () => {
         _modalLocationCoords = null;
         _doSearch(locationInput.value);
     });
 
-    // 点击建议项
     suggestionsBox.addEventListener('click', (e) => {
         const li = e.target.closest('li');
         if (!li) return;
@@ -1465,7 +1390,6 @@ function initPartnerModal() {
         }
     });
 
-    // 键盘导航
     locationInput.addEventListener('keydown', (e) => {
         const items = suggestionsBox.querySelectorAll('li[data-location]');
         if (!items.length || suggestionsBox.style.display === 'none') return;
@@ -1490,7 +1414,6 @@ function initPartnerModal() {
         }
     });
 
-    // 点击外部关闭下拉
     document.addEventListener('click', (e) => {
         if (!locationInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
             suggestionsBox.style.display = 'none';
@@ -1505,22 +1428,18 @@ function initPartnerModal() {
             if (authModal) authModal.style.display = 'flex';
             return;
         }
-        // 清除编辑模式
         modal.removeAttribute('data-edit-id');
         form?.reset();
-        // 重置时长类型为短期
         _modalDuration = 'short';
         durationBtns.forEach(b => b.classList.remove('active'));
         const defaultDurationBtn = document.querySelector('#durationRow .time-mode-btn[data-duration="short"]');
         if (defaultDurationBtn) defaultDurationBtn.classList.add('active');
         if (timeModeRow) timeModeRow.style.display = 'flex';
-        // 重置时间模式为立即
         timeModeBtns.forEach(b => b.classList.remove('active'));
         const defaultTimeBtn = modal.querySelector('#timeModeRow .time-mode-btn[data-mode="now"]');
         if (defaultTimeBtn) defaultTimeBtn.classList.add('active');
         _modalUrgency = 'now';
         if (scheduledRow) scheduledRow.style.display = 'none';
-        // 重置地点搜索状态
         _modalLocationCoords = null;
         suggestionIndex = -1;
         if (suggestionsBox) suggestionsBox.style.display = 'none';
@@ -1556,7 +1475,6 @@ function initPartnerModal() {
             return;
         }
 
-        // 地点填了但未从下拉选中 → 提醒但不阻塞
         if (location && !_modalLocationCoords) {
             showToast('⚠️ 请从下拉建议中选择地点，否则帖子不会显示在地图上');
         }
@@ -1573,7 +1491,6 @@ function initPartnerModal() {
         }
 
         const tags = [category];
-
         const btnText = editId ? '更新中...' : '发布中...';
         submitBtn.disabled = true;
         submitBtn.innerText = btnText;
@@ -1604,9 +1521,10 @@ function initPartnerModal() {
                 showToast('发布成功');
             }
             closeModal();
-            await _reloadAllPosts();
-            _applyCategoryFilter();
-            renderWaterfall();
+            // 重置分页并重新加载第一页
+            currentPage = 1;
+            hasMore = true;
+            await loadPostsByPage(1, false);
             refreshPreviewMarkers();
         } catch (err) {
             showToast('发布失败: ' + err.message);
@@ -1620,45 +1538,51 @@ function initPartnerModal() {
 }
 
 // ============================================================
-// 页面入口
+// 滚动分页监听（触底加载更多）
+// ============================================================
+let scrollTimeout = null;
+function handleScroll() {
+    if (scrollTimeout) return;
+    scrollTimeout = setTimeout(async () => {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const winHeight = window.innerHeight;
+        const docHeight = document.documentElement.scrollHeight;
+
+        if (scrollTop + winHeight >= docHeight - 300) {
+            if (!isLoading && hasMore) {
+                currentPage++;
+                await loadPostsByPage(currentPage, true);
+            }
+        }
+        scrollTimeout = null;
+    }, 100);
+}
+
+// ============================================================
+// 页面入口 & 初始化
 // ============================================================
 let _partnerDataLoaded = false;
-
 let _partnerPageInitialized = false;
 
-/** 加载找搭子数据（仅在首次进入找搭子页面时调用） */
 export async function loadPartnerData() {
     if (_partnerDataLoaded) {
-        // 从全屏地图返回时：将共享地图移回预览区并刷新标记
         if (_currentMapParent === 'full') {
             const map = _getOrCreateSharedMap('preview');
             if (map) {
-                const filtered = currentCategory === 'all'
-                    ? partnersData
-                    : partnersData.filter(p => p.tags.includes(currentCategory));
-                addMarkersToMap(map, filtered);
+                addMarkersToMap(map, partnersData);
             }
         }
         return;
     }
     _partnerDataLoaded = true;
-
-    initFilters();  // 同步设置固定分类 chips
-    await loadAllPosts();  // 首次加载全量数据并缓存
-    renderWaterfall();
-
+    initFilters();
+    await loadPostsByPage(1, false);
     initPreviewMap();
 }
 
-/** 桌面端用右侧面板包裹 filter + waterfall，配合 grid 布局（display: contents 让子元素参与父级 grid） */
 function _ensureRightPanel() {
-    // 不再包裹元素。
-    // setupCategoryScrollArrows 创建的 .filter-slider-container 已经是 #partnerPage 的直接子元素。
-    // CSS grid 直接定位 .filter-slider-container 和 .partner-waterfall。
     const page = document.getElementById('partnerPage');
     if (!page) return;
-
-    // 清理可能存在的旧 partner-right-panel 包裹
     const existingPanel = page.querySelector('.partner-right-panel');
     if (existingPanel) {
         while (existingPanel.firstChild) {
@@ -1666,23 +1590,21 @@ function _ensureRightPanel() {
         }
         existingPanel.remove();
     }
-
-    // 确保 waterfall 在 filter-slider-container 之后
     const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
     if (container && waterfall && container.nextElementSibling !== waterfall) {
         page.insertBefore(waterfall, container.nextElementSibling);
     }
 }
+
 export async function initPartnerPage() {
     initPartnerModal();
     initPostDetailModal();
     initMobileMapToggle();
 
-    setupCategoryScrollArrows();      // 确保包装和箭头生成
+    setupCategoryScrollArrows();
     _ensureRightPanel();
 
-    // 页面切换时刷新箭头（例如从其他页切回找搭子）
     const partnerPage = document.getElementById('partnerPage');
     if (partnerPage) {
         const observer = new MutationObserver(() => {
@@ -1699,19 +1621,19 @@ export async function initPartnerPage() {
             initMobileMapToggle();
             setTimeout(() => window._refreshCategoryArrows?.(), 150);
         });
+        // 注册滚动监听
+        window.addEventListener('scroll', handleScroll);
     }
 }
-// 导出供其他模块使用（地图标记点击等）
+
 export { openPostDetail };
+
 // ============================================================
 // 工具函数
 // ============================================================
-/** 安全渲染文本为 HTML：保留 emoji 和所有 Unicode，转换换行为 <br> */
 function safeHtmlWithBreaks(str) {
     if (!str) return '';
-    // 先转义 HTML 特殊字符（保留 emoji 等多字节 Unicode）
     let safe = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // 换行转 <br>，保留连续空白
     safe = safe.replace(/\n/g, '<br>');
     return safe;
 }
@@ -1724,56 +1646,10 @@ function _debounce(fn, delay) {
     };
 }
 
-// ============================================================
-// 全局暴露 & 自动初始化（确保 app.js 未调用时也能工作）
-// ============================================================
-
-// 暴露到全局，方便 app.js 调用
+// 暴露全局方法
 window.initPartnerPage = initPartnerPage;
 window.loadPartnerData = loadPartnerData;
 window.setupCategoryScrollArrows = setupCategoryScrollArrows;
-
-// 自动初始化：如果 DOM 已就绪，立即执行
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('[partner.js] DOMContentLoaded - auto init');
-        // 如果 partnerFilter 存在，立即初始化
-        if (document.getElementById('partnerFilter')) {
-            setupCategoryScrollArrows();
-        }
-    });
-} else {
-    // DOM 已就绪，立即执行
-    console.log('[partner.js] DOM already ready - auto init');
-    if (document.getElementById('partnerFilter')) {
-        setupCategoryScrollArrows();
-    }
-}
-
-// 监听页面切换：当 partnerPage 变为 active 时初始化
-const _partnerPageObserver = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-            const target = mutation.target;
-            if (target.id === 'partnerPage' && target.classList.contains('active-page')) {
-                console.log('[partner.js] partnerPage activated - auto init');
-                setTimeout(() => {
-                    setupCategoryScrollArrows();
-                    window._refreshCategoryArrows?.();
-                }, 50);
-            }
-        }
-    });
-});
-
-// 如果 partnerPage 存在，立即监听
-const _partnerPageEl = document.getElementById('partnerPage');
-if (_partnerPageEl) {
-    _partnerPageObserver.observe(_partnerPageEl, { attributes: true, attributeFilter: ['class'] });
-}
-
-
-// 强制显示箭头（调试用）
 window.forceShowArrows = function() {
     document.querySelectorAll('.scroll-arrow').forEach(arrow => {
         arrow.classList.remove('is-hidden');
@@ -1781,16 +1657,10 @@ window.forceShowArrows = function() {
         arrow.style.opacity = '1';
         arrow.style.display = 'flex';
     });
-    console.log('[forceShowArrows] 所有箭头已强制显示');
 };
-
-// 强制检查溢出状态
 window.checkOverflow = function() {
     const wrapper = document.querySelector('.filter-scroll-wrapper');
-    if (!wrapper) {
-        console.warn('[checkOverflow] 未找到 filter-scroll-wrapper');
-        return;
-    }
+    if (!wrapper) return;
     const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
     console.log('[checkOverflow]', {
         scrollWidth: wrapper.scrollWidth,
