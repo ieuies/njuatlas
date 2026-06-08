@@ -106,9 +106,10 @@ export async function searchPlaces(keyword, city = '南京', location = null, pa
 }
 
 // ── AI 聊天 ──
-export async function chatRecommend(message, sessionId = null, city = '南京') {
+export async function chatRecommend(message, sessionId = null, city = '南京', location = null) {
     const body = { message, city };
     if (sessionId) body.session_id = sessionId;
+    if (location) body.location = location;
     return request('/llm/chat_recommend', 'POST', body, true, 30000);
 }
 

@@ -113,21 +113,59 @@ def chat_recommend():
     candidates = []
     candidates_text = ""
     if is_food_request:
+        user_location_raw = clean_string(data.get("location"), "location", max_length=50)
+
+        # 始终用城市文本搜索，不因有坐标就切 /place/around（自然语言关键词匹配更好）
         search_result = search_places(user_message, city=city, page=1, page_size=10, types="050000")
+
+        # 预解析用户坐标，用于自己算距离
+        user_lng = user_lat = None
+        if user_location_raw:
+            try:
+                parts = user_location_raw.split(",")
+                user_lng, user_lat = float(parts[0]), float(parts[1])
+            except (ValueError, IndexError):
+                pass
+
         if search_result.get("status") == "1":
+            from math import radians, cos, sin, asin, sqrt
+
+            def haversine(lng1, lat1, lng2, lat2):
+                """球面距离，单位米。"""
+                lng1, lat1, lng2, lat2 = map(radians, [lng1, lat1, lng2, lat2])
+                dlng = lng2 - lng1
+                dlat = lat2 - lat1
+                a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
+                return 2 * 6371000 * asin(sqrt(a))
+
             for poi in search_result.get("pois", [])[:5]:
+                # 自己算距离（比依赖 /place/around 端点更可控）
+                dist_str = ""
+                poi_loc = poi.get("location", "")
+                if user_lng is not None and poi_loc:
+                    try:
+                        plng, plat = poi_loc.split(",")
+                        plng, plat = float(plng), float(plat)
+                        dist = int(haversine(user_lng, user_lat, plng, plat))
+                        dist_str = f"{dist}m" if dist < 1000 else f"{dist / 1000:.1f}km"
+                    except (ValueError, IndexError):
+                        pass
+
                 candidates.append({
                     "name": poi.get("name", "未知"),
                     "address": poi.get("address", "未知"),
-                    "location": poi.get("location", ""),
+                    "location": poi_loc,
                     "rating": poi.get("biz_ext", {}).get("rating", "暂无评分"),
                     "cost": poi.get("biz_ext", {}).get("cost", "暂无价格"),
+                    "distance_text": dist_str,
                 })
         if candidates:
             candidates_text = "以下是高德地图搜索到的南京真实餐厅信息（供参考）：\n"
             for index, candidate in enumerate(candidates, 1):
+                dist_text = f"距离约{candidate['distance_text']}，" if candidate['distance_text'] else ""
                 candidates_text += (
                     f"{index}. {candidate['name']} - {candidate['address']} - "
+                    f"{dist_text}"
                     f"评分{candidate['rating']} - 人均{candidate['cost']}\n"
                 )
         else:
