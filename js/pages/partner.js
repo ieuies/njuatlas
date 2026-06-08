@@ -104,19 +104,24 @@ async function loadPostsByPage(page, append = false) {
         }
 
         const result = await listPosts(params);
-        const newPosts = (result.items || []).map(_mapPost);
+        let newPosts = (result.items || []).map(_mapPost);
+
+        // ----- 前端兜底过滤：确保只显示当前分类的帖子 -----
+        if (currentCategory !== 'all') {
+            newPosts = newPosts.filter(post => post.tags.includes(currentCategory));
+        }
+        // ------------------------------------------------
+
         hasMore = newPosts.length === PAGE_SIZE;
 
         if (append) {
-            // 追加模式：合并到缓存 & 追加渲染
             _allPartnersData.push(...newPosts);
-            partnersData = _allPartnersData;  // 引用相同
+            partnersData = _allPartnersData;
             appendWaterfallCards(newPosts);
         } else {
-            // 重置模式：清空缓存，重新渲染
             _allPartnersData = newPosts;
             partnersData = _allPartnersData;
-            renderWaterfall();       // 全量渲染（数据量仅为第一页，不卡）
+            renderWaterfall();
         }
         return newPosts;
     } catch (err) {
@@ -127,7 +132,6 @@ async function loadPostsByPage(page, append = false) {
         isLoading = false;
     }
 }
-
 /** 追加渲染新卡片到瀑布流末尾（不重建全部） */
 function appendWaterfallCards(posts) {
     const container = document.getElementById('partnerWaterfall');
