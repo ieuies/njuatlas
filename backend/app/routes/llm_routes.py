@@ -106,19 +106,126 @@ def chat_recommend():
         "午餐", "晚餐", "川菜", "湘菜", "火锅", "烧烤", "咖啡", "奶茶",
         "外卖", "堂食", "食堂", "哪家", "哪里", "什么店", "有啥", "有没有",
         "菜单", "点菜", "请客", "聚餐", "约会", "小吃", "甜点", "面包",
-        "饺子", "面", "饭馆", "菜馆", "食堂", "好喝"
+        "饺子", "面", "饭馆", "菜馆", "好喝",
+        "附近", "周边", "旁边", "一带", "附近有", "去吃点",
+        "去吃", "吃的", "吃东西", "吃的啥", "吃啥",
+        "有什么好吃的", "有什么吃的", "有推荐的",
     ]
     is_food_request = any(kw in user_message.lower() for kw in food_keywords)
+
+    # 兜底：消息中同时含有「推荐」+ 南大地点词也视为美食请求
+    location_keywords = ["鼓楼", "仙林", "浦口", "南大", "校区", "南门", "北门", "汉口路", "珠江路"]
+    if not is_food_request:
+        if "推荐" in user_message.lower() and any(loc in user_message for loc in location_keywords):
+            is_food_request = True
+
+    # 细分餐饮类型映射：按关键词长度降序排列（越长越优先匹配）
+    # 高德 POI 分类码参考：
+    #   050000=餐饮, 050100=中餐厅, 050200=外国餐厅, 050300=快餐厅,
+    #   050500=冷饮店, 050600=糕饼店, 050700=甜品店, 050800=茶餐厅,
+    #   051000=咖啡厅, 051100=茶艺馆
+    FOOD_TYPE_MAP = [
+        # 饮品（优先长关键词）
+        ("奶茶", "050500"),      # 冷饮店
+        ("茶饮", "050500"),
+        ("饮品", "050500"),
+        ("咖啡", "051000"),      # 咖啡厅
+        ("好喝", "050500"),      # 冷饮店（"什么好喝" → 饮品）
+        # 甜点烘焙
+        ("甜品", "050700"),      # 甜品店
+        ("甜点", "050700"),
+        ("面包", "050600"),      # 糕饼店
+        ("蛋糕", "050600"),
+        # 正餐细分
+        ("火锅", "050100"),      # 中餐厅
+        ("烧烤", "050100"),
+        ("川菜", "050100"),
+        ("湘菜", "050100"),
+        ("粤菜", "050100"),
+        ("麻辣烫", "050100"),
+        ("麻辣", "050100"),
+        ("饺子", "050100"),
+        ("面馆", "050100"),
+        ("饭馆", "050100"),
+        ("菜馆", "050100"),
+        ("日料", "050200"),      # 外国餐厅
+        ("韩餐", "050200"),
+        ("韩料", "050200"),
+        ("西餐", "050200"),
+        # 快餐小吃
+        ("快餐", "050300"),      # 快餐厅
+        ("小吃", "050300"),      # 快餐厅
+        ("夜宵", "050300"),
+        ("早餐", "050300"),
+        ("午餐", "050300"),
+        ("晚餐", "050300"),
+        ("食堂", "050300"),
+        # 茶餐厅
+        ("茶餐厅", "050800"),    # 茶餐厅
+        ("港式", "050800"),
+    ]
+    # 按关键词长度降序排列："茶餐厅" 比 "餐厅" 先匹配
+    FOOD_TYPE_MAP.sort(key=lambda x: len(x[0]), reverse=True)
+
+    def _resolve_food_type(message):
+        """根据用户消息中的细分关键词，返回精确的高德 POI 类型码。
+        未命中任何细分词时返回默认大类 '050000'。
+        """
+        msg_lower = message.lower()
+        for keyword, type_code in FOOD_TYPE_MAP:
+            if keyword in msg_lower:
+                return type_code
+        return "050000"
+
+    def _resolve_search_keyword(message):
+        """从用户消息中提取更适合高德搜索的地点关键词。
+        例如 '鼓楼校区附近推荐一些' → '鼓楼'
+        """
+        area_keywords = sorted([
+            ("汉口路", "汉口路"),
+            ("珠江路", "珠江路"),
+            ("鼓楼校区", "鼓楼"),
+            ("仙林校区", "仙林"),
+            ("鼓楼", "鼓楼"),
+            ("仙林", "仙林"),
+            ("浦口", "浦口"),
+            ("南大", "南京大学"),
+            ("新街口", "新街口"),
+            ("夫子庙", "夫子庙"),
+            ("南门", "南门"),
+            ("北门", "北门"),
+        ], key=lambda x: len(x[0]), reverse=True)
+        for kw, replacement in area_keywords:
+            if kw in message:
+                return f"{replacement}"
+        # 如果没有地名关键词，去掉无意义噪音词
+        noise_words = [
+            "附近", "周边", "一带", "推荐", "一些", "有什么", "有", "吗", "呢", "去",
+            "帮我", "能不能", "可以", "给我", "啥", "什么", "哪里", "哪些",
+            "好吃的", "吃的", "附近有", "推荐一下", "吃啥", "吃啥呢",
+            "吃什么", "吃点啥", "去哪吃", "去哪", "去哪儿吃",
+            "有好吃的", "有什么好吃的", "有啥好吃的",
+            "有推荐的", "有推荐吗", "推荐吗",
+            "想吃什么", "想吃啥", "想吃点",
+            "叫外卖", "外卖", "附近的外卖",
+            "今天", "今晚", "中午", "晚上",
+            "吃", "喝", "是", "的", "了", "呀", "吧", "啊",
+        ]
+        clean = message
+        for noise in sorted(noise_words, key=len, reverse=True):
+            clean = clean.replace(noise, " ")
+        clean = " ".join(clean.split()).strip()
+        return clean if len(clean) >= 2 else message
 
     candidates = []
     candidates_text = ""
     if is_food_request:
         user_location_raw = clean_string(data.get("location"), "location", max_length=50)
 
-        # 始终用城市文本搜索，不因有坐标就切 /place/around（自然语言关键词匹配更好）
-        search_result = search_places(user_message, city=city, page=1, page_size=10, types="050000")
+        # 硬过滤半径（米）
+        MAX_DISTANCE_M = 5000
 
-        # 预解析用户坐标，用于自己算距离
+        # 预解析用户坐标
         user_lng = user_lat = None
         if user_location_raw:
             try:
@@ -126,6 +233,49 @@ def chat_recommend():
                 user_lng, user_lat = float(parts[0]), float(parts[1])
             except (ValueError, IndexError):
                 pass
+
+        # 根据用户消息中的细分关键词，选择精确的高德 POI 类型
+        search_types = _resolve_food_type(user_message)
+        search_keyword = _resolve_search_keyword(user_message)
+
+        # 有定位 → 周边搜索（高德端 5km 过滤 + 更大页码确保候选充足）
+        # 无定位 → 城市文本搜索（保持原有行为）
+        if user_lng is not None and user_lat is not None:
+            search_result = search_places(
+                search_keyword,
+                location=user_location_raw,
+                radius=MAX_DISTANCE_M,
+                page=1,
+                page_size=25,
+                types=search_types,
+            )
+            # 细分类型搜不到结果时，回退到餐饮大类再搜（避免冷门分类码在周边搜索为空）
+            if search_types != "050000" and search_result.get("status") == "0" or (search_result.get("status") == "1" and not search_result.get("pois")):
+                search_result = search_places(
+                    search_keyword,
+                    location=user_location_raw,
+                    radius=MAX_DISTANCE_M,
+                    page=1,
+                    page_size=25,
+                    types="050000",
+                )
+        else:
+            search_result = search_places(
+                search_keyword,
+                city=city,
+                page=1,
+                page_size=10,
+                types=search_types,
+            )
+            # 细分类型搜不到结果时，回退到餐饮大类再搜
+            if search_types != "050000" and search_result.get("status") == "0" or (search_result.get("status") == "1" and not search_result.get("pois")):
+                search_result = search_places(
+                    search_keyword,
+                    city=city,
+                    page=1,
+                    page_size=10,
+                    types="050000",
+                )
 
         if search_result.get("status") == "1":
             from math import radians, cos, sin, asin, sqrt
@@ -138,25 +288,67 @@ def chat_recommend():
                 a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
                 return 2 * 6371000 * asin(sqrt(a))
 
-            for poi in search_result.get("pois", [])[:5]:
-                # 自己算距离（比依赖 /place/around 端点更可控）
-                dist_str = ""
+            raw_candidates = []
+            for poi in search_result.get("pois", []):
+                dist_m = None
                 poi_loc = poi.get("location", "")
                 if user_lng is not None and poi_loc:
                     try:
                         plng, plat = poi_loc.split(",")
                         plng, plat = float(plng), float(plat)
-                        dist = int(haversine(user_lng, user_lat, plng, plat))
-                        dist_str = f"{dist}m" if dist < 1000 else f"{dist / 1000:.1f}km"
+                        dist_m = int(haversine(user_lng, user_lat, plng, plat))
                     except (ValueError, IndexError):
                         pass
 
-                candidates.append({
+                # 硬过滤：有定位时只保留 5km 以内
+                if user_lng is not None and (dist_m is None or dist_m > MAX_DISTANCE_M):
+                    continue
+
+                # 解析评分数值（用于后续加权排序）
+                raw_rating = poi.get("biz_ext", {}).get("rating", "")
+                rating_num = None
+                if raw_rating and raw_rating != "暂无评分":
+                    try:
+                        rating_num = float(raw_rating)
+                    except (ValueError, TypeError):
+                        pass
+
+                raw_candidates.append({
                     "name": poi.get("name", "未知"),
                     "address": poi.get("address", "未知"),
                     "location": poi_loc,
-                    "rating": poi.get("biz_ext", {}).get("rating", "暂无评分"),
+                    "rating": raw_rating or "暂无评分",
                     "cost": poi.get("biz_ext", {}).get("cost", "暂无价格"),
+                    "distance_m": dist_m,
+                    "rating_num": rating_num,
+                })
+
+            # 综合评分排序：距离权重 0.6 + 评分权重 0.4
+            # 距离得分：1km 内=1.0，5km=0.0，线性衰减
+            # 评分得分：5 分=1.0，0 分=0.0，无评分=0.5（中等偏下）
+            def _candidate_score(c):
+                dist_score = 0.0
+                if c["distance_m"] is not None:
+                    dist_score = max(0.0, 1.0 - c["distance_m"] / MAX_DISTANCE_M)
+                rating_score = 0.5  # 无评分的默认分
+                if c["rating_num"] is not None:
+                    rating_score = min(c["rating_num"], 5.0) / 5.0
+                return dist_score * 0.6 + rating_score * 0.4
+
+            raw_candidates.sort(key=_candidate_score, reverse=True)
+
+            # 取排序后的前 5 家
+            for c in raw_candidates[:5]:
+                dist_str = ""
+                if c["distance_m"] is not None:
+                    d = c["distance_m"]
+                    dist_str = f"{d}m" if d < 1000 else f"{d / 1000:.1f}km"
+                candidates.append({
+                    "name": c["name"],
+                    "address": c["address"],
+                    "location": c["location"],
+                    "rating": c["rating"],
+                    "cost": c["cost"],
                     "distance_text": dist_str,
                 })
         if candidates:
