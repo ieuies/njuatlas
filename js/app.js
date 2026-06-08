@@ -1,7 +1,6 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
-import { initAIPage } from './pages/ai.js';
 
 // ── 动态加载 CSS（避免重复加载）────────────────────────────────
 const loadedStyles = new Set();
@@ -32,11 +31,13 @@ function loadStyle(href) {
 let _partnerMod = null;
 let _guideMod = null;
 let _profileMod = null;
+let _aiMod = null;
 let _partnerPageInited = false;
 let _profilePageInited = false;
 function _loadPartner() { return _partnerMod || (_partnerMod = import('./pages/partner.js')); }
 function _loadGuide()   { return _guideMod   || (_guideMod   = import('./pages/guide.js')); }
 function _loadProfile() { return _profileMod || (_profileMod = import('./pages/profile.js')); }
+function _loadAI()      { return _aiMod      || (_aiMod      = import('./pages/ai.js')); }
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
@@ -73,10 +74,31 @@ const PAGE_STYLES = {
 
 async function ensurePageStyles(pageId) {
     const sheets = PAGE_STYLES[pageId];
-    if (!sheets) return;
-    for (const href of sheets) {
-        await loadStyle(href);
-    }
+    if (!sheets?.length) return;
+    await Promise.all(sheets.map((href) => loadStyle(href)));
+}
+
+function prefetchPageModule(pageId) {
+    if (pageId === 'partner' || pageId === 'fullMap') return _loadPartner();
+    if (pageId === 'guide') return _loadGuide();
+    if (pageId === 'profile') return _loadProfile();
+    if (pageId === 'ai') return _loadAI();
+    return Promise.resolve();
+}
+
+function prefetchCommonAssets() {
+    const run = (cb) => {
+        if (window.requestIdleCallback) window.requestIdleCallback(cb, { timeout: 4000 });
+        else setTimeout(cb, 1200);
+    };
+    run(() => {
+        ['css/partner.css', 'css/guide.css', 'css/profile.css', 'css/components.css', 'css/ai.css']
+            .forEach((href) => loadStyle(href));
+        _loadPartner();
+        _loadGuide();
+        _loadProfile();
+        _loadAI();
+    });
 }
 
 async function switchPage(pageId) {
@@ -88,7 +110,10 @@ async function switchPage(pageId) {
         return;
     }
 
-    await ensurePageStyles(pageId);
+    await Promise.all([
+        ensurePageStyles(pageId),
+        prefetchPageModule(pageId),
+    ]);
 
     // 隐藏所有页面
     document.querySelectorAll('.content-area .page').forEach(page => {
@@ -132,7 +157,8 @@ async function switchPage(pageId) {
         const mod = await _loadGuide();
         mod.initGuidePage();
     } else if (pageId === 'ai') {
-        initAIPage();
+        const mod = await _loadAI();
+        mod.initAIPage();
     } else if (pageId === 'partner') {
         const mod = await _loadPartner();
         // 首次加载时初始化模态框等
@@ -234,7 +260,11 @@ function initThemeToggle() {
     // localStorage 就像浏览器里的小笔记本，可以记住上次离开时是开灯还是关灯。
     const applyTheme = (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
-        if (themeButton) themeButton.textContent = theme === 'dark' ? '☀️' : '🌙';
+        if (themeButton) {
+            themeButton.innerHTML = theme === 'dark'
+                ? '<i class="fas fa-sun" aria-hidden="true"></i>'
+                : '<i class="fas fa-moon" aria-hidden="true"></i>';
+        }
         localStorage.setItem('njuatlas-theme', theme);
     };
 
@@ -531,15 +561,18 @@ async function init() {
     initNavigation();
     initThemeToggle();
     initHomeParticles();
-    initHomeCards();
-    initMobileGrid();
+    const deferHeavyHome = window.requestIdleCallback || ((cb) => setTimeout(cb, 0));
+    deferHeavyHome(() => {
+        initHomeCards();
+        initMobileGrid();
+    });
     initFabButton();
     initMapExpand();
     initFullMapPage();
 
     // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
     await switchPage('home');
-
+    prefetchCommonAssets();
 }
 
 // 全局事件

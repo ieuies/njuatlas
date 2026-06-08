@@ -3,6 +3,7 @@ import { showToast } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
 let currentSessionId = null;
+let _conversationListLoaded = false;
 
 // 发送锁：上一次请求未完成时忽略新的发送
 let isSending = false;
@@ -116,7 +117,7 @@ function showThinking() {
     const div = document.createElement('div');
     div.className = 'chat-message chat-thinking';
     div.id = 'aiThinkingMsg';
-    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon">🤔</span><span class="thinking-text">小南正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
+    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon icon-spinner" aria-hidden="true"></span><span class="thinking-text">小南正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
     messagesDiv.appendChild(div);
     scrollToBottom();
     return div;
@@ -141,8 +142,9 @@ function escapeHtml(str) {
 
 // ==================== 侧栏相关 ====================
 
-async function loadConversationList() {
+async function loadConversationList(force = false) {
     if (!isLoggedIn()) return;
+    if (!force && _conversationListLoaded) return;
     const listContainer = document.getElementById('aiConversationList');
     if (!listContainer) return;
     try {
@@ -159,7 +161,7 @@ async function loadConversationList() {
                     <div class="ai-conv-preview">${escapeHtml(formatSessionTime(session.last_at))}</div>
                 </div>
                 <div class="ai-conv-time">${formatRelativeTime(session.last_at)}</div>
-                <button class="ai-conv-delete" data-session-id="${escapeHtml(session.session_id)}" title="删除会话"><i class="fas fa-trash-alt"></i></button>
+                <button class="ai-conv-delete" data-session-id="${escapeHtml(session.session_id)}" title="删除会话"><i class="fas fa-trash-can"></i></button>
             </div>
         `).join('');
 
@@ -178,6 +180,7 @@ async function loadConversationList() {
             });
         });
         if (currentSessionId) highlightCurrentSession(currentSessionId);
+        _conversationListLoaded = true;
     } catch (err) {
         // token 过期时 api.js 已清理 localStorage，isLoggedIn() 会返回 false
         // 这里静默处理，sendMessage 会弹出登录框引导用户
@@ -244,7 +247,7 @@ async function deleteConversationHandler(sessionId) {
         await deleteConversation(sessionId);
         showToast('对话已删除');
         if (currentSessionId === sessionId) startNewChat();
-        await loadConversationList();
+        await loadConversationList(true);
     } catch (err) {
         if (err.message === 'UNAUTHORIZED') {
             showToast('登录已过期，请重新登录');
@@ -263,7 +266,7 @@ function startNewChat() {
 }
 
 async function refreshSidebar() {
-    await loadConversationList();
+    await loadConversationList(true);
 }
 
 // 侧栏 UI 控制
@@ -362,8 +365,10 @@ async function sendMessage() {
         if (res.session_id) {
             const newSession = currentSessionId !== res.session_id;
             currentSessionId = res.session_id;
-            if (newSession) await loadConversationList();
-            else await refreshSidebar();
+            if (newSession) {
+                _conversationListLoaded = false;
+                await loadConversationList(true);
+            } else await refreshSidebar();
             highlightCurrentSession(currentSessionId);
         }
         removeThinking();
@@ -386,10 +391,10 @@ async function sendMessage() {
                 html += `<div class="ai-candidate-item">
                             <span class="ai-candidate-name">${escapeHtml(c.name)}</span>
                             <span class="ai-candidate-meta">
-                                <span>${distStr ? `📍 ${escapeHtml(distStr)}` : ''}</span>
-                                <span>⭐ ${escapeHtml(c.rating)}</span>
-                                <span>💰 ${escapeHtml(c.cost)}</span>
-                                ${typeStr ? `<span>🏷️ ${escapeHtml(typeStr)}</span>` : ''}
+                                <span>${distStr ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(distStr)}` : ''}</span>
+                                <span><i class="fas fa-star" aria-hidden="true"></i> ${escapeHtml(c.rating)}</span>
+                                <span><i class="fas fa-coins" aria-hidden="true"></i> ${escapeHtml(c.cost)}</span>
+                                ${typeStr ? `<span><i class="fas fa-tag" aria-hidden="true"></i> ${escapeHtml(typeStr)}</span>` : ''}
                             </span>
                          </div>`;
             });

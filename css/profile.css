@@ -213,24 +213,26 @@
 /* ========== Tab 导航 ========== */
 .profile-tabs {
     display: flex;
-    gap: 4px;
-    padding: 4px;
-    background: var(--atlas-card);
-    border-radius: 16px;
-    box-shadow: var(--atlas-shadow);
+    gap: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    border-bottom: 1px solid var(--btn-border);
+    box-shadow: none;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    transition: background-color 0.3s;
 }
 .profile-tabs::-webkit-scrollbar { display: none; }
 .profile-tab {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 10px 16px;
+    padding: 10px 16px 8px;
     border: none;
-    border-radius: 13px;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
     background: transparent;
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -238,17 +240,18 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    transition: all 0.2s;
 }
 .profile-tab i { font-size: 0.9rem; }
 .profile-tab:hover {
-    color: var(--atlas-purple);
-    background: var(--bg-tertiary);
+    color: var(--btn-primary-bg);
+    background: transparent;
 }
 .profile-tab.active {
-    background: var(--gradient-primary);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(107,33,165,0.25);
+    background: transparent;
+    color: var(--btn-primary-bg);
+    border-bottom-color: var(--btn-primary-bg);
+    font-weight: 800;
+    box-shadow: none;
 }
 @media (max-width: 768px) {
     .profile-tabs {
@@ -265,17 +268,17 @@
     .profile-tabs {
         display: grid !important;
         grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        gap: 8px !important;
-        align-items: center !important;
+        gap: 0 !important;
+        align-items: stretch !important;
     }
     .profile-tab {
         width: 100% !important;
-        min-height: 58px !important;
+        min-height: 48px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
         gap: 8px !important;
-        padding: 0 12px !important;
+        padding: 10px 12px 8px !important;
         line-height: 1 !important;
         white-space: nowrap;
     }
@@ -500,18 +503,20 @@
     border-top-color: var(--atlas-line);
 }
 :root[data-theme="dark"] .profile-tabs {
-    background: var(--atlas-card);
+    background: transparent;
+    border-bottom-color: var(--btn-border);
 }
 :root[data-theme="dark"] .profile-tab {
     color: var(--text-secondary);
 }
 :root[data-theme="dark"] .profile-tab:hover {
-    color: var(--atlas-purple);
-    background: var(--bg-tertiary);
+    color: var(--btn-primary-bg);
+    background: transparent;
 }
 :root[data-theme="dark"] .profile-tab.active {
-    background: var(--gradient-primary);
-    color: #fff;
+    background: transparent;
+    color: var(--btn-primary-bg);
+    border-bottom-color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .profile-content-card {
     background: var(--atlas-card);

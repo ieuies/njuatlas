@@ -57,24 +57,27 @@ function _categoryStyle(cat) {
     return categoryColorCache[cat];
 }
 
-// 搭子类型 → emoji 映射
-const TYPE_EMOJI = {
-    '饭搭子': '🍚',
-    '运动搭子': '⚽',
-    '学习搭子': '📚',
-    '游戏搭子': '🎮',
-    '电影搭子': '🎬',
-    '旅游搭子': '✈️',
-    '音乐搭子': '🎵',
-    '摄影搭子': '📷',
+const TYPE_ICONS = {
+    '饭搭子': 'fa-utensils',
+    '运动搭子': 'fa-futbol',
+    '学习搭子': 'fa-book',
+    '游戏搭子': 'fa-gamepad',
+    '电影搭子': 'fa-film',
+    '旅游搭子': 'fa-plane',
+    '音乐搭子': 'fa-music',
+    '摄影搭子': 'fa-camera',
 };
-function _typeEmoji(category) {
-    return TYPE_EMOJI[category] || '👥';
+function _typeIcon(category) {
+    return TYPE_ICONS[category] || 'fa-user-group';
 }
 function _typeLabel(post) {
-    const emoji = _typeEmoji(post.category);
-    if (post.type === 'event') return `${emoji} 活动组局`;
-    return `${emoji} 长期招募`;
+    const icon = _typeIcon(post.category);
+    const suffix = post.type === 'event' ? '活动组局' : '长期招募';
+    return `<i class="fas ${icon}" aria-hidden="true"></i> ${suffix}`;
+}
+function _categoryChipHtml(c) {
+    const icon = c.icon ? `<i class="fas ${c.icon}" aria-hidden="true"></i> ` : '';
+    return `${icon}${escapeHtml(c.label)}`;
 }
 
 function _isCurrentUserOwner(item) {
@@ -164,21 +167,21 @@ function createPostCardElement(p) {
                 ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
                 ${p.budget ? `<span><b>预算</b><em>${escapeHtml(p.budget)}</em></span>` : ''}
                 ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
-                <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' 👑' : ''}</em></span>
+                <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-star owner-mark" aria-hidden="true" title="发起人"></i>' : ''}</em></span>
             </div>
             <div class="partner-card-footer">
                 <div class="partner-card-stats">
-                    <span>👁 ${p.views}</span>
-                    <span>👍 ${p.likeCount}</span>
-                    <span>💬 ${p.commentCount}</span>
-                    <span>👥 ${p.members}/${p.slots}</span>
+                    <span><i class="fas fa-eye" aria-hidden="true"></i> ${p.views}</span>
+                    <span><i class="fas fa-thumbs-up" aria-hidden="true"></i> ${p.likeCount}</span>
+                    <span><i class="fas fa-comment" aria-hidden="true"></i> ${p.commentCount}</span>
+                    <span><i class="fas fa-user" aria-hidden="true"></i> ${p.members}/${p.slots}</span>
                 </div>
                 ${p.isOwner ? `
-                    <button class="join-btn owner-delete-btn" data-id="${p.id}">🗑️ 删除活动</button>
+                    <button class="join-btn owner-delete-btn" data-id="${p.id}"><i class="fas fa-trash-can" aria-hidden="true"></i> 删除活动</button>
                 ` : (p.type === 'event' && p.members >= p.slots && p.participationStatus !== 'going') ? `
-                    <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;">🚫 已满员</button>
+                    <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;"><i class="fas fa-ban" aria-hidden="true"></i> 已满员</button>
                 ` : `
-                    <button class="join-btn" data-id="${p.id}">${p.participationStatus === 'going' ? '✅ 已报名·点此取消' : '我要参加'}</button>
+                    <button class="join-btn" data-id="${p.id}">${p.participationStatus === 'going' ? '<i class="fas fa-circle-check" aria-hidden="true"></i> 已报名·点此取消' : '我要参加'}</button>
                 `}
             </div>
         </div>
@@ -547,11 +550,13 @@ function _updateSingleCardDOM(postId, status, participantCount, slots) {
     if (!card) return;
     const btn = card.querySelector('.join-btn:not(.owner-delete-btn)');
     if (btn) {
-        btn.textContent = status === 'going' ? '✅ 已报名·点此取消' : '我要参加';
+        btn.innerHTML = status === 'going'
+            ? '<i class="fas fa-circle-check" aria-hidden="true"></i> 已报名·点此取消'
+            : '我要参加';
     }
     const statSpans = card.querySelectorAll('.partner-card-stats span');
     if (statSpans.length >= 4) {
-        statSpans[3].textContent = `👥 ${participantCount}/${slots}`;
+        statSpans[3].innerHTML = `<i class="fas fa-user" aria-hidden="true"></i> ${participantCount}/${slots}`;
     }
 }
 
@@ -631,7 +636,7 @@ async function _silentRefreshCurrentPage() {
 }
 
 async function _deletePostCard(postId) {
-    if (!confirm('⚠️ 确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
+    if (!confirm('确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
     try {
         await deletePost(postId);
         showToast('已删除');
@@ -908,16 +913,16 @@ function _renderPostDetail(post) {
     const timeStr = _formatPostTime(post.event_time, post.urgency);
     document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
     if (post.location_name) {
-        document.getElementById('detailLocation').innerHTML = `<i class="fas fa-map-pin"></i> ${escapeHtml(post.location_name)}`;
+        document.getElementById('detailLocation').innerHTML = `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(post.location_name)}`;
     }
     if (post.budget) {
-        document.getElementById('detailBudget').innerHTML = `<i class="fas fa-yen-sign"></i> ${escapeHtml(post.budget)}`;
+        document.getElementById('detailBudget').innerHTML = `${escapeHtml(post.budget)}`;
         document.getElementById('detailBudget').style.display = '';
     } else {
         document.getElementById('detailBudget').style.display = 'none';
     }
     if (post.contact) {
-        document.getElementById('detailContact').innerHTML = `<i class="fas fa-address-book"></i> ${escapeHtml(post.contact)}`;
+        document.getElementById('detailContact').innerHTML = `<i class="fas fa-address-book" aria-hidden="true"></i> ${escapeHtml(post.contact)}`;
         document.getElementById('detailContact').style.display = '';
     } else {
         document.getElementById('detailContact').style.display = 'none';
@@ -943,7 +948,7 @@ function _renderPostDetail(post) {
         if (ownerActions) ownerActions.style.display = 'flex';
     } else if (isFull && post.participation_status !== 'going') {
         participateBtn.style.display = 'block';
-        participateBtn.textContent = '🚫 已满员';
+        participateBtn.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i> 已满员';
         participateBtn.disabled = true;
         participateBtn.classList.remove('going');
         if (ownerActions) ownerActions.style.display = 'none';
@@ -980,7 +985,7 @@ function _renderDetailParticipants(participants) {
     container.innerHTML = participants.map(p => `
         <span class="participant-chip${p.is_organizer ? ' organizer' : ''}">
             ${escapeHtml(p.username || '用户')}
-            ${p.is_organizer ? '<span class="participant-status organizer-badge" title="发起人">👑 发起人</span>' : ''}
+            ${p.is_organizer ? '<span class="participant-status organizer-badge" title="发起人"><i class="fas fa-star" aria-hidden="true"></i> 发起人</span>' : ''}
             <span class="participant-status${p.status === 'interested' ? ' interested' : ''}">${p.status === 'going' ? '确定' : '感兴趣'}</span>
         </span>
     `).join('');
@@ -1147,14 +1152,14 @@ async function _refreshDetailParticipants(postId) {
 // ============================================================
 const FIXED_CATEGORIES = [
     { label: '全部', category: 'all' },
-    { label: '🍚 饭搭子', category: '饭搭子' },
-    { label: '⚽ 运动搭子', category: '运动搭子' },
-    { label: '📚 学习搭子', category: '学习搭子' },
-    { label: '🎮 游戏搭子', category: '游戏搭子' },
-    { label: '🎬 电影搭子', category: '电影搭子' },
-    { label: '✈️ 旅游搭子', category: '旅游搭子' },
-    { label: '🎵 音乐搭子', category: '音乐搭子' },
-    { label: '📷 摄影搭子', category: '摄影搭子' },
+    { label: '饭搭子', icon: 'fa-utensils', category: '饭搭子' },
+    { label: '运动搭子', icon: 'fa-futbol', category: '运动搭子' },
+    { label: '学习搭子', icon: 'fa-book', category: '学习搭子' },
+    { label: '游戏搭子', icon: 'fa-gamepad', category: '游戏搭子' },
+    { label: '电影搭子', icon: 'fa-film', category: '电影搭子' },
+    { label: '旅游搭子', icon: 'fa-plane', category: '旅游搭子' },
+    { label: '音乐搭子', icon: 'fa-music', category: '音乐搭子' },
+    { label: '摄影搭子', icon: 'fa-camera', category: '摄影搭子' },
 ];
 
 function initFilters() {
@@ -1162,7 +1167,7 @@ function initFilters() {
     if (!container) return;
 
     container.innerHTML = FIXED_CATEGORIES.map((c, i) =>
-        `<span class="filter-chip${i === 0 ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${escapeHtml(c.label)}</span>`
+        `<span class="filter-chip${i === 0 ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${_categoryChipHtml(c)}</span>`
     ).join('');
 
     container.querySelectorAll('.filter-chip').forEach(chip => {
@@ -1452,7 +1457,7 @@ function initPartnerModal() {
         }
 
         if (location && !_modalLocationCoords) {
-            showToast('⚠️ 请从下拉建议中选择地点，否则帖子不会显示在地图上');
+            showToast('请从下拉建议中选择地点，否则帖子不会显示在地图上');
         }
 
         let event_time = null;

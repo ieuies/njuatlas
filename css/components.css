@@ -75,31 +75,33 @@
 .detail-action-btn {
     flex: 1;
     padding: 10px 0;
-    border: 1.5px solid var(--gray-300);
-    border-radius: 24px;
-    background: var(--bg-primary);
+    border: 1.5px solid var(--btn-border);
+    border-radius: var(--btn-radius);
+    background: transparent;
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
     color: var(--text-primary);
+    box-shadow: none;
 }
 .detail-action-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
 }
 .detail-action-btn.liked {
-    background: linear-gradient(135deg, #EC4899, #F43F5E);
-    color: white;
-    border-color: transparent;
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--danger);
 }
 .detail-action-btn.primary {
-    background: var(--gradient-primary);
-    color: white;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
     border: none;
 }
 .detail-action-btn.primary.going {
-    background: var(--gray-400);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1.5px solid var(--btn-border);
 }
 
 /* ========== 参与者列表 ========== */
@@ -317,17 +319,18 @@
     color: var(--text-tertiary);
 }
 :root[data-theme="dark"] .detail-action-btn {
-    background: var(--bg-primary);
-    border-color: var(--gray-300);
+    background: transparent;
+    border-color: var(--btn-border);
     color: var(--text-primary);
 }
 :root[data-theme="dark"] .detail-action-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .detail-action-btn.primary {
-    background: var(--gradient-primary);
-    color: white;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+}
     border: none;
 }
 :root[data-theme="dark"] .post-detail-section h4 {

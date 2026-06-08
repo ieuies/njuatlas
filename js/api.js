@@ -130,7 +130,7 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (page) params.set('page', page);
     if (page_size) params.set('page_size', page_size);
     const qs = params.toString();
-    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, true);
+    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, false);
 }
 export async function getPost(postId) {
     return request(`/posts/${postId}`, 'GET', null, true);

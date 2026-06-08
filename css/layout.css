@@ -29,6 +29,26 @@
 .page { display: none; }
 .page.active-page { display: block; position: relative; overflow: hidden; }
 
+/* 内容页宽度：必须在首屏 layout 中定义，不可仅放在 partner.css 懒加载 */
+#partnerPage,
+#guidePage,
+#profilePage {
+    width: min(1180px, calc(100% - 40px)) !important;
+    max-width: 100%;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 24px 0 calc(96px + var(--atlas-bottombar)) !important;
+    box-sizing: border-box;
+}
+@media (max-width: 768px) {
+    #partnerPage,
+    #guidePage,
+    #profilePage {
+        width: calc(100% - 24px) !important;
+        padding-bottom: calc(92px + var(--atlas-bottombar)) !important;
+    }
+}
+
 /* ========== 顶部栏 ========== */
 .top-bar {
     height: var(--topbar-height);
@@ -59,11 +79,19 @@
 .theme-toggle-btn {
     width: 44px;
     height: 44px;
-    border: 1px solid var(--atlas-line);
-    border-radius: 999px;
-    background: var(--atlas-card);
-    box-shadow: 0 8px 22px rgba(74,29,110,0.08);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--btn-radius);
+    background: transparent;
+    box-shadow: none;
     cursor: pointer;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.theme-toggle-btn i.fas {
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke: 0;
 }
 .page-title {
     color: var(--atlas-muted);
@@ -72,20 +100,21 @@
 }
 
 /* 登录/用户区域 */
-.login-round-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.login-round-btn:hover { filter: brightness(1.05); }
 .topbar-user {
     display: flex;
     align-items: center;
     gap: 6px;
-    background: var(--bg-tertiary);
+    background: transparent;
     padding: 4px 4px 4px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--gray-200);
+    border-radius: var(--btn-radius);
+    border: 1.5px solid var(--btn-border);
+    box-shadow: none;
 }
 .topbar-username {
     font-weight: 600;
     font-size: 0.8rem;
-    color: var(--primary);
+    color: var(--text-primary);
     max-width: 80px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -95,37 +124,47 @@
 .logout-btn {
     width: 30px;
     height: 30px;
-    border-radius: 50%;
-    border: none;
-    background: var(--gray-200);
+    border-radius: var(--btn-radius);
+    border: 1.5px solid var(--btn-border);
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: var(--transition-fast);
     font-size: 0.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-.logout-btn:hover { background: var(--danger); color: white; }
+.logout-btn i.fas {
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke: 0;
+}
+.logout-btn:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: transparent;
+}
 
 /* ========== 桌面导航 ========== */
 .desktop-nav {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 5px;
-    border: 1px solid var(--atlas-line);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.45);
+    gap: 0;
+    padding: 0;
+    border: none;
+    border-bottom: 1px solid var(--btn-border);
+    border-radius: 0;
+    background: transparent;
 }
 .desktop-nav-item {
     min-height: 44px;
-    padding: 0 16px;
+    padding: 0 16px 10px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
     background: transparent;
     color: var(--atlas-muted);
-    font-weight: 900;
+    font-weight: 700;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -134,9 +173,10 @@
     white-space: nowrap;
 }
 .desktop-nav-item.active {
-    background: var(--gradient-primary);
-    color: #fff;
-    box-shadow: 0 10px 24px rgba(107,33,165,0.24);
+    background: transparent;
+    color: var(--btn-primary-bg);
+    border-bottom-color: var(--btn-primary-bg);
+    box-shadow: none;
 }
 
 /* ========== 底部 Tab 栏（移动端） ========== */
@@ -174,45 +214,43 @@
     transition: color 0.2s;
 }
 .tab-item i { font-size: 1.15rem; }
-.tab-item.active { color: var(--atlas-purple); }
+.tab-item.active { color: var(--btn-primary-bg); }
 
 /* ========== 按钮美化覆盖 ========== */
 .logout-btn, .map-expand-btn, .primary-btn,
 .secondary-btn, .small-btn, .join-btn {
     min-height: 44px;
-    border-radius: 999px;
-    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+    border-radius: var(--btn-radius);
 }
 .login-round-btn {
-    width: 44px;
+    width: auto;
     height: 44px;
-    min-width: 44px;
+    min-width: 64px;
     min-height: 44px;
-    padding: 0;
-    border-radius: 50%;
-    border: none;
-    background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
-    color: #fff;
-    font-size: 0.75rem;
+    padding: 0 14px;
+    border-radius: var(--btn-radius);
+    border: 1.5px solid var(--btn-primary-bg);
+    background: transparent;
+    color: var(--btn-primary-bg);
+    font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: var(--shadow-md);
+    box-shadow: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
-    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 .logout-btn, .map-expand-btn, .secondary-btn, .small-btn {
-    border: 1px solid var(--atlas-line);
-    background: var(--atlas-card);
+    border: 1.5px solid var(--btn-border);
+    background: transparent;
     color: var(--atlas-ink);
-    box-shadow: 0 8px 22px rgba(74,29,110,0.08);
+    box-shadow: none;
 }
 .primary-btn, .join-btn {
     border: 0;
-    background: var(--gradient-primary);
-    color: #fff;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
 }
 
 /* ========== 暗色模式 ========== */
@@ -224,31 +262,46 @@
     color: var(--atlas-ink);
 }
 :root[data-theme="dark"] .theme-toggle-btn {
-    background: var(--atlas-card);
-    border-color: var(--atlas-line);
-    box-shadow: 0 8px 22px rgba(0,0,0,0.2);
+    background: transparent;
+    border-color: var(--btn-border);
+    color: var(--btn-primary-bg);
+    box-shadow: none;
+}
+:root[data-theme="dark"] .theme-toggle-btn:hover {
+    border-color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .page-title {
     color: var(--atlas-muted);
 }
 :root[data-theme="dark"] .desktop-nav {
-    background: rgba(30, 27, 46, 0.6);
-    border-color: var(--atlas-line);
+    background: transparent;
+    border-bottom-color: var(--btn-border);
 }
 :root[data-theme="dark"] .desktop-nav-item {
     color: var(--atlas-muted);
 }
 :root[data-theme="dark"] .desktop-nav-item.active {
-    background: var(--gradient-primary);
-    color: #fff;
-    box-shadow: 0 10px 24px rgba(124, 58, 237, 0.35);
+    background: transparent;
+    color: var(--btn-primary-bg);
+    border-bottom-color: var(--btn-primary-bg);
+    box-shadow: none;
 }
 :root[data-theme="dark"] .topbar-user {
-    background: var(--bg-tertiary);
-    border-color: var(--gray-200);
+    background: transparent;
+    border-color: var(--btn-border);
 }
 :root[data-theme="dark"] .topbar-username {
-    color: var(--primary);
+    color: var(--btn-primary-bg);
+}
+:root[data-theme="dark"] .logout-btn {
+    background: transparent;
+    border-color: var(--btn-border);
+    color: var(--text-secondary);
+}
+:root[data-theme="dark"] .logout-btn:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: transparent;
 }
 :root[data-theme="dark"] .bottom-tab-bar {
     background: var(--atlas-card);
@@ -258,24 +311,20 @@
     color: var(--atlas-muted);
 }
 :root[data-theme="dark"] .tab-item.active {
-    color: var(--atlas-purple);
+    color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .login-round-btn {
-    background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
-    color: #fff;
+    background: transparent;
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
 }
-:root[data-theme="dark"] .logout-btn {
-    background: var(--atlas-card);
-    border-color: var(--atlas-line);
-    color: var(--atlas-ink);
-}
-:root[data-theme="dark"] .logout-btn:hover {
-    background: var(--danger);
-    color: white;
+:root[data-theme="dark"] .login-round-btn:hover {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
 }
 :root[data-theme="dark"] .secondary-btn, :root[data-theme="dark"] .small-btn {
-    background: var(--atlas-card);
-    border-color: var(--atlas-line);
+    background: transparent;
+    border-color: var(--btn-border);
     color: var(--atlas-ink);
 }
 

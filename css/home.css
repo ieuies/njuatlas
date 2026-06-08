@@ -117,28 +117,29 @@
 }
 .home-brand-btn {
     padding: 10px 22px;
-    border-radius: 999px;
+    border-radius: var(--btn-radius);
     font-size: 0.84rem;
     font-weight: 700;
     cursor: pointer;
-    border: none;
-    transition: var(--transition-fast);
+    box-shadow: none;
 }
 .home-brand-btn.primary {
-    background: var(--atlas-purple);
-    color: #fff;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border: none;
 }
 .home-brand-btn.primary:hover {
-    filter: brightness(1.1);
-    transform: translateY(-1px);
+    filter: brightness(1.08);
 }
 .home-brand-btn.secondary {
     background: transparent;
     color: var(--atlas-ink);
-    border: 1.5px solid var(--atlas-line);
+    border: 1.5px solid var(--btn-border);
 }
 .home-brand-btn.secondary:hover {
-    background: var(--bg-tertiary);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
+    background: transparent;
 }
 
 /* 右侧卡片区 */
@@ -283,15 +284,17 @@
     color: rgba(255,255,255,0.6);
 }
 :root[data-theme="dark"] .home-brand-btn.primary {
-    background: linear-gradient(135deg, #fff, #ead7ff);
-    color: #3a155b;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
 }
 :root[data-theme="dark"] .home-brand-btn.secondary {
     color: rgba(255,255,255,0.8);
-    border-color: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.25);
 }
 :root[data-theme="dark"] .home-brand-btn.secondary:hover {
-    background: rgba(255,255,255,0.07);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
+    background: transparent;
 }
 :root[data-theme="dark"] .home-flip-front {
     background: rgba(255,255,255,0.04);

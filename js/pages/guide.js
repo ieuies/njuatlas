@@ -62,13 +62,13 @@ function renderGuideGrid(items) {
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
-                    ${item.rating ? `<span class="guide-rating">⭐ ${item.rating}</span>` : ''}
+                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${item.rating}</span>` : ''}
                 </div>
                 <div class="guide-desc">${esc(item.desc)}</div>
                 <div class="guide-meta">
-                    ${item.campus ? `<span class="guide-campus-tag">📍 ${esc(item.campus)}校区</span>` : ''}
+                    ${item.campus ? `<span class="guide-campus-tag"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.campus)}校区</span>` : ''}
                     <span class="guide-type">${esc(item.type)}</span>
-                    ${item.address ? `<span style="font-size:0.75rem;color:var(--text-tertiary);">📍 ${esc(item.address)}</span>` : ''}
+                    ${item.address ? `<span style="font-size:0.75rem;color:var(--text-tertiary);"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}</span>` : ''}
                     ${item.price ? `<span class="guide-price">${esc(item.price)}</span>` : ''}
                 </div>
             </div>
@@ -90,10 +90,7 @@ async function _fetchCampusData(campus) {
     const location = _getCampusLocation(campus);
     const allItems = [];
 
-    let delay = 0;
     const promises = Object.entries(CATEGORY_CONFIG).map(async ([cat, cfg]) => {
-        const ms = delay; delay += 100;
-        if (ms > 0) await new Promise(r => setTimeout(r, ms));
         try {
             const r = await searchPlaces(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
             if (r.status === '1' && Array.isArray(r.pois)) {
@@ -226,13 +223,13 @@ function openGuideDetail(item) {
     if (!modal) return;
     document.getElementById('guideDetailImg').src = item.image || '';
     document.getElementById('guideDetailName').textContent = item.name;
-    document.getElementById('guideDetailRating').textContent = item.rating ? `⭐ ${item.rating}` : '';
+    document.getElementById('guideDetailRating').innerHTML = item.rating ? `<i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}` : '';
     document.getElementById('guideDetailPrice').textContent = item.price || '';
     document.getElementById('guideDetailPrice').style.cssText = item.price ? 'font-weight:700;color:var(--danger);' : '';
     document.getElementById('guideDetailType').textContent = item.type || '';
     document.getElementById('guideDetailType').style.cssText = item.type ? 'padding:3px 10px;border-radius:10px;font-size:0.75rem;background:var(--bg-tertiary);color:var(--text-secondary);' : '';
     document.getElementById('guideDetailDesc').textContent = item.desc || '';
-    document.getElementById('guideDetailAddr').innerHTML = item.address ? `📍 ${esc(item.address)}` : '';
+    document.getElementById('guideDetailAddr').innerHTML = item.address ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}` : '';
     modal.style.display = 'flex';
 }
 

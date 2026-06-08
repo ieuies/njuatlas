@@ -7,6 +7,38 @@ import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 
 let currentProfileTab = 'posts';
+let _profileBioCache = null;
+
+const CROPPER_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css';
+const CROPPER_JS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+let _cropperLoadPromise = null;
+
+function ensureCropperLoaded() {
+    if (typeof window.Cropper !== 'undefined') return Promise.resolve();
+    if (_cropperLoadPromise) return _cropperLoadPromise;
+    _cropperLoadPromise = new Promise((resolve, reject) => {
+        if (!document.querySelector('link[data-cropper-css]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = CROPPER_CSS;
+            link.dataset.cropperCss = '1';
+            document.head.appendChild(link);
+        }
+        const existing = document.querySelector('script[data-cropper-js]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('Cropper 加载失败')), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = CROPPER_JS;
+        script.dataset.cropperJs = '1';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Cropper 加载失败'));
+        document.head.appendChild(script);
+    });
+    return _cropperLoadPromise;
+}
 
 // 封面相关常量
 const COVER_PRESETS = [
@@ -71,6 +103,7 @@ function openCropModal(file) {
             return;
         }
 
+        ensureCropperLoaded().then(() => {
         const reader = new FileReader();
         reader.onload = (e) => {
             img.src = e.target.result;
@@ -146,6 +179,7 @@ function openCropModal(file) {
         confirmBtn.addEventListener('click', onConfirm);
         cancelBtn.addEventListener('click', onCancel);
         closeBtn.addEventListener('click', onCancel);
+        }).catch(reject);
     });
 }
 
@@ -190,7 +224,7 @@ function renderProfileHeader() {
     if (usernameEl) usernameEl.innerText = username;
 
     const emailLine = document.getElementById('profileEmailLine');
-    if (emailLine) emailLine.innerText = email ? `📧 ${email}` : '';
+    if (emailLine) emailLine.innerHTML = email ? `<i class="fas fa-envelope" aria-hidden="true"></i> ${escapeHtml(email)}` : '';
 
     renderAvatar(user);
     loadAndRenderBio();
@@ -199,7 +233,9 @@ function renderProfileHeader() {
     const resendBtn = document.getElementById('sendVerifyEmailBtn');
     const verified = Boolean(user?.email_verified);
     if (statusEl) {
-        statusEl.innerText = verified ? '✓ 邮箱已验证' : '⚠ 邮箱未验证';
+        statusEl.innerHTML = verified
+            ? '<i class="fas fa-circle-check" aria-hidden="true"></i> 邮箱已验证'
+            : '<i class="fas fa-circle-exclamation" aria-hidden="true"></i> 邮箱未验证';
         statusEl.className = `profile-status ${verified ? 'is-verified' : 'is-unverified'}`;
     }
     if (resendBtn) resendBtn.style.display = verified ? 'none' : 'inline-flex';
@@ -222,37 +258,47 @@ function renderAvatar(user) {
     });
 }
 
-async function loadAndRenderBio() {
+async function loadAndRenderBio(force = false) {
     const bioEl = document.getElementById('profileBio');
     if (!bioEl) return;
+    if (!force && _profileBioCache) {
+        _applyProfileBio(_profileBioCache);
+        return;
+    }
     try {
         const profile = await getMyProfile();
-        if (profile.bio) bioEl.innerText = profile.bio;
-        const campusEl = document.getElementById('profileCampus');
-        if (campusEl) campusEl.innerText = profile.campus ? `📍 ${profile.campus}校区` : '';
-
-        const editUsername = document.getElementById('editUsername');
-        const editBio = document.getElementById('editBio');
-        const editTags = document.getElementById('editTags');
-        const editCampus = document.getElementById('editCampus');
-        if (editUsername) editUsername.value = profile.username || '';
-        if (editBio) editBio.value = profile.bio || '';
-        if (editTags) editTags.value = (profile.tags || []).join(', ');
-        if (editCampus) editCampus.value = profile.campus || '';
-
-        const tagsContainer = document.getElementById('profileTags');
-        if (tagsContainer) {
-            const tags = profile.tags || [];
-            if (tags.length) {
-                tagsContainer.innerHTML = tags.map(tag => `<span class="profile-tag-chip">${escapeHtml(tag)}</span>`).join('');
-                tagsContainer.style.display = 'flex';
-            } else {
-                tagsContainer.innerHTML = '<span class="profile-tag-placeholder">暂无标签，去编辑资料添加～</span>';
-                tagsContainer.style.display = 'flex';
-            }
-        }
+        _profileBioCache = profile;
+        _applyProfileBio(profile);
     } catch (e) {
         // 静默失败
+    }
+}
+
+function _applyProfileBio(profile) {
+    const bioEl = document.getElementById('profileBio');
+    if (bioEl && profile.bio) bioEl.innerText = profile.bio;
+    const campusEl = document.getElementById('profileCampus');
+    if (campusEl) campusEl.innerHTML = profile.campus ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(profile.campus)}校区` : '';
+
+    const editUsername = document.getElementById('editUsername');
+    const editBio = document.getElementById('editBio');
+    const editTags = document.getElementById('editTags');
+    const editCampus = document.getElementById('editCampus');
+    if (editUsername) editUsername.value = profile.username || '';
+    if (editBio) editBio.value = profile.bio || '';
+    if (editTags) editTags.value = (profile.tags || []).join(', ');
+    if (editCampus) editCampus.value = profile.campus || '';
+
+    const tagsContainer = document.getElementById('profileTags');
+    if (tagsContainer) {
+        const tags = profile.tags || [];
+        if (tags.length) {
+            tagsContainer.innerHTML = tags.map(tag => `<span class="profile-tag-chip">${escapeHtml(tag)}</span>`).join('');
+            tagsContainer.style.display = 'flex';
+        } else {
+            tagsContainer.innerHTML = '<span class="profile-tag-placeholder">暂无标签，去编辑资料添加～</span>';
+            tagsContainer.style.display = 'flex';
+        }
     }
 }
 
@@ -297,7 +343,7 @@ async function loadProfileTabContent(tabId) {
 async function renderMyPosts(container) {
     const user = getUser();
     if (!user?.id) {
-        container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-file-alt"></i>请先登录</div>';
+        container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-file-lines"></i>请先登录</div>';
         return;
     }
     try {
@@ -307,9 +353,9 @@ async function renderMyPosts(container) {
         if (!posts.length) {
             container.innerHTML = `
                 <div class="profile-empty-state">
-                    <i class="fas fa-file-alt"></i>
+                    <i class="fas fa-file-lines"></i>
                     <p>还没有发布过组局</p>
-                    <button class="primary-btn small" id="gotoCreatePostBtn">✨ 发起第一个组局</button>
+                    <button class="primary-btn small" id="gotoCreatePostBtn"><i class="fas fa-plus" aria-hidden="true"></i> 发起第一个组局</button>
                 </div>`;
             const gotoBtn = document.getElementById('gotoCreatePostBtn');
             if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('partner'));
@@ -320,7 +366,7 @@ async function renderMyPosts(container) {
                 <div class="profile-content-card-title">${escapeHtml(p.title || '无标题')}</div>
                 <div class="profile-content-card-body">${escapeHtml((p.content || p.description || '').substring(0, 150))}</div>
                 <div class="profile-content-card-meta">
-                    <span><i class="fas fa-tag"></i> ${escapeHtml(p.category || p.type || '')}</span>
+                    <span><i class="fas fa-bookmark"></i> ${escapeHtml(p.category || p.type || '')}</span>
                     <span><i class="fas fa-clock"></i> ${formatDate(p.created_at)}</span>
                     <span><i class="fas fa-heart"></i> ${p.like_count || 0} 赞</span>
                     <span><i class="fas fa-comment"></i> ${p.comment_count || 0} 评</span>
@@ -378,7 +424,7 @@ async function renderMyComments(container) {
                 <div class="profile-empty-state">
                     <i class="fas fa-comment"></i>
                     <p>还没有发表过评论</p>
-                    <button class="primary-btn small" id="gotoCommentBtn">🍜 去评价一家店</button>
+                    <button class="primary-btn small" id="gotoCommentBtn"><i class="fas fa-utensils" aria-hidden="true"></i> 去评价一家店</button>
                 </div>`;
             const gotoBtn = document.getElementById('gotoCommentBtn');
             if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('guide'));
@@ -388,7 +434,7 @@ async function renderMyComments(container) {
             if (c.type === 'post') {
                 return `
                     <article class="profile-content-card" data-post-id="${c.postId}">
-                        <div class="profile-content-card-title">💬 回复：${escapeHtml(c.postTitle)}</div>
+                        <div class="profile-content-card-title"><i class="fas fa-comment" aria-hidden="true"></i> 回复：${escapeHtml(c.postTitle)}</div>
                         <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
                         <div class="profile-content-card-meta">
                             <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
@@ -398,7 +444,7 @@ async function renderMyComments(container) {
             }
             return `
                 <article class="profile-content-card">
-                    <div class="profile-content-card-title"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(c.placeName)}</div>
+                    <div class="profile-content-card-title"><i class="fas fa-location-dot"></i> ${escapeHtml(c.placeName)}</div>
                     <div class="profile-content-card-body">${escapeHtml(c.content)}</div>
                     <div class="profile-content-card-meta">
                         <span><i class="fas fa-clock"></i> ${formatDate(c.time)}</span>
@@ -436,7 +482,7 @@ async function renderMyFavorites(container) {
                 <div class="profile-empty-state">
                     <i class="fas fa-heart"></i>
                     <p>还没有收藏或点赞</p>
-                    <button class="primary-btn small" id="gotoGuideBtn">✨ 去发现宝藏店铺</button>
+                    <button class="primary-btn small" id="gotoGuideBtn"><i class="fas fa-compass" aria-hidden="true"></i> 去发现宝藏店铺</button>
                 </div>`;
             const gotoBtn = document.getElementById('gotoGuideBtn');
             if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('guide'));
@@ -460,7 +506,7 @@ async function renderMyFavorites(container) {
 // ========== 我的活动 ==========
 async function renderMyActivities(container) {
     try {
-        const data = await listPosts({ page_size: 100 });
+        const data = await listPosts({ page_size: 30 });
         const user = getUser();
         const allPosts = data.items || [];
         const myActivities = allPosts.filter(p =>
@@ -472,7 +518,7 @@ async function renderMyActivities(container) {
                 <div class="profile-empty-state">
                     <i class="fas fa-calendar"></i>
                     <p>还没有参加过组局活动</p>
-                    <button class="primary-btn small" id="gotoPartnerBtn">🎯 去看看有哪些活动</button>
+                    <button class="primary-btn small" id="gotoPartnerBtn"><i class="fas fa-user-group" aria-hidden="true"></i> 去看看有哪些活动</button>
                 </div>`;
             const gotoBtn = document.getElementById('gotoPartnerBtn');
             if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('partner'));
@@ -483,7 +529,7 @@ async function renderMyActivities(container) {
                 <div class="profile-content-card-title">${escapeHtml(p.title || '无标题')}</div>
                 <div class="profile-content-card-body">${escapeHtml((p.content || p.description || '').substring(0, 120))}</div>
                 <div class="profile-content-card-meta">
-                    <span><i class="fas fa-tag"></i> ${escapeHtml(p.category || p.type || '')}</span>
+                    <span><i class="fas fa-bookmark"></i> ${escapeHtml(p.category || p.type || '')}</span>
                     <span><i class="fas fa-clock"></i> ${formatDate(p.created_at)}</span>
                     <span><i class="fas fa-users"></i> ${p.participant_count || 0} 人参与</span>
                 </div>
@@ -562,7 +608,8 @@ function initEditProfile() {
                 user.campus = campus;
                 localStorage.setItem('current_user', JSON.stringify(user));
             }
-            loadAndRenderBio();
+            _profileBioCache = null;
+            loadAndRenderBio(true);
         } catch (err) {
             showToast(err.message || '保存失败');
         } finally {
