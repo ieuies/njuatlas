@@ -9,6 +9,7 @@ function readStoredUser() {
         if (raw) return JSON.parse(raw);
         const token = getAuthToken();
         if (!token) return null;
+        // 解码 JWT payload 获取用户信息
         const payloadPart = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
         const paddedPayload = payloadPart.padEnd(payloadPart.length + (4 - payloadPart.length % 4) % 4, '=');
         const payload = JSON.parse(atob(paddedPayload));
@@ -42,7 +43,27 @@ function userFromAuthPayload(data, fallback = {}) {
 }
 
 export function isLoggedIn() {
-    return !!getAuthToken();
+    // 不仅检查 token 存在，还要验证它是否已过期
+    const token = getAuthToken();
+    if (!token) return false;
+    try {
+        const payloadPart = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const paddedPayload = payloadPart.padEnd(payloadPart.length + (4 - payloadPart.length % 4) % 4, '=');
+        const payload = JSON.parse(atob(paddedPayload));
+        const now = Math.floor(Date.now() / 1000);
+        // JWT exp 是秒级时间戳
+        if (payload.exp && payload.exp < now) {
+            // token 已过期，清理
+            setAuthToken(null);
+            persistUser(null);
+            return false;
+        }
+        return true;
+    } catch {
+        setAuthToken(null);
+        persistUser(null);
+        return false;
+    }
 }
 
 export function getUser() {

@@ -36,6 +36,10 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
         }
         if (!res.ok) {
             if (res.status === 401 && needAuth) {
+                // token 已过期或无效，清理本地残留状态
+                authToken = null;
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('current_user');
                 throw new Error('UNAUTHORIZED');
             }
             throw new Error(data.message || `请求失败: ${res.status}`);

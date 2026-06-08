@@ -179,6 +179,12 @@ async function loadConversationList() {
         });
         if (currentSessionId) highlightCurrentSession(currentSessionId);
     } catch (err) {
+        // token 过期时 api.js 已清理 localStorage，isLoggedIn() 会返回 false
+        // 这里静默处理，sendMessage 会弹出登录框引导用户
+        if (err.message === 'UNAUTHORIZED') {
+            listContainer.innerHTML = '<div class="ai-conv-empty"><i class="fas fa-lock"></i> 请登录后查看历史对话</div>';
+            return;
+        }
         console.warn('加载会话列表失败:', err);
         listContainer.innerHTML = '<div class="ai-conv-empty">加载失败，请刷新重试</div>';
     }
@@ -224,6 +230,11 @@ async function loadConversation(sessionId) {
         highlightCurrentSession(sessionId);
         if (window.innerWidth <= 768) closeMobileSidebar();
     } catch (err) {
+        if (err.message === 'UNAUTHORIZED') {
+            showToast('登录已过期，请重新登录');
+            document.getElementById('authModal').style.display = 'flex';
+            return;
+        }
         showToast('加载对话失败: ' + err.message);
     }
 }
@@ -235,6 +246,11 @@ async function deleteConversationHandler(sessionId) {
         if (currentSessionId === sessionId) startNewChat();
         await loadConversationList();
     } catch (err) {
+        if (err.message === 'UNAUTHORIZED') {
+            showToast('登录已过期，请重新登录');
+            document.getElementById('authModal').style.display = 'flex';
+            return;
+        }
         showToast('删除失败: ' + err.message);
     }
 }
@@ -304,6 +320,7 @@ async function sendMessage() {
     if (!msg) return;
     if (!isLoggedIn()) {
         showToast('请先登录使用AI助手');
+        document.getElementById('authModal').style.display = 'flex';
         return;
     }
 
@@ -365,6 +382,12 @@ async function sendMessage() {
         await refreshSidebar();
     } catch (e) {
         removeThinking();
+        // token 过期：弹出登录框，引导用户重新登录
+        if (e.message === 'UNAUTHORIZED') {
+            showToast('登录已过期，请重新登录');
+            document.getElementById('authModal').style.display = 'flex';
+            return;
+        }
         const errDiv = document.createElement('div');
         errDiv.className = 'chat-message chat-bot';
         errDiv.textContent = '抱歉，AI 回复失败，请稍后重试';
