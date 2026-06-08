@@ -1,0 +1,356 @@
+/*! nju.atlas - layout.css (全局布局) */
+
+/* ========== 主布局容器 ========== */
+.app-layout.mobile-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+    background: var(--bg-secondary);
+    position: relative;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-bottom: calc(var(--bottom-tab-height) + 16px);
+}
+
+.content-area {
+    flex: 1;
+    padding: 12px 12px 0;
+    overflow-y: auto;
+}
+
+.page { display: none; }
+.page.active-page { display: block; position: relative; overflow: hidden; }
+
+/* ========== 顶部栏 ========== */
+.top-bar {
+    height: var(--topbar-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--gray-200);
+}
+.top-bar-left { display: flex; align-items: center; gap: 6px; }
+.top-bar-right { display: flex; align-items: center; gap: 8px; }
+
+.brand-mark {
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--atlas-ink);
+    font-size: clamp(1.75rem, 3.4vw, 2.35rem);
+    font-weight: 950;
+    letter-spacing: -0.06em;
+    cursor: pointer;
+}
+.theme-toggle-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--atlas-line);
+    border-radius: 999px;
+    background: var(--atlas-card);
+    box-shadow: 0 8px 22px rgba(74,29,110,0.08);
+    cursor: pointer;
+}
+.page-title {
+    color: var(--atlas-muted);
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+/* 登录/用户区域 */
+.login-round-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    border: none;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: var(--shadow-md);
+}
+.login-round-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-tertiary);
+    padding: 4px 4px 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--gray-200);
+}
+.topbar-username {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--primary);
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.logout-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--gray-200);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.logout-btn:hover { background: var(--danger); color: white; }
+
+/* ========== 桌面导航 ========== */
+.desktop-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--atlas-line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.45);
+}
+.desktop-nav-item {
+    min-height: 44px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--atlas-muted);
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    white-space: nowrap;
+}
+.desktop-nav-item.active {
+    background: var(--gradient-primary);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(107,33,165,0.24);
+}
+
+/* ========== 底部 Tab 栏（移动端） ========== */
+.bottom-tab-bar {
+    display: none;
+    justify-content: space-around;
+    align-items: center;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0;
+    width: min(100%, 520px);
+    height: 66px;
+    padding: 4px 8px;
+    z-index: 2800;
+    border-top: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    backdrop-filter: blur(18px);
+}
+.tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: var(--atlas-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.tab-item i { font-size: 1.15rem; }
+.tab-item.active { color: var(--atlas-purple); }
+
+/* ========== 按钮美化覆盖 ========== */
+.login-round-btn, .logout-btn, .map-expand-btn, .primary-btn,
+.secondary-btn, .small-btn, .join-btn {
+    min-height: 44px;
+    border-radius: 999px;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+.login-round-btn {
+    border: none;
+    background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
+    color: #fff;
+    box-shadow: var(--shadow-md);
+}
+.logout-btn, .map-expand-btn, .secondary-btn, .small-btn {
+    border: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    color: var(--atlas-ink);
+    box-shadow: 0 8px 22px rgba(74,29,110,0.08);
+}
+.primary-btn, .join-btn {
+    border: 0;
+    background: var(--gradient-primary);
+    color: #fff;
+}
+
+/* ========== 暗色模式 ========== */
+:root[data-theme="dark"] .top-bar {
+    background: rgba(20, 16, 30, 0.96);
+    border-bottom-color: var(--atlas-line);
+}
+:root[data-theme="dark"] .brand-mark {
+    color: var(--atlas-ink);
+}
+:root[data-theme="dark"] .theme-toggle-btn {
+    background: var(--atlas-card);
+    border-color: var(--atlas-line);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.2);
+}
+:root[data-theme="dark"] .page-title {
+    color: var(--atlas-muted);
+}
+:root[data-theme="dark"] .desktop-nav {
+    background: rgba(30, 27, 46, 0.6);
+    border-color: var(--atlas-line);
+}
+:root[data-theme="dark"] .desktop-nav-item {
+    color: var(--atlas-muted);
+}
+:root[data-theme="dark"] .desktop-nav-item.active {
+    background: var(--gradient-primary);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(124, 58, 237, 0.35);
+}
+:root[data-theme="dark"] .topbar-user {
+    background: var(--bg-tertiary);
+    border-color: var(--gray-200);
+}
+:root[data-theme="dark"] .topbar-username {
+    color: var(--primary);
+}
+:root[data-theme="dark"] .bottom-tab-bar {
+    background: var(--atlas-card);
+    border-top-color: var(--atlas-line);
+}
+:root[data-theme="dark"] .tab-item {
+    color: var(--atlas-muted);
+}
+:root[data-theme="dark"] .tab-item.active {
+    color: var(--atlas-purple);
+}
+:root[data-theme="dark"] .login-round-btn {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
+    color: #fff;
+}
+:root[data-theme="dark"] .logout-btn {
+    background: var(--atlas-card);
+    border-color: var(--atlas-line);
+    color: var(--atlas-ink);
+}
+:root[data-theme="dark"] .logout-btn:hover {
+    background: var(--danger);
+    color: white;
+}
+:root[data-theme="dark"] .secondary-btn, :root[data-theme="dark"] .small-btn {
+    background: var(--atlas-card);
+    border-color: var(--atlas-line);
+    color: var(--atlas-ink);
+}
+
+/* 桌面端暗色模式顶部栏覆盖 */
+@media (min-width: 769px) {
+    :root[data-theme="dark"] .top-bar {
+        background: rgba(20, 16, 30, 0.92) !important;
+        border-bottom-color: var(--atlas-line) !important;
+    }
+}
+
+/* ========== 响应式：桌面端顶部栏固定 ========== */
+@media (min-width: 769px) {
+    .top-bar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 3000 !important;
+        height: var(--atlas-topbar) !important;
+        width: 100% !important;
+        padding: 0 clamp(18px, 4vw, 56px) !important;
+        background: rgba(255, 255, 255, 0.86) !important;
+        border-bottom: 1px solid var(--atlas-line) !important;
+        backdrop-filter: blur(18px);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.5) inset;
+    }
+    .main-content {
+        padding-top: var(--atlas-topbar) !important;
+        padding-bottom: 0 !important;
+    }
+    .content-area {
+        padding: 0 !important;
+        overflow: auto !important;
+        position: relative;
+        z-index: 1;
+    }
+    .bottom-tab-bar { display: none !important; }
+}
+
+/* ========== 移动端顶部栏调整 ========== */
+@media (max-width: 768px) {
+    :root { --atlas-topbar: 58px; }
+    .top-bar { padding: 0 14px !important; }
+    .desktop-nav, .topbar-username, .page-title { display: none !important; }
+    .logout-btn {
+        width: 28px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        font-size: 0.75rem !important;
+    }
+    .topbar-user {
+        padding: 2px 2px 2px 8px !important;
+        gap: 4px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        align-items: center !important;
+    }
+    .topbar-username {
+        height: 32px !important;
+        line-height: 32px !important;
+    }
+    .logout-btn {
+        width: 30px !important;
+        height: 30px !important;
+        min-width: 30px !important;
+        min-height: 30px !important;
+        padding: 0 !important;
+        border-radius: 999px !important;
+        flex: 0 0 30px !important;
+        font-size: 0.85rem !important;
+    }
+    .brand-mark { font-size: 1.35rem; }
+    .bottom-tab-bar {
+        display: flex !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
+}

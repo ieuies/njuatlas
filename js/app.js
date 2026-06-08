@@ -3,6 +3,24 @@ import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
 import { initAIPage } from './pages/ai.js';
 
+// ── 动态加载 CSS（避免重复加载）────────────────────────────────
+const loadedStyles = new Set();
+
+function loadStyle(href) {
+    if (loadedStyles.has(href)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.onload = () => {
+            loadedStyles.add(href);
+            resolve();
+        };
+        link.onerror = reject;
+        document.head.appendChild(link);
+    });
+}
+
 // ── 按需懒加载：大模块（partner 63KB / guide 10KB / profile 21KB）在首次导航时才下载 ──
 let _partnerMod = null;
 let _guideMod = null;
@@ -82,13 +100,17 @@ async function switchPage(pageId) {
         item.classList.toggle('active', tabPage === pageId);
     });
 
-    // 页面切换时的初始化（大模块按需动态加载）
+    // 页面切换时的初始化（大模块按需动态加载 + 对应的 CSS 按需加载）
     if (pageId === 'guide') {
+        await loadStyle('css/guide.css');
         const mod = await _loadGuide();
         mod.initGuidePage();
     } else if (pageId === 'ai') {
+        await loadStyle('css/ai.css');
         initAIPage();
     } else if (pageId === 'partner') {
+        await loadStyle('css/partner.css');
+        await loadStyle('css/components.css');  // 帖子详情模态框需要
         const mod = await _loadPartner();
         // 首次加载时初始化模态框等
         if (!_partnerMod._inited) {
@@ -97,6 +119,8 @@ async function switchPage(pageId) {
         }
         mod.loadPartnerData();
     } else if (pageId === 'profile') {
+        await loadStyle('css/profile.css');
+        await loadStyle('css/components.css');  // 可能用到评论等组件
         const mod = await _loadProfile();
         // 首次加载时绑定编辑资料等按钮事件
         if (!_profileMod._inited) {
@@ -110,6 +134,8 @@ async function switchPage(pageId) {
         requestAnimationFrame(() => {
             requestAnimationFrame(() => initFullMapMarkers());
         });
+    } else if (pageId === 'home') {
+        // home.css 已在 HTML 中加载，无需动态加载
     }
 
     // 发起组局按钮只属于找搭子页，离开该页时隐藏。
@@ -455,7 +481,7 @@ function initMapExpand() {
 }
 
 // ========== 初始化 ==========
-function init() {
+async function init() {
     updateNavBar();
 
     // 初始化各模块
@@ -470,7 +496,7 @@ function init() {
     initFullMapPage();
 
     // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
-    switchPage('home');
+    await switchPage('home');
 
 }
 

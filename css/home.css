@@ -1,0 +1,353 @@
+/*! nju.atlas - home.css (首页专用) */
+
+/* ========== 首页容器 ========== */
+#homePage,
+#homePage.active-page {
+    position: relative;
+    min-height: calc(100vh - var(--atlas-topbar));
+    padding-bottom: var(--atlas-bottombar);
+    background: linear-gradient(180deg, #fefdfe 0%, #f8f6fa 30%, #f3eff8 100%) !important;
+}
+:root[data-theme="dark"] #homePage,
+:root[data-theme="dark"] #homePage.active-page {
+    background: linear-gradient(180deg, #14101e 0%, #1a1528 40%, #0f0f18 100%) !important;
+}
+#homePage::before {
+    content: "";
+    display: block;
+    position: absolute;
+    top: -180px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(900px, 100vw);
+    height: 500px;
+    background: radial-gradient(ellipse at 50% 40%, rgba(168,85,247,0.08) 0%, rgba(168,85,247,0.03) 40%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+:root[data-theme="dark"] #homePage::before {
+    background: radial-gradient(ellipse at 50% 40%, rgba(168,85,247,0.12) 0%, rgba(107,33,165,0.05) 40%, transparent 70%);
+}
+
+/* ========== 粒子画布 ========== */
+.home-particles {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* ========== 移动端图片网格（仅在移动端显示） ========== */
+.home-mobile-grid {
+    display: none;
+}
+@media (max-width: 768px) {
+    .home-mobile-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        grid-template-rows: repeat(7, 1fr);
+        height: 50vh;
+        min-height: 280px;
+        -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+        mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+    }
+    .home-mobile-grid .mg-cell {
+        background-size: cover;
+        background-position: center;
+    }
+}
+
+/* ========== Hero 区域（双栏布局） ========== */
+.home-hero {
+    display: flex;
+    width: 100%;
+    height: calc(100vh - var(--atlas-topbar) - 155px);
+    min-height: 520px;
+    padding: 0 0 0 40px;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+}
+
+/* 左侧品牌区 */
+.home-brand {
+    flex: 0 0 auto;
+    min-width: 340px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+}
+.home-brand-inner {
+    position: relative;
+    z-index: 1;
+    text-align: left;
+    padding: 30px 10px;
+    max-width: 420px;
+}
+.home-brand-kicker {
+    margin: 0 0 8px;
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.17em;
+    color: var(--text-tertiary);
+}
+.home-brand-title {
+    margin: 0 0 10px;
+    font-size: clamp(3.6rem, 6.5vw, 6rem);
+    font-weight: 950;
+    letter-spacing: -0.07em;
+    line-height: 1.04;
+    color: var(--atlas-ink);
+}
+.home-brand-sub {
+    margin: 0 0 26px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.home-brand-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.home-brand-btn {
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: var(--transition-fast);
+}
+.home-brand-btn.primary {
+    background: var(--atlas-purple);
+    color: #fff;
+}
+.home-brand-btn.primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+.home-brand-btn.secondary {
+    background: transparent;
+    color: var(--atlas-ink);
+    border: 1.5px solid var(--atlas-line);
+}
+.home-brand-btn.secondary:hover {
+    background: var(--bg-tertiary);
+}
+
+/* 右侧卡片区 */
+.home-card-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 10px 14px 10px 0;
+    box-sizing: border-box;
+}
+.home-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.home-card-row {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+/* ========== 3D 翻转卡片 ========== */
+.home-flip-card {
+    width: 107px;
+    height: 107px;
+    flex: 0 0 107px;
+    cursor: pointer;
+    perspective: 600px;
+    opacity: 0;
+    transform: translateY(12px);
+    will-change: opacity, transform;
+}
+.home-flip-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.4s ease;
+    transform-style: preserve-3d;
+}
+.home-flip-card:hover .home-flip-inner,
+.home-flip-card.flipped .home-flip-inner {
+    transform: rotateY(180deg);
+}
+.home-flip-front,
+.home-flip-back {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+.home-flip-front {
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+}
+.home-flip-back {
+    transform: rotateY(180deg);
+    background-size: cover;
+    background-position: center;
+}
+
+/* 入场动画 */
+.home-flip-card.enter {
+    animation-name: homeCardUpFade;
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(.2, .9, .3, 1);
+    animation-fill-mode: forwards;
+}
+@keyframes homeCardUpFade {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home-flip-card,
+    .home-flip-card.enter {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
+/* ========== 底部功能卡片（四列） ========== */
+.home-features {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 16px;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 2;
+}
+.home-feat-card {
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+.home-feat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--atlas-shadow-strong);
+}
+.home-feat-num {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 900;
+    color: var(--atlas-purple);
+    background: rgba(124,58,237,0.08);
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-bottom: 6px;
+}
+.home-feat-card h3 {
+    margin: 0 0 4px;
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--atlas-ink);
+}
+.home-feat-card p {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+/* ========== 暗色模式调整 ========== */
+:root[data-theme="dark"] .home-brand-kicker {
+    color: rgba(255,255,255,0.5);
+}
+:root[data-theme="dark"] .home-brand-title {
+    color: #fff;
+    text-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+:root[data-theme="dark"] .home-brand-sub {
+    color: rgba(255,255,255,0.6);
+}
+:root[data-theme="dark"] .home-brand-btn.primary {
+    background: linear-gradient(135deg, #fff, #ead7ff);
+    color: #3a155b;
+}
+:root[data-theme="dark"] .home-brand-btn.secondary {
+    color: rgba(255,255,255,0.8);
+    border-color: rgba(255,255,255,0.18);
+}
+:root[data-theme="dark"] .home-brand-btn.secondary:hover {
+    background: rgba(255,255,255,0.07);
+}
+:root[data-theme="dark"] .home-flip-front {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.07);
+}
+:root[data-theme="dark"] .home-feat-card {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.07);
+}
+:root[data-theme="dark"] .home-feat-card h3 {
+    color: #e8e4f0;
+}
+:root[data-theme="dark"] .home-feat-card p {
+    color: rgba(255,255,255,0.5);
+}
+:root[data-theme="dark"] .home-feat-num {
+    color: #a78bfa;
+    background: rgba(167,139,250,0.12);
+}
+
+/* ========== 移动端首页适配 ========== */
+@media (max-width: 768px) {
+    .home-particles { display: none; }
+    .home-hero {
+        flex-direction: column;
+        height: auto;
+        min-height: auto;
+        max-height: none;
+        padding: 0;
+        gap: 0;
+        overflow: visible;
+    }
+    .home-brand {
+        flex: none;
+        width: 100%;
+        text-align: center;
+        margin-top: -18vh;
+        position: relative;
+        z-index: 3;
+    }
+    .home-brand-inner {
+        text-align: center;
+        padding: 10px 0;
+        max-width: none;
+    }
+    .home-brand-title { font-size: 2.6rem; }
+    .home-brand-actions { justify-content: center; }
+    .home-card-area { display: none !important; }
+    .home-features {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 20px 16px 24px;
+        position: relative;
+        z-index: 3;
+    }
+    .home-feat-card { padding: 14px 15px; }
+    .home-feat-card h3 { font-size: 0.84rem; }
+    .home-feat-card p { font-size: 0.7rem; }
+}
