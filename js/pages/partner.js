@@ -506,36 +506,6 @@ async function refreshPreviewMarkers() {
     addMarkersToMap(map, partnersData);
 }
 
-function initMobileMapToggle() {
-    if (window.innerWidth > 768) return;
-    const card = document.getElementById('mapPreviewCard');
-    if (!card || card._toggleReady) return;
-    card._toggleReady = true;
-
-    const header = card.querySelector('.map-preview-header');
-    if (!header) return;
-
-    header.style.cursor = 'pointer';
-    const title = header.querySelector('.map-preview-title');
-    if (title && !title.querySelector('.map-toggle-chevron')) {
-        const chevron = document.createElement('span');
-        chevron.className = 'map-toggle-chevron';
-        chevron.innerHTML = '<i class="fas fa-chevron-down"></i>';
-        title.appendChild(chevron);
-    }
-
-    header.addEventListener('click', (e) => {
-        if (e.target.closest('#mapExpandBtn')) return;
-        const isExpanded = card.classList.toggle('map-expanded');
-        if (isExpanded) {
-            requestAnimationFrame(() => {
-                if (_sharedMap) _sharedMap.resize();
-                setTimeout(() => _sharedMap?.resize(), 400);
-            });
-        }
-    });
-}
-
 async function initFullMapMarkers() {
     try {
         await ensureAMap();
@@ -682,7 +652,8 @@ let currentDetailPost = null;
 
 function initPostDetailModal() {
     const modal = document.getElementById('postDetailModal');
-    if (!modal) return;
+    if (!modal || modal.dataset.ready === '1') return;
+    modal.dataset.ready = '1';
 
     const closeBtn = document.getElementById('closePostDetailBtn');
     const likeBtn = document.getElementById('detailLikeBtn');
@@ -1308,7 +1279,8 @@ function initPartnerModal() {
     const submitBtn = document.getElementById('submitPartnerBtn');
     const form = document.getElementById('partnerForm');
 
-    if (!modal) return;
+    if (!modal || modal.dataset.ready === '1') return;
+    modal.dataset.ready = '1';
 
     const scheduledRow = document.getElementById('scheduledTimeRow');
     const timeModeRow = document.getElementById('timeModeRow');
@@ -1609,7 +1581,6 @@ function _ensureRightPanel() {
 export async function initPartnerPage() {
     initPartnerModal();
     initPostDetailModal();
-    initMobileMapToggle();
 
     setupCategoryScrollArrows();
     _ensureRightPanel();
@@ -1627,7 +1598,6 @@ export async function initPartnerPage() {
     if (!_partnerPageInitialized) {
         _partnerPageInitialized = true;
         window.addEventListener('resize', () => {
-            initMobileMapToggle();
             setTimeout(() => window._refreshCategoryArrows?.(), 150);
         });
         // 注册滚动监听

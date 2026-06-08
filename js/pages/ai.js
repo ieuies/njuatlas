@@ -269,6 +269,9 @@ async function refreshSidebar() {
 // 侧栏 UI 控制
 function initSidebarControls() {
     const sidebar = document.getElementById('aiSidebar');
+    if (sidebar?.dataset.controlsReady === 'true') return;
+    if (sidebar) sidebar.dataset.controlsReady = 'true';
+
     const toggleBtn = document.getElementById('aiSidebarToggle');
     const expandBtn = document.getElementById('aiSidebarExpand');
     const newChatBtn = document.getElementById('aiNewChatBtn');
@@ -424,7 +427,8 @@ async function sendMessage() {
 // 移动端软键盘适配：使用 visualViewport API 避免键盘遮挡输入框
 function initViewportAdaptation() {
     const container = document.getElementById('aiPage');
-    if (!container || !window.visualViewport) return;
+    if (!container || !window.visualViewport || container.dataset.viewportReady === 'true') return;
+    container.dataset.viewportReady = 'true';
 
     const applyViewport = () => {
         const viewport = window.visualViewport;

@@ -144,11 +144,21 @@ async function _fetchCampusData(campus) {
 }
 
 // ── 筛选与应用 ──
-async function _applyGuideFilters() {
+async function _applyGuideFilters(force = false) {
     const container = document.getElementById('guideGrid');
+    const campus = _resolveCampus();
+
+    if (!force && _guideCache[campus]) {
+        let items = _guideCache[campus];
+        if (currentGuideCat !== 'all') {
+            items = items.filter(s => s.type === currentGuideCat);
+        }
+        renderGuideGrid(items);
+        return;
+    }
+
     if (container) container.innerHTML = '<div class="guide-loading">加载中...</div>';
 
-    const campus = _resolveCampus();
     try {
         const allItems = await _fetchCampusData(campus);
         let items = allItems;
@@ -294,7 +304,8 @@ export async function loadGuideData() {
 
 export function initGuidePage() {
     const container = document.getElementById('guideGrid');
-    if (container && !container.querySelector('.guide-card')) {
+    const campus = _resolveCampus();
+    if (container && !container.querySelector('.guide-card') && !_guideCache[campus]) {
         container.innerHTML = '<div class="guide-loading">加载精彩推荐中...</div>';
     }
     loadGuideData();

@@ -6,6 +6,13 @@ import { initAIPage } from './pages/ai.js';
 // ── 动态加载 CSS（避免重复加载）────────────────────────────────
 const loadedStyles = new Set();
 
+function seedLoadedStyles() {
+    document.querySelectorAll('link[rel="stylesheet"][href]').forEach((link) => {
+        const href = link.getAttribute('href');
+        if (href) loadedStyles.add(href);
+    });
+}
+
 function loadStyle(href) {
     if (loadedStyles.has(href)) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -25,6 +32,8 @@ function loadStyle(href) {
 let _partnerMod = null;
 let _guideMod = null;
 let _profileMod = null;
+let _partnerPageInited = false;
+let _profilePageInited = false;
 function _loadPartner() { return _partnerMod || (_partnerMod = import('./pages/partner.js')); }
 function _loadGuide()   { return _guideMod   || (_guideMod   = import('./pages/guide.js')); }
 function _loadProfile() { return _profileMod || (_profileMod = import('./pages/profile.js')); }
@@ -54,6 +63,22 @@ const pageTitles = {
     fullMap: '组局地图',
 };
 
+const PAGE_STYLES = {
+    guide: ['css/guide.css'],
+    ai: ['css/ai.css'],
+    partner: ['css/partner.css', 'css/components.css'],
+    profile: ['css/profile.css', 'css/components.css'],
+    fullMap: ['css/partner.css'],
+};
+
+async function ensurePageStyles(pageId) {
+    const sheets = PAGE_STYLES[pageId];
+    if (!sheets) return;
+    for (const href of sheets) {
+        await loadStyle(href);
+    }
+}
+
 async function switchPage(pageId) {
     // 这些页面沿用现有登录模态框；这里不改账号流程，只把入口统一接到已有 authModal。
     const protectedPages = ['profile'];
@@ -62,6 +87,8 @@ async function switchPage(pageId) {
         if (modal) modal.style.display = 'flex';
         return;
     }
+
+    await ensurePageStyles(pageId);
 
     // 隐藏所有页面
     document.querySelectorAll('.content-area .page').forEach(page => {
@@ -100,31 +127,25 @@ async function switchPage(pageId) {
         item.classList.toggle('active', tabPage === pageId);
     });
 
-    // 页面切换时的初始化（大模块按需动态加载 + 对应的 CSS 按需加载）
+    // 页面切换时的初始化（大模块按需动态加载）
     if (pageId === 'guide') {
-        await loadStyle('css/guide.css');
         const mod = await _loadGuide();
         mod.initGuidePage();
     } else if (pageId === 'ai') {
-        await loadStyle('css/ai.css');
         initAIPage();
     } else if (pageId === 'partner') {
-        await loadStyle('css/partner.css');
-        await loadStyle('css/components.css');  // 帖子详情模态框需要
         const mod = await _loadPartner();
         // 首次加载时初始化模态框等
-        if (!_partnerMod._inited) {
-            _partnerMod._inited = true;
+        if (!_partnerPageInited) {
+            _partnerPageInited = true;
             mod.initPartnerPage();
         }
         mod.loadPartnerData();
     } else if (pageId === 'profile') {
-        await loadStyle('css/profile.css');
-        await loadStyle('css/components.css');  // 可能用到评论等组件
         const mod = await _loadProfile();
         // 首次加载时绑定编辑资料等按钮事件
-        if (!_profileMod._inited) {
-            _profileMod._inited = true;
+        if (!_profilePageInited) {
+            _profilePageInited = true;
             mod.initProfilePage();
         }
         mod.refreshProfile();
@@ -134,8 +155,12 @@ async function switchPage(pageId) {
         requestAnimationFrame(() => {
             requestAnimationFrame(() => initFullMapMarkers());
         });
-    } else if (pageId === 'home') {
-        // home.css 已在 HTML 中加载，无需动态加载
+    }
+
+    if (pageId === 'home') {
+        window._resumeHomeParticles?.();
+    } else {
+        window._pauseHomeParticles?.();
     }
 
     // 发起组局按钮只属于找搭子页，离开该页时隐藏。
@@ -315,8 +340,24 @@ function initHomeParticles() {
             }
         }
 
-        animId = requestAnimationFrame(render);
+        if (document.getElementById('homePage')?.classList.contains('active-page')) {
+            animId = requestAnimationFrame(render);
+        } else {
+            animId = null;
+        }
     }
+
+    window._pauseHomeParticles = () => {
+        if (animId) {
+            cancelAnimationFrame(animId);
+            animId = null;
+        }
+    };
+    window._resumeHomeParticles = () => {
+        if (!animId && document.getElementById('homePage')?.classList.contains('active-page')) {
+            render();
+        }
+    };
 
     resize(); initParticles(); render();
 
@@ -482,6 +523,7 @@ function initMapExpand() {
 
 // ========== 初始化 ==========
 async function init() {
+    seedLoadedStyles();
     updateNavBar();
 
     // 初始化各模块
@@ -509,12 +551,13 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
 });
 
 document.getElementById('closeAuthModalBtn')?.addEventListener('click', () => {
-    document.getElementById('authModal').style.display = 'none';
+    const authModal = document.getElementById('authModal');
+    if (authModal) authModal.style.display = 'none';
 });
 
 document.getElementById('authModal')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) {
-        document.getElementById('authModal').style.display = 'none';
+        e.currentTarget.style.display = 'none';
     }
 });
 

@@ -379,6 +379,8 @@ button { transition: transform 0.12s cubic-bezier(0.2,0.9,0.4,1.1), box-shadow 0
 .time-mode-btn:hover:not(.active) { border-color: #7C3AED; color: #7C3AED; }
 .scheduled-time-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .scheduled-time-row input { flex: 1; min-width: 0; }
+.partner-form-row { display: flex; gap: 8px; }
+.partner-form-row input { flex: 1; min-width: 0; }
 
 /* ========== 卡片通用按压效果 ========== */
 .filter-chip:active, .join-btn:active, .primary-btn:active, .secondary-btn:active,
