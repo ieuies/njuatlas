@@ -72,19 +72,6 @@
 }
 
 /* 登录/用户区域 */
-.login-round-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    color: white;
-    border: none;
-    font-size: 0.75rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: var(--transition);
-    box-shadow: var(--shadow-md);
-}
 .login-round-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .topbar-user {
     display: flex;
@@ -190,17 +177,31 @@
 .tab-item.active { color: var(--atlas-purple); }
 
 /* ========== 按钮美化覆盖 ========== */
-.login-round-btn, .logout-btn, .map-expand-btn, .primary-btn,
+.logout-btn, .map-expand-btn, .primary-btn,
 .secondary-btn, .small-btn, .join-btn {
     min-height: 44px;
     border-radius: 999px;
     transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 .login-round-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 50%;
     border: none;
     background: linear-gradient(135deg, var(--atlas-purple), var(--accent));
     color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
     box-shadow: var(--shadow-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 .logout-btn, .map-expand-btn, .secondary-btn, .small-btn {
     border: 1px solid var(--atlas-line);

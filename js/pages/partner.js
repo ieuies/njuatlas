@@ -1587,18 +1587,23 @@ export async function loadPartnerData() {
 function _ensureRightPanel() {
     const page = document.getElementById('partnerPage');
     if (!page) return;
-    const existingPanel = page.querySelector('.partner-right-panel');
-    if (existingPanel) {
-        while (existingPanel.firstChild) {
-            page.insertBefore(existingPanel.firstChild, existingPanel);
-        }
-        existingPanel.remove();
-    }
+
     const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
-    if (container && waterfall && container.nextElementSibling !== waterfall) {
-        page.insertBefore(waterfall, container.nextElementSibling);
+    if (!container || !waterfall) return;
+
+    let panel = page.querySelector('.partner-right-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.className = 'partner-right-panel';
+        page.insertBefore(panel, container);
+        panel.appendChild(container);
+        panel.appendChild(waterfall);
+        return;
     }
+
+    if (container.parentElement !== panel) panel.appendChild(container);
+    if (waterfall.parentElement !== panel) panel.appendChild(waterfall);
 }
 
 export async function initPartnerPage() {
