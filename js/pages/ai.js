@@ -340,8 +340,22 @@ async function sendMessage() {
     scrollToBottom();
     showThinking();
 
+    // 获取用户定位，失败不阻塞
+    let userLocation = null;
     try {
-        const res = await chatRecommend(msg, currentSessionId);
+        const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                timeout: 5000,
+                maximumAge: 300000
+            });
+        });
+        userLocation = `${pos.coords.longitude},${pos.coords.latitude}`;
+    } catch {
+        // 定位失败退化为全市搜索
+    }
+
+    try {
+        const res = await chatRecommend(msg, currentSessionId, '南京', userLocation);
         if (res.session_id) {
             const newSession = currentSessionId !== res.session_id;
             currentSessionId = res.session_id;
@@ -364,9 +378,11 @@ async function sendMessage() {
             candDiv.className = 'chat-message chat-bot';
             let html = '<div class="ai-candidates"><div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>';
             res.candidates.forEach(c => {
+                const distStr = c.distance_text || '';
                 html += `<div class="ai-candidate-item">
                             <span class="ai-candidate-name">${escapeHtml(c.name)}</span>
                             <span class="ai-candidate-meta">
+                                <span>${distStr ? `📍 ${escapeHtml(distStr)}` : ''}</span>
                                 <span>⭐ ${escapeHtml(c.rating)}</span>
                                 <span>💰 ${escapeHtml(c.cost)}</span>
                             </span>
