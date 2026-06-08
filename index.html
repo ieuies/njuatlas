@@ -22,6 +22,71 @@
     <!-- Font Awesome & 主样式 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/style.css">
+    <!-- 额外添加：刷新按钮样式（确保高优先级） -->
+    <style>
+        /* 指南页刷新按钮及头部布局 */
+        .guide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .guide-header-left {
+            flex: 1;
+        }
+        .guide-refresh-btn {
+            width: 44px;
+            height: 44px;
+            min-width: 44px;
+            border-radius: 50%;
+            border: 1.5px solid var(--atlas-line);
+            background: var(--atlas-card);
+            color: var(--atlas-ink);
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+        }
+        .guide-refresh-btn:hover {
+            background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+            color: #fff;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(107, 33, 165, 0.22);
+        }
+        .guide-refresh-btn:active {
+            transform: scale(0.92);
+        }
+        .guide-refresh-btn.refreshing {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .guide-refresh-btn i {
+            transition: transform 0.4s ease;
+        }
+        .guide-refresh-btn.refreshing i {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .guide-refresh-btn {
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                font-size: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -148,9 +213,15 @@
                 <button class="fab-create-group" id="fabCreateGroup" title="发起组局"><i class="fas fa-plus"></i><span>发起组局</span></button>
             </div>
 
-            <!-- 指南页面 -->
+            <!-- 指南页面（已添加刷新按钮） -->
             <div id="guidePage" class="page">
-                <div class="guide-header"><h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2><p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p></div>
+                <div class="guide-header">
+                    <div class="guide-header-left">
+                        <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
+                        <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
+                    </div>
+                    <button class="guide-refresh-btn" id="refreshGuideBtn" title="刷新数据"><i class="fas fa-sync-alt"></i></button>
+                </div>
                 <div class="guide-filter" id="guideCampusFilter">
                     <button data-guide-campus="all" class="guide-chip active">全部</button>
                     <button data-guide-campus="鼓楼" class="guide-chip">🏫 鼓楼</button>
@@ -170,7 +241,7 @@
                 <div id="guideGrid" class="guide-grid"><div class="guide-loading">加载精彩推荐中...</div></div>
             </div>
 
-            <!-- 个人中心页面（已集成封面裁剪） -->
+            <!-- 个人中心页面 -->
             <div id="profilePage" class="page">
                 <div class="profile-shell">
                     <section class="profile-header-card">
@@ -220,8 +291,6 @@
             <div id="guideDetailModal" class="modal"><div class="modal-card guide-detail-card"><button class="modal-close-btn" id="closeGuideDetailBtn"><i class="fas fa-times"></i></button><img id="guideDetailImg" class="guide-detail-img" src="" alt=""><h2 id="guideDetailName"></h2><div class="guide-detail-meta"><span id="guideDetailRating" class="guide-detail-rating"></span><span id="guideDetailPrice"></span><span id="guideDetailType"></span></div><p id="guideDetailDesc"></p><p id="guideDetailAddr" style="color:var(--text-tertiary);font-size:0.85rem;"></p></div></div>
             <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-edit"></i> 编辑资料</h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg" id="editAvatarPreview"><i class="fas fa-user"></i></div><span class="avatar-hint">头像根据用户名自动生成</span></div><label>用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label>个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label>兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><label>所在校区</label><select id="editCampus"><option value="">不设置</option><option value="鼓楼">鼓楼</option><option value="仙林">仙林</option><option value="浦口">浦口</option><option value="苏州">苏州</option></select><hr style="margin:16px 0;border-color:var(--atlas-line);"><label>修改密码（留空则不修改）</label><input type="password" id="editOldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> 危险操作</p><p class="danger-zone-desc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> 注销账号</button></div></form></div></div>
             <div id="fullMapPage" class="page"><div class="full-map-header"><button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> 返回</button><h2>附近组局地图</h2></div><div class="full-map-container" id="fullMapContainer"><div class="map-container" id="fullMap"></div></div></div>
-
-            <!-- 图片裁剪模态框（新增） -->
             <div id="cropModal" class="modal" style="display: none;">
                 <div class="modal-card crop-modal-card">
                     <button class="modal-close-btn" id="closeCropModalBtn"><i class="fas fa-times"></i></button>

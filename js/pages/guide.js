@@ -11,21 +11,22 @@ const CAMPUS_COORDS = {
 };
 const DEFAULT_CAMPUS = '鼓楼';
 
-// ── 分类 → { types: 高德 POI 类型编码, keyword: 搜索关键词 }
-// 基于高德 POI 分类编码：https://lbs.amap.com/api/webservice/download
+// ── 分类配置
 const CATEGORY_CONFIG = {
     '美食':     { types: '050000',                          keyword: '' },
-    '咖啡饮品': { types: '050500|050600|050700|050900',      keyword: '' },  // 咖啡厅+茶艺馆+饮品冷饮+甜品烘焙
-    '休闲娱乐': { types: '080300|080600',                    keyword: '' },  // 休闲娱乐+电影院剧院
-    '运动健身': { types: '080100',                          keyword: '' },  // 运动场馆
-    '购物商圈': { types: '060100|061000',                    keyword: '' },  // 商场购物中心+特色商业街
-    '景点公园': { types: '110000|140000',                    keyword: '' },  // 风景名胜+文化场馆
+    '咖啡饮品': { types: '050500|050600|050700|050900',      keyword: '' },
+    '休闲娱乐': { types: '080300|080600',                    keyword: '' },
+    '运动健身': { types: '080100',                          keyword: '' },
+    '购物商圈': { types: '060100|061000',                    keyword: '' },
+    '景点公园': { types: '110000|140000',                    keyword: '' },
 };
 const SEARCH_RADIUS = 5000;
 
 let currentGuideCat = 'all';
 let currentGuideCampus = 'all';
-let _guideCache = {};  // { '鼓楼': [...items], '仙林': [...items], ... }
+let _guideCache = {};
+let _isRefreshing = false;
+let _randomOrder = false;   // 随机排序标志
 
 // ── 工具 ──
 function _getCampusLocation(campus) {
@@ -39,6 +40,10 @@ function _resolveCampus() {
     const c = user?.campus || '';
     if (CAMPUS_COORDS[c]) return c;
     return DEFAULT_CAMPUS;
+}
+
+function _clearGuideCache() {
+    _guideCache = {};
 }
 
 // ── 渲染 ──
@@ -85,7 +90,6 @@ async function _fetchCampusData(campus) {
     const location = _getCampusLocation(campus);
     const allItems = [];
 
-    // 错开请求避免同时 6 个并发触发限流（stagger 100ms per category）
     let delay = 0;
     const promises = Object.entries(CATEGORY_CONFIG).map(async ([cat, cfg]) => {
         const ms = delay; delay += 100;
@@ -113,7 +117,6 @@ async function _fetchCampusData(campus) {
 
     await Promise.all(promises);
 
-    // 去重（按名称）
     const seen = new Set();
     const deduped = allItems.filter(item => {
         if (seen.has(item.name)) return false;
@@ -121,12 +124,20 @@ async function _fetchCampusData(campus) {
         return true;
     });
 
-    // 按评分降序排列（高德 weight 排序 + 本地评分排序双重保障）
-    deduped.sort((a, b) => {
-        const ra = parseFloat(a.rating) || 0;
-        const rb = parseFloat(b.rating) || 0;
-        return rb - ra;
-    });
+    // 根据随机标志决定排序方式
+    if (_randomOrder) {
+        // Fisher-Yates 随机打乱
+        for (let i = deduped.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
+        }
+    } else {
+        deduped.sort((a, b) => {
+            const ra = parseFloat(a.rating) || 0;
+            const rb = parseFloat(b.rating) || 0;
+            return rb - ra;
+        });
+    }
 
     _guideCache[campus] = deduped;
     return deduped;
@@ -151,8 +162,39 @@ async function _applyGuideFilters() {
     }
 }
 
+// 刷新数据（清除缓存 + 随机排序）
+export async function refreshGuideData() {
+    if (_isRefreshing) {
+        showToast('刷新中，请稍候...');
+        return;
+    }
+    const btn = document.getElementById('refreshGuideBtn');
+    try {
+        _isRefreshing = true;
+        if (btn) {
+            btn.classList.add('refreshing');
+            btn.disabled = true;
+        }
+        showToast('正在刷新数据...');
+        _randomOrder = true;           // 开启随机模式
+        _clearGuideCache();            // 清除所有缓存
+        await _applyGuideFilters();
+        showToast('刷新成功');
+    } catch (err) {
+        console.error('刷新失败:', err);
+        showToast('刷新失败，请稍后重试');
+    } finally {
+        _isRefreshing = false;
+        if (btn) {
+            btn.classList.remove('refreshing');
+            btn.disabled = false;
+        }
+    }
+}
+
 function filterGuideItems(cat) {
     currentGuideCat = cat;
+    _randomOrder = false;   // 切换分类后恢复按评分排序
     document.querySelectorAll('#guideFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === cat);
     });
@@ -161,6 +203,7 @@ function filterGuideItems(cat) {
 
 function _filterGuideCampus(campus) {
     currentGuideCampus = campus;
+    _randomOrder = false;   // 切换校区后恢复按评分排序
     document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === campus);
     });
@@ -230,11 +273,22 @@ function initGuideCampusFilter() {
     });
 }
 
+function bindRefreshButton() {
+    const refreshBtn = document.getElementById('refreshGuideBtn');
+    if (!refreshBtn || refreshBtn.dataset.refreshBound) return;
+    refreshBtn.dataset.refreshBound = 'true';
+    refreshBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        refreshGuideData();
+    });
+}
+
 // ── 入口 ──
 export async function loadGuideData() {
     initGuideModals();
     initGuideFilter();
     initGuideCampusFilter();
+    bindRefreshButton();
     _applyGuideFilters();
 }
 

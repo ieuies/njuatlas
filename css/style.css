@@ -4311,3 +4311,65 @@ body,
     border-radius: 18px 18px 0 0;
     overflow: hidden;
 }
+/* 指南页刷新按钮 */
+.guide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.guide-header-left {
+    flex: 1;
+}
+.guide-refresh-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 50%;
+    border: 1.5px solid var(--atlas-line);
+    background: var(--atlas-card);
+    color: var(--atlas-ink);
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+}
+.guide-refresh-btn:hover {
+    background: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
+    color: #fff;
+    border-color: transparent;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(107, 33, 165, 0.22);
+}
+.guide-refresh-btn:active {
+    transform: scale(0.92);
+}
+.guide-refresh-btn.refreshing {
+    pointer-events: none;
+    opacity: 0.7;
+}
+.guide-refresh-btn i {
+    transition: transform 0.4s ease;
+}
+.guide-refresh-btn.refreshing i {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .guide-refresh-btn {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        font-size: 1rem;
+    }
+}

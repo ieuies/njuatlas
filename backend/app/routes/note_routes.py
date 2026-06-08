@@ -118,6 +118,8 @@ def list_posts():
     place_id = request.args.get("place_id", type=int)
     user_id = request.args.get("user_id", type=int)
     sort = clean_string(request.args.get("sort", "hot"), "sort", max_length=20) or "hot"
+    if sort not in ("hot", "new", "nearby", "random"):
+        sort = "hot"
 
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)

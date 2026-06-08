@@ -556,7 +556,9 @@ class NoteSystem:
         elif sort == "nearby":
             # 附近排序：先用 place_id 做地理粗筛，后续可加 GeoHash 优化
             q = q.order_by(EventPost.hot_score.desc())  # 暂时退化为热度排序
-            # TODO: 加入坐标距离计算排序
+        elif sort == "random":
+            from sqlalchemy import func
+            q = q.order_by(func.random())
         else:
             # 默认 hot
             q = q.order_by(EventPost.hot_score.desc())
