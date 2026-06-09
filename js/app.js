@@ -33,12 +33,15 @@ let _partnerMod = null;
 let _guideMod = null;
 let _profileMod = null;
 let _aiMod = null;
+let _messagesMod = null;
 let _partnerPageInited = false;
 let _profilePageInited = false;
+let _messagesPageInited = false;
 function _loadPartner() { return _partnerMod || (_partnerMod = import('./pages/partner.js')); }
 function _loadGuide()   { return _guideMod   || (_guideMod   = import('./pages/guide.js')); }
 function _loadProfile() { return _profileMod || (_profileMod = import('./pages/profile.js')); }
 function _loadAI()      { return _aiMod      || (_aiMod      = import('./pages/ai.js')); }
+function _loadMessages(){ return _messagesMod || (_messagesMod = import('./pages/messages.js')); }
 
 // 延迟导入 openPostDetail，避免循环依赖
 let openPostDetailFn = null;
@@ -62,6 +65,7 @@ const pageTitles = {
     ai: 'AI助手',
     guide: '吃喝玩乐',
     profile: '个人',
+    messages: '消息',
     fullMap: '组局地图',
 };
 
@@ -70,6 +74,7 @@ const PAGE_STYLES = {
     ai: ['css/ai.css'],
     partner: ['css/partner.css', 'css/components.css'],
     profile: ['css/profile.css', 'css/components.css'],
+    messages: ['css/messages.css'],
     fullMap: ['css/partner.css'],
 };
 
@@ -84,6 +89,7 @@ function prefetchPageModule(pageId) {
     if (pageId === 'guide') return _loadGuide();
     if (pageId === 'profile') return _loadProfile();
     if (pageId === 'ai') return _loadAI();
+    if (pageId === 'messages') return _loadMessages();
     return Promise.resolve();
 }
 
@@ -107,7 +113,7 @@ function prefetchCommonAssets() {
 
 async function switchPage(pageId) {
     // 这些页面沿用现有登录模态框；这里不改账号流程，只把入口统一接到已有 authModal。
-    const protectedPages = ['profile'];
+    const protectedPages = ['profile', 'messages'];
     if (protectedPages.includes(pageId) && !isLoggedIn()) {
         const modal = document.getElementById('authModal');
         if (modal) modal.style.display = 'flex';
@@ -131,6 +137,7 @@ async function switchPage(pageId) {
         ai: 'aiPage',
         guide: 'guidePage',
         profile: 'profilePage',
+        messages: 'messagesPage',
         fullMap: 'fullMapPage',
     };
 
@@ -150,6 +157,10 @@ async function switchPage(pageId) {
         const tabPage = item.getAttribute('data-page');
         item.classList.toggle('active', tabPage === pageId);
     });
+    // 切换页面后让底部栏复位显示，并回到内容顶部
+    document.getElementById('bottomTabBar')?.classList.remove('tabbar-hidden');
+    const contentArea = document.getElementById('contentArea');
+    if (contentArea) contentArea.scrollTop = 0;
     // 桌面导航和底部导航共用同一个 active 状态，避免两个导航看起来不同步。
     document.querySelectorAll('.desktop-nav .desktop-nav-item').forEach(item => {
         const tabPage = item.getAttribute('data-page');
@@ -179,6 +190,13 @@ async function switchPage(pageId) {
             mod.initProfilePage();
         }
         mod.refreshProfile();
+    } else if (pageId === 'messages') {
+        const mod = await _loadMessages();
+        if (!_messagesPageInited) {
+            _messagesPageInited = true;
+            mod.initMessagesPage();
+        }
+        mod.refreshMessages();
     } else if (pageId === 'fullMap') {
         // 确保 partner 模块已加载（全屏地图需要 initFullMapMarkers）
         await _loadPartner();
@@ -256,6 +274,40 @@ function initNavigation() {
             if (page) switchPage(page);
         });
     });
+}
+
+// ========== 移动端底部 Tab 栏：随滚动智能显隐 ==========
+// 向下滚动（看内容）→ 收起；向上滚动或接近顶部 → 出现。导航始终可达又不挡内容。
+function initBottomBarAutoHide() {
+    const bar = document.getElementById('bottomTabBar');
+    const scroller = document.getElementById('contentArea');
+    if (!bar || !scroller) return;
+
+    const THRESHOLD = 8;       // 忽略细小抖动
+    const SHOW_NEAR_TOP = 48;  // 顶部附近始终显示
+    let lastY = 0;
+    let ticking = false;
+
+    const update = () => {
+        ticking = false;
+        const y = Math.max(0, scroller.scrollTop);
+        if (y <= SHOW_NEAR_TOP) {
+            bar.classList.remove('tabbar-hidden');
+            lastY = y;
+            return;
+        }
+        const delta = y - lastY;
+        if (Math.abs(delta) < THRESHOLD) return;
+        bar.classList.toggle('tabbar-hidden', delta > 0);
+        lastY = y;
+    };
+
+    scroller.addEventListener('scroll', () => {
+        if (!ticking) {
+            ticking = true;
+            requestAnimationFrame(update);
+        }
+    }, { passive: true });
 }
 
 // ========== 主题切换 ==========
@@ -575,6 +627,7 @@ async function init() {
     initFabButton();
     initMapExpand();
     initFullMapPage();
+    initBottomBarAutoHide();
 
     // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
     await switchPage('home');

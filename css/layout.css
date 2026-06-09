@@ -24,6 +24,9 @@
     flex: 1;
     padding: 12px 12px 0;
     overflow-y: auto;
+    /* 必须显式锁定横向：否则 overflow-y:auto 会让 overflow-x 计算为 auto，
+       导致移动端页面可被左右拖动（应只占满宽度、仅纵向滚动）。 */
+    overflow-x: hidden;
 }
 
 .page { display: none; }
@@ -32,7 +35,8 @@
 /* 内容页宽度：必须在首屏 layout 中定义，不可仅放在 partner.css 懒加载 */
 #partnerPage,
 #guidePage,
-#profilePage {
+#profilePage,
+#messagesPage {
     width: min(1180px, calc(100% - 40px)) !important;
     max-width: 100%;
     margin-left: auto !important;
@@ -43,7 +47,8 @@
 @media (max-width: 768px) {
     #partnerPage,
     #guidePage,
-    #profilePage {
+    #profilePage,
+    #messagesPage {
         width: calc(100% - 24px) !important;
         padding-bottom: calc(92px + var(--atlas-bottombar)) !important;
     }
@@ -251,6 +256,12 @@
     border-top: 1px solid var(--atlas-line);
     background: var(--atlas-card);
     backdrop-filter: blur(18px);
+    transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.28s ease;
+}
+/* 智能显隐：向下滚动时收起到屏幕外，减少存在感（JS 控制 class） */
+.bottom-tab-bar.tabbar-hidden {
+    transform: translate(-50%, 130%);
+    opacity: 0;
 }
 .tab-item {
     display: flex;
