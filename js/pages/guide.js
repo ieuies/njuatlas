@@ -1,4 +1,4 @@
-import { searchPlaces } from '../api.js';
+import { API_BASE } from '../config.js';
 import { getUser } from '../auth.js';
 import { showToast } from '../utils.js';
 
@@ -24,9 +24,11 @@ const SEARCH_RADIUS = 5000;
 
 let currentGuideCat = 'all';
 let currentGuideCampus = 'all';
+/** @type {Record<string, { cats: Record<string, object[]>, gen: number, prefetching?: boolean, _inflight?: Record<string, Promise<object[]>> }>} */
 let _guideCache = {};
 let _isRefreshing = false;
 let _randomOrder = false;   // 随机排序标志
+const CATEGORY_NAMES = Object.keys(CATEGORY_CONFIG);
 
 // ── 工具 ──
 function _getCampusLocation(campus) {
@@ -44,6 +46,158 @@ function _resolveCampus() {
 
 function _clearGuideCache() {
     _guideCache = {};
+}
+
+function _ensureCampusCache(campus) {
+    if (!_guideCache[campus]) {
+        _guideCache[campus] = { cats: {}, gen: 0 };
+    }
+    return _guideCache[campus];
+}
+
+function _sortAndDedupe(allItems) {
+    const seen = new Set();
+    const deduped = allItems.filter(item => {
+        if (seen.has(item.name)) return false;
+        seen.add(item.name);
+        return true;
+    });
+
+    if (_randomOrder) {
+        for (let i = deduped.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
+        }
+        return deduped;
+    }
+
+    deduped.sort((a, b) => {
+        const ra = parseFloat(a.rating) || 0;
+        const rb = parseFloat(b.rating) || 0;
+        return rb - ra;
+    });
+    return deduped;
+}
+
+function _getDisplayItems(campus, cat) {
+    const cache = _guideCache[campus];
+    if (!cache) return null;
+
+    if (cat !== 'all') {
+        return cache.cats[cat] !== undefined ? cache.cats[cat] : null;
+    }
+
+    const merged = [];
+    let anyLoaded = false;
+    for (const name of CATEGORY_NAMES) {
+        if (cache.cats[name] !== undefined) {
+            anyLoaded = true;
+            merged.push(...cache.cats[name]);
+        }
+    }
+    return anyLoaded ? _sortAndDedupe(merged) : null;
+}
+
+function _getPriorityCategories() {
+    if (currentGuideCat !== 'all') return [currentGuideCat];
+    // 「全部」先拉美食（1 次请求），首屏更快
+    return ['美食'];
+}
+
+function _poisToItems(pois, cat, campus) {
+    if (!Array.isArray(pois)) return [];
+    return pois.map(poi => ({
+        name: poi.name,
+        desc: poi.address || '',
+        image: poi.photos?.[0]?.url || '',
+        type: cat,
+        campus,
+        rating: poi.biz_ext?.rating || '',
+        price: poi.biz_ext?.cost ? `¥${poi.biz_ext.cost}/人` : '',
+        address: poi.address || '',
+    }));
+}
+
+async function _fetchCategoryItems(campus, cat) {
+    const cfg = CATEGORY_CONFIG[cat];
+    const location = _getCampusLocation(campus);
+    const r = await _searchPlacesQuiet(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
+    if (r.status === '1' && Array.isArray(r.pois)) {
+        return _poisToItems(r.pois, cat, campus);
+    }
+    return [];
+}
+
+async function _loadCategory(campus, cat, gen) {
+    const cache = _ensureCampusCache(campus);
+    if (cache.cats[cat] !== undefined) return cache.cats[cat];
+    if (cache.gen !== gen) return [];
+
+    cache._inflight = cache._inflight || {};
+    if (cache._inflight[cat]) return cache._inflight[cat];
+
+    cache._inflight[cat] = (async () => {
+        try {
+            const items = await _fetchCategoryItems(campus, cat);
+            if (cache.gen === gen) cache.cats[cat] = items;
+            return items;
+        } catch (e) {
+            console.warn(`高德搜索 ${cat}（${campus}）失败:`, e.message);
+            if (cache.gen === gen) cache.cats[cat] = [];
+            return [];
+        } finally {
+            delete cache._inflight[cat];
+        }
+    })();
+
+    return cache._inflight[cat];
+}
+
+function _maybeRender(campus, gen) {
+    if (_resolveCampus() !== campus) return;
+    const cache = _guideCache[campus];
+    if (!cache || cache.gen !== gen) return;
+
+    const items = _getDisplayItems(campus, currentGuideCat);
+    if (items !== null) renderGuideGrid(items);
+}
+
+function _kickPrefetch(campus) {
+    const cache = _guideCache[campus];
+    if (!cache || cache.prefetching) return;
+
+    const gen = cache.gen;
+    const remaining = CATEGORY_NAMES.filter(
+        cat => cache.cats[cat] === undefined && !cache._inflight?.[cat]
+    );
+    if (remaining.length === 0) return;
+
+    cache.prefetching = true;
+    (async () => {
+        for (const cat of remaining) {
+            if (_guideCache[campus]?.gen !== gen) break;
+            await _loadCategory(campus, cat, gen);
+            _maybeRender(campus, gen);
+        }
+        if (_guideCache[campus]?.gen === gen) {
+            _guideCache[campus].prefetching = false;
+        }
+    })();
+}
+/** 吃喝玩乐批量拉取专用：失败时不弹全局 toast（避免 6 路并行请求刷屏） */
+async function _searchPlacesQuiet(keyword, city, location, page, pageSize, radius, types, sortrule) {
+    let url = `${API_BASE}/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
+    if (location) url += `&location=${encodeURIComponent(location)}`;
+    if (radius) url += `&radius=${encodeURIComponent(radius)}`;
+    if (types) url += `&types=${encodeURIComponent(types)}`;
+    if (sortrule) url += `&sortrule=${encodeURIComponent(sortrule)}`;
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.message || `请求失败: ${res.status}`);
+    }
+    return data;
 }
 
 // ── 渲染 ──
@@ -83,90 +237,46 @@ function renderGuideGrid(items) {
     });
 }
 
-// ── 数据获取（按校区缓存） ──
-async function _fetchCampusData(campus) {
-    if (_guideCache[campus]) return _guideCache[campus];
-
-    const location = _getCampusLocation(campus);
-    const allItems = [];
-
-    const promises = Object.entries(CATEGORY_CONFIG).map(async ([cat, cfg]) => {
-        try {
-            const r = await searchPlaces(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
-            if (r.status === '1' && Array.isArray(r.pois)) {
-                r.pois.forEach(poi => {
-                    allItems.push({
-                        name: poi.name,
-                        desc: poi.address || '',
-                        image: poi.photos?.[0]?.url || '',
-                        type: cat,
-                        campus: campus,
-                        rating: poi.biz_ext?.rating || '',
-                        price: poi.biz_ext?.cost ? `¥${poi.biz_ext.cost}/人` : '',
-                        address: poi.address || '',
-                    });
-                });
-            }
-        } catch (e) {
-            console.warn(`高德搜索 ${cat}（${campus}）失败:`, e.message);
-        }
-    });
-
-    await Promise.all(promises);
-
-    const seen = new Set();
-    const deduped = allItems.filter(item => {
-        if (seen.has(item.name)) return false;
-        seen.add(item.name);
-        return true;
-    });
-
-    // 根据随机标志决定排序方式
-    if (_randomOrder) {
-        // Fisher-Yates 随机打乱
-        for (let i = deduped.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
-        }
-    } else {
-        deduped.sort((a, b) => {
-            const ra = parseFloat(a.rating) || 0;
-            const rb = parseFloat(b.rating) || 0;
-            return rb - ra;
-        });
-    }
-
-    _guideCache[campus] = deduped;
-    return deduped;
-}
-
 // ── 筛选与应用 ──
 async function _applyGuideFilters(force = false) {
     const container = document.getElementById('guideGrid');
     const campus = _resolveCampus();
 
-    if (!force && _guideCache[campus]) {
-        let items = _guideCache[campus];
-        if (currentGuideCat !== 'all') {
-            items = items.filter(s => s.type === currentGuideCat);
-        }
-        renderGuideGrid(items);
+    if (force) {
+        const c = _ensureCampusCache(campus);
+        c.gen += 1;
+        c.cats = {};
+        c._inflight = {};
+        c.prefetching = false;
+    }
+
+    const cached = _getDisplayItems(campus, currentGuideCat);
+    if (!force && cached !== null) {
+        renderGuideGrid(cached);
+        _kickPrefetch(campus);
         return;
     }
 
-    if (container) container.innerHTML = '<div class="guide-loading">加载中...</div>';
+    const cache = _ensureCampusCache(campus);
+    const needed = currentGuideCat === 'all' ? _getPriorityCategories() : [currentGuideCat];
+    const missing = needed.filter(cat => cache.cats[cat] === undefined);
 
-    try {
-        const allItems = await _fetchCampusData(campus);
-        let items = allItems;
-        if (currentGuideCat !== 'all') {
-            items = items.filter(s => s.type === currentGuideCat);
+    if (missing.length > 0) {
+        if (container && cached === null) {
+            container.innerHTML = '<div class="guide-loading">加载中...</div>';
         }
-        renderGuideGrid(items);
-    } catch (e) {
-        console.error('指南数据加载失败:', e);
-        if (container) container.innerHTML = '<div class="guide-loading">加载失败，请稍后重试</div>';
+        const gen = cache.gen;
+        await Promise.all(missing.map(cat => _loadCategory(campus, cat, gen)));
     }
+
+    const items = _getDisplayItems(campus, currentGuideCat);
+    if (items !== null) {
+        renderGuideGrid(items);
+    } else if (container) {
+        container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
+    }
+
+    _kickPrefetch(campus);
 }
 
 // 刷新数据（清除缓存 + 随机排序）
@@ -183,9 +293,9 @@ export async function refreshGuideData() {
             btn.disabled = true;
         }
         showToast('正在刷新数据...');
-        _randomOrder = true;           // 开启随机模式
-        _clearGuideCache();            // 清除所有缓存
-        await _applyGuideFilters();
+        _randomOrder = true;
+        _clearGuideCache();
+        await _applyGuideFilters(true);
         showToast('刷新成功');
     } catch (err) {
         console.error('刷新失败:', err);
@@ -302,7 +412,8 @@ export async function loadGuideData() {
 export function initGuidePage() {
     const container = document.getElementById('guideGrid');
     const campus = _resolveCampus();
-    if (container && !container.querySelector('.guide-card') && !_guideCache[campus]) {
+    const hasData = _getDisplayItems(campus, currentGuideCat);
+    if (container && !container.querySelector('.guide-card') && hasData === null) {
         container.innerHTML = '<div class="guide-loading">加载精彩推荐中...</div>';
     }
     loadGuideData();

@@ -54,6 +54,11 @@ def _get_cached(cache_key):
             _CACHE.pop(cache_key, None)
             return None
 
+        # 跳过历史上误缓存的失败响应，避免持续 502
+        if str(data.get("status")) != "1":
+            _CACHE.pop(cache_key, None)
+            return None
+
         return deepcopy(data)
 
 
@@ -101,7 +106,8 @@ def amap_request(endpoint, params):
         raise
 
     data = json.loads(response.data.decode("utf-8"))
-    _set_cached(cache_key, data)
+    if str(data.get("status")) == "1":
+        _set_cached(cache_key, data)
     data["_cache"] = {"hit": False}
     log_event(
         current_app.logger,
