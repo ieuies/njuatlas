@@ -1,5 +1,5 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
-import { showToast } from './utils.js';
+import { showToast, renderAvatarInto } from './utils.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 
@@ -223,7 +223,9 @@ function updateNavBar() {
 
         const user = getUser();
         if (usernameSpan && user) {
-            usernameSpan.innerText = user.username || (user.email ? user.email.split('@')[0] : '同学');
+            usernameSpan.classList.add('topbar-avatar');
+            usernameSpan.title = user.username || (user.email ? user.email.split('@')[0] : '同学');
+            renderAvatarInto(usernameSpan, user, '0.95rem');
             usernameSpan.onclick = () => switchPage('profile');
         }
     } else {
@@ -421,22 +423,31 @@ function initHomeParticles() {
     canvas._cleanup = () => { if (animId) cancelAnimationFrame(animId); };
 }
 
+// 首页随机网格使用的全部 landmarks 图片
+const LANDMARK_IMAGES = [
+    'image/landmarks/beida.jpg',
+    'image/landmarks/duck.jpg',
+    'image/landmarks/exercise.jpg',
+    'image/landmarks/gate.jpg',
+    'image/landmarks/k.jpg',
+    'image/landmarks/lake.jpg',
+    'image/landmarks/liberary.jpg',
+    'image/landmarks/meat.jpg',
+    'image/landmarks/nailong.jpg',
+    'image/landmarks/sport.jpg',
+    'image/landmarks/sushi.jpg',
+    'image/landmarks/tasiting.jpg',
+    'image/landmarks/zhongshan.jpg',
+    'image/landmarks/zifeng.jpg',
+];
+
 // ========== 移动端首页图片网格（6×7） ==========
 function initMobileGrid() {
     const grid = document.getElementById('homeMobileGrid');
     if (!grid || grid.dataset.ready === 'true') return;
     grid.dataset.ready = 'true';
 
-    const imgs = [
-        'image/landmarks/beida.jpg',
-        'image/landmarks/exercise.jpg',
-        'image/landmarks/gate.jpg',
-        'image/landmarks/liberary.jpg',
-        'image/landmarks/meat.jpg',
-        'image/landmarks/nailong.jpg',
-        'image/landmarks/sushi.jpg',
-        'image/landmarks/zifeng.jpg',
-    ];
+    const imgs = LANDMARK_IMAGES;
 
     // 42个格子，随机取图
     const cells = [];
@@ -460,16 +471,7 @@ function initHomeCards() {
     if (!grid || grid.dataset.ready === 'true') return;
     grid.dataset.ready = 'true';
 
-    const landmarks = [
-        'image/landmarks/beida.jpg',
-        'image/landmarks/exercise.jpg',
-        'image/landmarks/gate.jpg',
-        'image/landmarks/liberary.jpg',
-        'image/landmarks/meat.jpg',
-        'image/landmarks/nailong.jpg',
-        'image/landmarks/sushi.jpg',
-        'image/landmarks/zifeng.jpg',
-    ];
+    const landmarks = LANDMARK_IMAGES;
 
     // 6行，基础6列，突出行向左多伸
     const rowCounts = [6, 7, 6, 9, 8, 6];

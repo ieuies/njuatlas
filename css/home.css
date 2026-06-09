@@ -50,8 +50,8 @@
         grid-template-rows: repeat(7, 1fr);
         height: 50vh;
         min-height: 280px;
-        -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
-        mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+        mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
     }
     .home-mobile-grid .mg-cell {
         background-size: cover;
@@ -63,8 +63,8 @@
 .home-hero {
     display: flex;
     width: 100%;
-    height: calc(100vh - var(--atlas-topbar) - 155px);
-    min-height: 520px;
+    height: calc(100vh - var(--atlas-topbar) - 110px);
+    min-height: 580px;
     padding: 0 0 0 40px;
     box-sizing: border-box;
     overflow: hidden;
@@ -78,16 +78,16 @@
     min-width: 340px;
     position: relative;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    padding: 0 24px;
+    padding: 8vh 24px 0;
 }
 .home-brand-inner {
     position: relative;
     z-index: 1;
     text-align: left;
     padding: 30px 10px;
-    max-width: 420px;
+    max-width: clamp(460px, 70vw, 1300px);
 }
 .home-brand-kicker {
     margin: 0 0 8px;
@@ -97,13 +97,28 @@
     color: var(--text-tertiary);
 }
 .home-brand-title {
-    margin: 0 0 10px;
-    font-size: clamp(3.6rem, 6.5vw, 6rem);
-    font-weight: 950;
-    letter-spacing: -0.07em;
-    line-height: 1.04;
-    color: var(--atlas-ink);
+    margin: 0 0 14px;
+    line-height: 1;
 }
+/* 首页品牌艺术字：与顶栏一致的遮罩上色。
+   注意：宽度必须基于视口（vw），不能用 100%，因为父级 .home-brand-inner
+   是收缩到内容宽度的弹性项，100% 会塌缩到文字宽度导致艺术字无法放大。 */
+.home-brand-logo {
+    display: block;
+    width: min(100%, 1280px);
+    aspect-ratio: 513 / 122;
+    height: auto;
+    background-color: var(--primary);
+    -webkit-mask: url('../image/brand-logo.png') no-repeat left center / contain;
+    mask: url('../image/brand-logo.png') no-repeat left center / contain;
+    transition: background-color 0.3s ease;
+}
+@media (min-width: 769px) {
+    .home-brand-logo {
+        width: min(42vw, 760px);
+    }
+}
+
 .home-brand-sub {
     margin: 0 0 26px;
     font-size: 0.9rem;
@@ -123,23 +138,25 @@
     cursor: pointer;
     box-shadow: none;
 }
-.home-brand-btn.primary {
-    background: var(--btn-primary-bg);
-    color: var(--btn-primary-fg);
-    border: none;
-}
-.home-brand-btn.primary:hover {
-    filter: brightness(1.08);
-}
+/* 两个按钮平时均为透明描边，仅在点击（按下）时实化填充 */
+.home-brand-btn.primary,
 .home-brand-btn.secondary {
     background: transparent;
     color: var(--atlas-ink);
     border: 1.5px solid var(--btn-border);
 }
+.home-brand-btn.primary:hover,
 .home-brand-btn.secondary:hover {
     border-color: var(--btn-primary-bg);
     color: var(--btn-primary-bg);
     background: transparent;
+}
+.home-brand-btn.primary:active,
+.home-brand-btn.secondary:active {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-bg);
+    filter: none;
 }
 
 /* 右侧卡片区 */
@@ -276,25 +293,29 @@
 :root[data-theme="dark"] .home-brand-kicker {
     color: rgba(255,255,255,0.5);
 }
-:root[data-theme="dark"] .home-brand-title {
-    color: #fff;
-    text-shadow: 0 8px 32px rgba(0,0,0,0.3);
+:root[data-theme="dark"] .home-brand-logo {
+    filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.35));
 }
 :root[data-theme="dark"] .home-brand-sub {
     color: rgba(255,255,255,0.6);
 }
-:root[data-theme="dark"] .home-brand-btn.primary {
-    background: var(--btn-primary-bg);
-    color: var(--btn-primary-fg);
-}
+:root[data-theme="dark"] .home-brand-btn.primary,
 :root[data-theme="dark"] .home-brand-btn.secondary {
+    background: transparent;
     color: rgba(255,255,255,0.8);
     border-color: rgba(255,255,255,0.25);
 }
+:root[data-theme="dark"] .home-brand-btn.primary:hover,
 :root[data-theme="dark"] .home-brand-btn.secondary:hover {
     border-color: var(--btn-primary-bg);
     color: var(--btn-primary-bg);
     background: transparent;
+}
+:root[data-theme="dark"] .home-brand-btn.primary:active,
+:root[data-theme="dark"] .home-brand-btn.secondary:active {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .home-flip-front {
     background: rgba(255,255,255,0.04);

@@ -330,7 +330,6 @@
 :root[data-theme="dark"] .detail-action-btn.primary {
     background: var(--btn-primary-bg);
     color: var(--btn-primary-fg);
-}
     border: none;
 }
 :root[data-theme="dark"] .post-detail-section h4 {

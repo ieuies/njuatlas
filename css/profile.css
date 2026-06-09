@@ -6,7 +6,7 @@
     gap: 16px;
 }
 
-/* ========== 封面区域（全端统一 3:1） ========== */
+/* ========== 封面区域（网页端 3:1，移动端 2:1） ========== */
 .profile-cover-container {
     width: 100%;
     overflow: hidden;
@@ -23,14 +23,15 @@
     background-color: var(--bg-tertiary);
     transition: background-image 0.2s;
     border-radius: calc(var(--btn-radius) - 1px) calc(var(--btn-radius) - 1px) 0 0;
+    cursor: pointer;
 }
 .cover-edit-btn {
     position: absolute;
-    bottom: 10px;
+    top: 10px;
     right: 12px;
     width: 36px;
     height: 36px;
-    border-radius: var(--btn-radius);
+    border-radius: 50%;
     background: var(--bg-primary);
     border: 1.5px solid var(--btn-border);
     color: var(--text-primary);
@@ -50,12 +51,15 @@
     -webkit-text-stroke: 0;
 }
 @media (max-width: 768px) {
-    .profile-cover { min-height: 80px; }
+    .profile-cover {
+        aspect-ratio: 2 / 1;
+        min-height: 80px;
+    }
     .cover-edit-btn {
         width: 32px;
         height: 32px;
         font-size: 0.9rem;
-        bottom: 6px;
+        top: 6px;
         right: 8px;
     }
 }
@@ -75,13 +79,19 @@
     align-items: flex-start;
     gap: 18px;
     margin-bottom: 20px;
-    padding: 16px 20px 0;
+    /* QQ 风格：信息面板上移叠在封面上，顶部圆角形成过渡 */
+    position: relative;
+    z-index: 2;
+    margin-top: -22px;
+    padding: 18px 20px 0;
+    background: var(--atlas-card);
+    border-radius: 22px 22px 0 0;
 }
 .profile-avatar-lg {
     width: 80px;
     height: 80px;
     min-width: 80px;
-    border-radius: var(--btn-radius);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -97,6 +107,34 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+/* 头像容器：放大并上移，跨越封面与信息面板边界（QQ 风格） */
+.profile-avatar-wrap {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    flex-shrink: 0;
+    margin-top: -42px;
+}
+.profile-avatar-wrap .profile-avatar-lg {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    border: 4px solid var(--atlas-card);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.profile-avatar-wrap .profile-avatar-lg:hover {
+    border-color: var(--btn-primary-bg);
+}
+.avatar-clickable {
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+.avatar-clickable:hover {
+    border-color: var(--btn-primary-bg);
 }
 .profile-header-info {
     flex: 1;
@@ -189,6 +227,11 @@
         padding-top: 12px;
     }
     .profile-avatar-lg {
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+    }
+    .profile-avatar-wrap {
         width: 72px;
         height: 72px;
         min-width: 72px;
@@ -393,6 +436,18 @@
 }
 .profile-empty-state .primary-btn {
     margin-top: 10px;
+    /* 空状态 CTA 不使用高对比强调色，改为贴近背景的低对比样式 */
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--btn-border);
+    box-shadow: none;
+}
+.profile-empty-state .primary-btn:hover {
+    filter: none;
+    background: var(--bg-tertiary);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
+    box-shadow: none;
 }
 .profile-tag-chip {
     display: inline-block;
@@ -518,6 +573,61 @@
     justify-content: center;
     margin-top: 16px;
 }
+/* 头像裁剪：将裁剪框显示为圆形，更贴近最终展示效果 */
+.crop-avatar-mode .cropper-view-box,
+.crop-avatar-mode .cropper-face {
+    border-radius: 50%;
+}
+
+/* ========== 图片查看灯箱（头像原图 / 背景大图） ========== */
+.img-viewer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(12, 8, 20, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    cursor: zoom-out;
+    animation: imgViewerIn 0.22s ease;
+}
+@keyframes imgViewerIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.img-viewer-overlay img {
+    max-width: 92vw;
+    max-height: 86vh;
+    border-radius: 14px;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+    object-fit: contain;
+}
+.img-viewer-overlay.is-avatar img {
+    border-radius: 50%;
+    width: min(72vw, 420px);
+    height: min(72vw, 420px);
+    object-fit: cover;
+}
+.img-viewer-close {
+    position: absolute;
+    top: 18px;
+    right: 22px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.img-viewer-close:hover { background: rgba(255, 255, 255, 0.28); }
 /* ========== 暗色模式 ========== */
 :root[data-theme="dark"] .profile-header-card {
     background: var(--atlas-card) !important;

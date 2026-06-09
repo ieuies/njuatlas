@@ -24,6 +24,41 @@ export function formatDate(iso) {
 }
 
 // ============================================================
+// 用户头像（本地存储，仅本人可见）
+// 头像以裁剪后的 dataURL 形式保存在 localStorage，键按用户 ID 隔离。
+// 由于没有“查看他人头像”的接口，头像仅存在于本人浏览器中。
+// 未上传时回退为基于用户名生成的首字母色块。
+// ============================================================
+export function avatarStorageKey(user) {
+    if (!user || user.id == null) return null;
+    return `user_avatar_${user.id}`;
+}
+
+/** 返回头像描述对象：{ type:'image', src } 或 { type:'initial', initial, bg } */
+export function getUserAvatar(user) {
+    const key = avatarStorageKey(user);
+    const saved = key ? localStorage.getItem(key) : null;
+    if (saved) return { type: 'image', src: saved };
+    const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
+    const initial = (name.charAt(0) || '?').toUpperCase();
+    const hue = [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+    return { type: 'initial', initial, bg: `hsl(${hue}, 55%, 55%)` };
+}
+
+/** 把用户头像渲染进指定容器元素（自适应容器圆角）。 */
+export function renderAvatarInto(el, user, fontSize = '2rem') {
+    if (!el) return;
+    const avatar = getUserAvatar(user);
+    if (avatar.type === 'image') {
+        el.innerHTML = `<img src="${avatar.src}" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">`;
+        el.style.background = 'transparent';
+    } else {
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;background:${avatar.bg};border-radius:inherit;">${escapeHtml(avatar.initial)}</span>`;
+        el.style.background = avatar.bg;
+    }
+}
+
+// ============================================================
 // WGS-84 → GCJ-02 坐标转换（国测局坐标系）
 // 高德地图使用 GCJ-02 瓦片，若硬编码坐标来自 GPS/Google Maps
 // （WGS-84），需先转换再传给 AMap，否则会有 ~300-500m 偏移。

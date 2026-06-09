@@ -187,7 +187,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blr(8px);
+    backdrop-filter: blur(8px);
 }
 .ai-sidebar-expand:hover {
     background: var(--atlas-purple);

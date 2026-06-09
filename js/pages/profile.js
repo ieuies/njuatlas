@@ -4,7 +4,7 @@
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
-import { showToast, escapeHtml, formatDate } from '../utils.js';
+import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey } from '../utils.js';
 
 let currentProfileTab = 'posts';
 let _profileBioCache = null;
@@ -40,10 +40,7 @@ function ensureCropperLoaded() {
     return _cropperLoadPromise;
 }
 
-// 封面相关常量（全端统一 3:1）
-const COVER_ASPECT = 3 / 1;
-const COVER_EXPORT_WIDTH = 1500;
-const COVER_EXPORT_HEIGHT = 500;
+// 封面预设图（用户首次进入时随机分配一张）
 const COVER_PRESETS = [
     'https://picsum.photos/id/104/1500/500',
     'https://picsum.photos/id/15/1500/500',
@@ -58,6 +55,72 @@ function getCoverStorageKey() {
     if (!user || !user.id) return null;
     return `user_cover_${user.id}`;
 }
+
+// 裁剪前原图存储 Key（用于“点击查看原图/大图”）
+function getCoverOriginalKey() {
+    const user = getUser();
+    if (!user || !user.id) return null;
+    return `user_cover_orig_${user.id}`;
+}
+function getAvatarOriginalKey() {
+    const user = getUser();
+    if (!user || !user.id) return null;
+    return `user_avatar_orig_${user.id}`;
+}
+
+// 将 dataURL 等比缩小到 maxDim 内，控制 localStorage 体积（用于保存原图）
+function downscaleDataUrl(dataUrl, maxDim = 1600, quality = 0.86) {
+    return new Promise((resolve) => {
+        const im = new Image();
+        im.onload = () => {
+            const scale = Math.min(1, maxDim / Math.max(im.width, im.height));
+            const w = Math.round(im.width * scale);
+            const h = Math.round(im.height * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(im, 0, 0, w, h);
+            try {
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (e) {
+                resolve(dataUrl);
+            }
+        };
+        im.onerror = () => resolve(dataUrl);
+        im.src = dataUrl;
+    });
+}
+
+// 容错写入 localStorage：原图超出配额时静默跳过（不影响裁剪结果保存）
+function safeSetItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (e) {
+        console.warn('保存原图失败（可能超出本地存储配额）:', e?.message);
+        return false;
+    }
+}
+
+// 裁剪弹窗的两种模式配置（头像 1:1 导出 320x320，足够清晰且体积可控）
+const CROP_PRESETS = {
+    cover: {
+        aspect: 3 / 1,
+        exportWidth: 1500,
+        exportHeight: 500,
+        title: '调整封面图片',
+        hint: '拖拽或缩放图片，封面在所有设备上按 3:1 比例显示',
+        successMsg: '封面已更新',
+    },
+    avatar: {
+        aspect: 1,
+        exportWidth: 320,
+        exportHeight: 320,
+        title: '调整头像',
+        hint: '拖拽或缩放图片，头像按 1:1 显示（仅自己可见）',
+        successMsg: '头像已更新',
+    },
+};
 
 // ========== 封面功能（高清裁剪） ==========
 let cropper = null;
@@ -76,42 +139,94 @@ function loadProfileCover() {
     coverDiv.style.backgroundImage = `url('${coverUrl}')`;
 }
 
-function saveCoverFromCropped(canvas) {
-    return new Promise((resolve, reject) => {
-        const storageKey = getCoverStorageKey();
-        if (!storageKey) {
-            reject(new Error('请先登录'));
-            return;
-        }
-        const base64 = canvas.toDataURL('image/jpeg', 0.92);
-        localStorage.setItem(storageKey, base64);
-        const coverDiv = document.getElementById('profileCover');
-        if (coverDiv) coverDiv.style.backgroundImage = `url('${base64}')`;
-        resolve();
-    });
+async function saveCoverFromCropped(canvas, originalDataUrl) {
+    const storageKey = getCoverStorageKey();
+    if (!storageKey) throw new Error('请先登录');
+    const base64 = canvas.toDataURL('image/jpeg', 0.92);
+    localStorage.setItem(storageKey, base64);
+    const coverDiv = document.getElementById('profileCover');
+    if (coverDiv) coverDiv.style.backgroundImage = `url('${base64}')`;
+    // 保存裁剪前原图（缩放后）供“查看大图”
+    const origKey = getCoverOriginalKey();
+    if (origKey && originalDataUrl) {
+        safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1920, 0.86));
+    }
 }
 
-function openCropModal(file) {
+async function saveAvatarFromCropped(canvas, originalDataUrl) {
+    const storageKey = avatarStorageKey(getUser());
+    if (!storageKey) throw new Error('请先登录');
+    const base64 = canvas.toDataURL('image/jpeg', 0.9);
+    localStorage.setItem(storageKey, base64);
+    // 保存裁剪前原图（缩放后）供“查看原图”
+    const origKey = getAvatarOriginalKey();
+    if (origKey && originalDataUrl) {
+        safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1280, 0.88));
+    }
+    // 同步刷新个人页头像、编辑弹窗预览，以及顶栏头像
+    renderAvatar(getUser());
+    if (typeof window.updateNavBar === 'function') window.updateNavBar();
+}
+
+const CROP_SAVERS = {
+    cover: saveCoverFromCropped,
+    avatar: saveAvatarFromCropped,
+};
+
+// 移动端视口（与 profile.css 封面断点保持一致）
+function isMobileViewport() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+// 封面在移动端按 2:1 裁剪，网页端按 3:1
+function resolveCropPreset(mode) {
+    const base = CROP_PRESETS[mode] || CROP_PRESETS.cover;
+    if (mode === 'cover' && isMobileViewport()) {
+        return {
+            ...base,
+            aspect: 2 / 1,
+            exportWidth: 1200,
+            exportHeight: 600,
+            hint: '拖拽或缩放图片，移动端封面按 2:1 比例显示',
+        };
+    }
+    return base;
+}
+
+/**
+ * 打开裁剪弹窗。mode 为 'cover' 或 'avatar'，决定比例、导出尺寸与保存目标。
+ */
+function openCropModal(file, mode = 'cover') {
     return new Promise((resolve, reject) => {
+        const preset = resolveCropPreset(mode);
         const modal = document.getElementById('cropModal');
         const img = document.getElementById('cropImage');
         const confirmBtn = document.getElementById('cropConfirmBtn');
         const cancelBtn = document.getElementById('cropCancelBtn');
         const closeBtn = document.getElementById('closeCropModalBtn');
+        const titleEl = document.getElementById('cropModalTitle');
+        const hintEl = document.getElementById('cropModalHint');
 
         if (!modal || !img) {
             reject(new Error('裁剪组件未初始化'));
             return;
         }
 
+        if (titleEl) titleEl.innerText = preset.title;
+        if (hintEl) hintEl.innerText = preset.hint;
+        // 头像裁剪框显示为圆形，体验更贴合最终展示
+        modal.classList.toggle('crop-avatar-mode', mode === 'avatar');
+
+        let originalDataUrl = null;
         ensureCropperLoaded().then(() => {
         const reader = new FileReader();
         reader.onload = (e) => {
+            originalDataUrl = e.target.result;
             img.src = e.target.result;
             img.onload = () => {
                 if (cropper) cropper.destroy();
                 cropper = new Cropper(img, {
-                    aspectRatio: COVER_ASPECT,
+                    aspectRatio: preset.aspect,
                     viewMode: 1,
                     dragMode: 'move',
                     cropBoxMovable: true,
@@ -132,15 +247,15 @@ function openCropModal(file) {
         const onConfirm = () => {
             if (cropper) {
                 const canvas = cropper.getCroppedCanvas({
-                    width: COVER_EXPORT_WIDTH,
-                    height: COVER_EXPORT_HEIGHT,
+                    width: preset.exportWidth,
+                    height: preset.exportHeight,
                     imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high',
                 });
                 if (canvas) {
-                    saveCoverFromCropped(canvas)
+                    Promise.resolve((CROP_SAVERS[mode] || saveCoverFromCropped)(canvas, originalDataUrl))
                         .then(() => {
-                            showToast('封面已更新');
+                            showToast(preset.successMsg);
                             resolve();
                         })
                         .catch(reject);
@@ -157,6 +272,7 @@ function openCropModal(file) {
                 cropper.destroy();
                 cropper = null;
             }
+            modal.classList.remove('crop-avatar-mode');
             confirmBtn.removeEventListener('click', onConfirm);
             cancelBtn.removeEventListener('click', onCancel);
             closeBtn.removeEventListener('click', onCancel);
@@ -180,9 +296,12 @@ function initCoverEditor() {
     const coverFileInput = document.getElementById('coverFileInput');
     if (!coverEditBtn || !coverFileInput) return;
 
-    coverEditBtn.addEventListener('click', () => {
+    coverEditBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         coverFileInput.click();
     });
+    // 隐藏 input 位于封面内，其 .click() 触发的事件会冒泡到封面 → 误触“查看大图”，在此拦截
+    coverFileInput.addEventListener('click', (e) => e.stopPropagation());
 
     coverFileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
@@ -234,19 +353,90 @@ function renderProfileHeader() {
 }
 
 function renderAvatar(user) {
-    const avatarEls = [
-        document.getElementById('profileAvatarLarge'),
-        document.getElementById('editAvatarPreview'),
-    ];
-    const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
-    const initial = name.charAt(0).toUpperCase();
-    const hue = [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
-    const bg = `hsl(${hue}, 55%, 55%)`;
+    renderAvatarInto(document.getElementById('profileAvatarLarge'), user, '2rem');
+    renderAvatarInto(document.getElementById('editAvatarPreview'), user, '2rem');
+}
 
-    avatarEls.forEach(el => {
-        if (!el) return;
-        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:2rem;font-weight:800;color:#fff;background:${bg};border-radius:inherit;">${initial}</span>`;
-        el.style.background = bg;
+// ========== 图片查看灯箱（头像原图 / 背景大图） ==========
+function openImageViewer(src, { circle = false } = {}) {
+    if (!src) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'img-viewer-overlay' + (circle ? ' is-avatar' : '');
+    overlay.innerHTML = `
+        <button class="img-viewer-close" type="button" aria-label="关闭"><i class="fas fa-times"></i></button>
+        <img src="${src}" alt="查看大图">
+    `;
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', close);
+    overlay.querySelector('img')?.addEventListener('click', (e) => e.stopPropagation());
+    overlay.querySelector('.img-viewer-close')?.addEventListener('click', close);
+    document.addEventListener('keydown', function onEsc(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+    });
+    document.body.appendChild(overlay);
+}
+
+// ========== 头像上传与裁剪（本地存储，仅本人可见） ==========
+// 上传入口位于「编辑资料」弹窗内的头像预览；个人页大头像点击仅用于查看原图。
+function initAvatarEditor() {
+    const fileInput = document.getElementById('avatarFileInput');
+    if (!fileInput) return;
+
+    // 编辑资料弹窗内：点击头像预览 → 选图并裁剪
+    document.getElementById('editAvatarPreview')?.addEventListener('click', () => {
+        if (!isLoggedIn()) {
+            showToast('请先登录');
+            return;
+        }
+        fileInput.click();
+    });
+
+    // 个人页大头像：点击查看裁剪前原图（无原图时回退到当前头像）
+    document.getElementById('profileAvatarLarge')?.addEventListener('click', () => {
+        const origKey = getAvatarOriginalKey();
+        const src = (origKey && localStorage.getItem(origKey))
+            || (avatarStorageKey(getUser()) && localStorage.getItem(avatarStorageKey(getUser())));
+        if (src) {
+            openImageViewer(src, { circle: false });
+        } else {
+            showToast('还没有上传头像，可在「编辑资料」中设置');
+        }
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('请选择图片文件（JPEG/PNG/WebP）');
+            fileInput.value = '';
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('图片大小不能超过 5MB');
+            fileInput.value = '';
+            return;
+        }
+        try {
+            await openCropModal(file, 'avatar');
+        } catch (err) {
+            if (err.message !== '用户取消裁剪') {
+                showToast(err.message || '裁剪失败，请重试');
+            }
+        }
+        fileInput.value = '';
+    });
+}
+
+// 点击封面背景查看大图（点击右下角“更换封面”按钮不触发）
+function initCoverViewer() {
+    const cover = document.getElementById('profileCover');
+    if (!cover) return;
+    cover.addEventListener('click', (e) => {
+        if (e.target.closest('#coverEditBtn') || e.target.id === 'coverFileInput') return;
+        const origKey = getCoverOriginalKey();
+        const src = (origKey && localStorage.getItem(origKey))
+            || (getCoverStorageKey() && localStorage.getItem(getCoverStorageKey()));
+        if (src) openImageViewer(src, { circle: false });
     });
 }
 
@@ -661,6 +851,8 @@ export function initProfilePage() {
     initProfileStatJump();
     initEditProfile();
     initCoverEditor();
+    initCoverViewer();
+    initAvatarEditor();
     loadProfileCover();
     renderProfileHeader();
 

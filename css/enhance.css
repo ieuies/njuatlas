@@ -1,0 +1,316 @@
+/*! nju.atlas - enhance.css (全站视觉增强层)
+ *
+ * 设计目标：在不改动任何 JS 逻辑、不修改现有镂空线框图标的前提下，
+ * 为整站叠加更精致的层次、阴影、动效与可达性细节。
+ *
+ * 实现约定：
+ *   1. 本文件在 <head> 中最后加载；为可靠覆盖按需懒加载的页面样式，
+ *      需要覆盖的规则统一用 `html` / `:root` 前缀抬升优先级。
+ *   2. 优先使用「叠加式」增强（过渡、悬停位移、焦点环等），避免与
+ *      既有 !important 规则冲突。
+ *   3. 全部走 CSS 变量，自动兼容暗色模式。
+ */
+
+/* ========== 0. 增强专用变量 ========== */
+:root {
+    --enh-lift: translateY(-4px);
+    --enh-ring: 0 0 0 3px rgba(107, 33, 165, 0.18);
+    --enh-card-hover-shadow: 0 22px 50px rgba(74, 29, 110, 0.16), 0 6px 16px rgba(20, 16, 31, 0.08);
+    --enh-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+:root[data-theme="dark"] {
+    --enh-ring: 0 0 0 3px rgba(157, 111, 232, 0.28);
+    --enh-card-hover-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ========== 1. 全局排版与渲染润色 ========== */
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+body {
+    scroll-behavior: smooth;
+}
+
+/* 选区配色：紫调，呼应主题 */
+::selection {
+    background: rgba(107, 33, 165, 0.18);
+    color: var(--atlas-ink);
+}
+:root[data-theme="dark"] ::selection {
+    background: rgba(157, 111, 232, 0.32);
+    color: #fff;
+}
+
+/* 键盘焦点可达性：统一柔和焦点环（仅键盘触发，不影响鼠标点击观感） */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+    outline: none;
+    box-shadow: var(--enh-ring);
+    border-radius: var(--btn-radius);
+}
+
+/* 滚动条：更细腻的圆角与悬停反馈 */
+html ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--gray-300), var(--gray-400));
+    border-radius: 999px;
+}
+html ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, var(--atlas-purple-soft), var(--atlas-purple));
+}
+
+/* 页面切换淡入：进入时轻微上浮，增强空间感 */
+.page.active-page {
+    animation: enhPageIn 0.42s var(--enh-ease) both;
+}
+@keyframes enhPageIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .page.active-page { animation: none; }
+    body, html { scroll-behavior: auto; }
+}
+
+/* ========== 2. 按钮微交互 ========== */
+/* 主按钮：保留杂志感直角，叠加细腻的悬停浮起与按压反馈 */
+html .primary-btn,
+html .ai-send-btn,
+html .detail-action-btn.primary {
+    transition: transform 0.18s var(--enh-ease), filter 0.18s ease, box-shadow 0.22s ease;
+}
+html .primary-btn:hover,
+html .ai-send-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(74, 29, 110, 0.22);
+}
+html .primary-btn:active,
+html .ai-send-btn:active {
+    transform: translateY(0);
+}
+
+/* 描边按钮悬停时背景轻微染色，过渡更顺滑 */
+html .secondary-btn,
+html .small-btn,
+html .home-brand-btn,
+html .map-expand-btn,
+html .back-btn,
+html .guide-refresh-btn,
+html .ai-quick-row .quick-q-btn {
+    transition: transform 0.18s var(--enh-ease), color 0.18s ease,
+                border-color 0.18s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+html .secondary-btn:hover,
+html .home-brand-btn:hover,
+html .ai-quick-row .quick-q-btn:hover {
+    background: rgba(107, 33, 165, 0.05);
+}
+
+/* 登录按钮：悬停时填充主色，体验更明确 */
+html .login-round-btn {
+    transition: transform 0.18s var(--enh-ease), background-color 0.2s ease, color 0.2s ease;
+}
+html .login-round-btn:hover {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    transform: translateY(-1px);
+}
+
+/* ========== 3. 卡片层次与悬停 ========== */
+/* 找搭子卡片：原本无悬停反馈，补上浮起 + 阴影 + 边框染色 */
+html .partner-brief-card {
+    transition: transform 0.26s var(--enh-ease), box-shadow 0.26s ease,
+                border-color 0.26s ease, background-color 0.3s ease;
+}
+html .partner-brief-card:hover {
+    transform: var(--enh-lift);
+    box-shadow: var(--enh-card-hover-shadow);
+    border-color: rgba(107, 33, 165, 0.28) !important;
+}
+
+/* 吃喝玩乐卡片：图片悬停轻微放大，强化“可点击/探索”感 */
+html .guide-card {
+    transition: transform 0.26s var(--enh-ease), box-shadow 0.26s ease, border-color 0.26s ease;
+}
+html .guide-card:hover {
+    box-shadow: var(--enh-card-hover-shadow);
+}
+html .guide-card .guide-img {
+    transition: transform 0.5s var(--enh-ease);
+}
+html .guide-card:hover .guide-img {
+    transform: scale(1.05);
+}
+
+/* 首页功能卡片：补一道顶部高光描边，悬停时主色渐显 */
+html .home-feat-card {
+    position: relative;
+    transition: transform 0.25s var(--enh-ease), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+html .home-feat-card::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 2px;
+    border-radius: 12px 12px 0 0;
+    background: var(--gradient-primary);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+html .home-feat-card:hover {
+    border-color: rgba(107, 33, 165, 0.25);
+}
+html .home-feat-card:hover::after {
+    opacity: 1;
+}
+
+/* ========== 4. 标签 / 徽章润色 ========== */
+/* 帖子卡片标签：渐变底色，文字主色，更有“胶囊”质感 */
+html .partner-card-tag {
+    background: linear-gradient(135deg, rgba(107, 33, 165, 0.1), rgba(236, 72, 153, 0.1)) !important;
+    color: var(--atlas-purple) !important;
+    border: 1px solid rgba(107, 33, 165, 0.12);
+}
+:root[data-theme="dark"] .partner-card-tag {
+    background: linear-gradient(135deg, rgba(157, 111, 232, 0.16), rgba(244, 114, 182, 0.14)) !important;
+    color: var(--atlas-purple-soft) !important;
+    border-color: rgba(157, 111, 232, 0.2);
+}
+
+/* 详情弹窗标签：悬停轻微加深 */
+html .post-detail-tag {
+    transition: background-color 0.2s ease;
+}
+
+/* ========== 5. 筛选 chip 下划线滑入动画 ========== */
+/* 给底部下划线一个从中心展开的过渡，切换更灵动（不改变布局） */
+html .partner-filter .filter-chip,
+html .guide-chip,
+html .desktop-nav-item {
+    transition: color 0.2s ease;
+}
+
+/* ========== 6. 模态框与浮层 ========== */
+/* 加深背板模糊，弹窗更聚焦 */
+html .modal {
+    background: rgba(26, 16, 40, 0.42);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+:root[data-theme="dark"] .modal {
+    background: rgba(0, 0, 0, 0.62);
+}
+/* 弹窗卡片：更柔和的大阴影 + 顶部细描边高光 */
+html .modal-card {
+    box-shadow: 0 28px 80px rgba(20, 16, 31, 0.28), 0 8px 24px rgba(74, 29, 110, 0.12);
+}
+
+/* 输入框聚焦：统一柔和外发光（补全 partner / profile 表单观感） */
+html .modal-card input:focus,
+html .modal-card textarea:focus,
+html .modal-card select:focus,
+html .post-detail-comment-input textarea:focus,
+html .detail-reply-input-row input:focus {
+    box-shadow: var(--enh-ring);
+}
+
+/* ========== 7. AI 助手细节 ========== */
+/* 会话项激活态左侧主色条 */
+html .ai-conv-item {
+    position: relative;
+    overflow: hidden;
+}
+html .ai-conv-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--gradient-primary);
+    border-radius: 0 3px 3px 0;
+}
+/* 欢迎头像轻微呼吸光晕 */
+html .ai-welcome-avatar {
+    animation: enhPulse 3.2s ease-in-out infinite;
+}
+@keyframes enhPulse {
+    0%, 100% { box-shadow: 0 12px 32px rgba(107, 33, 165, 0.18); }
+    50%      { box-shadow: 0 12px 40px rgba(107, 33, 165, 0.34); }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .ai-welcome-avatar { animation: none; }
+}
+
+/* ========== 8. 加载 / 空状态 shimmer ========== */
+/* 为各页面的纯文字加载态增加柔和呼吸，避免“卡住”观感 */
+html .guide-loading,
+html .profile-loading,
+html .ai-conv-loading,
+html .detail-comments-empty,
+html .guide-prefetch-hint {
+    animation: enhFade 1.6s ease-in-out infinite;
+}
+@keyframes enhFade {
+    0%, 100% { opacity: 0.45; }
+    50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .guide-loading,
+    html .profile-loading,
+    html .ai-conv-loading,
+    html .detail-comments-empty,
+    html .guide-prefetch-hint { animation: none; }
+}
+
+/* ========== 9. 首页品牌标题渐变描边点缀 ========== */
+/* 标题保持原有粗体黑字，仅在亮色模式给副标题一抹主色，层次更分明 */
+html .home-brand-kicker {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0.9;
+}
+:root[data-theme="dark"] .home-brand-kicker {
+    -webkit-text-fill-color: transparent;
+}
+
+/* 顶部品牌字悬停轻微染色反馈 */
+html .brand-mark {
+    transition: color 0.2s ease, transform 0.2s var(--enh-ease);
+}
+html .brand-mark:hover {
+    color: var(--atlas-purple);
+}
+
+/* ========== 10. 顶栏与导航微调 ========== */
+/* 桌面导航项悬停预提示主色，点击前即有反馈 */
+html .desktop-nav-item:hover {
+    color: var(--atlas-purple);
+}
+/* 底部 tab 点击放大反馈（移动端） */
+html .tab-item {
+    transition: color 0.2s ease, transform 0.15s var(--enh-ease);
+}
+html .tab-item:active {
+    transform: scale(0.9);
+}
+
+/* ========== 11. 评论 / 参与者细节 ========== */
+html .detail-comment {
+    transition: background-color 0.2s ease;
+    border: 1px solid transparent;
+}
+html .detail-comment:hover {
+    border-color: var(--atlas-line);
+}
+html .participant-chip {
+    transition: transform 0.18s var(--enh-ease);
+}
+html .participant-chip:hover {
+    transform: translateY(-1px);
+}

@@ -46,7 +46,7 @@
     --atlas-bottombar: 66px;
     --gradient-primary: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
     /* 方案 E：杂志感按钮 */
-    --btn-radius: 4px;
+    --btn-radius: 10px;
     --btn-primary-bg: #1a1721;
     --btn-primary-fg: #ffffff;
     --btn-border: #c8c2d0;
