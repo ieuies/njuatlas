@@ -1,4 +1,4 @@
-import { showToast, escapeHtml } from '../../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent } from '../../api.js';
 import { partnerStore, PAGE_SIZE } from './shared.js';
@@ -73,6 +73,11 @@ function createPostCardElement(p) {
     article.setAttribute('data-id', p.id);
     article.innerHTML = `
         <div class="partner-card-content">
+            <button class="partner-card-author" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
+                ${avatarHtmlForUser({ id: p.publisherId, username: p.publisher, avatar_url: p.publisherAvatar }, 36)}
+                <span class="partner-card-author-name">${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-star owner-mark" aria-hidden="true" title="我"></i>' : ''}</span>
+            </button>
+            ${p.coverImage ? `<div class="partner-card-cover" style="background-image:url('${escapeHtml(p.coverImage)}')"></div>` : ''}
             <div class="partner-card-head">
                 <div class="partner-card-tags">
                     ${p.tags.filter(t => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t)).slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
@@ -85,7 +90,6 @@ function createPostCardElement(p) {
                 ${p.location ? `<span><b>地点</b><em>${escapeHtml(p.location)}</em></span>` : ''}
                 ${p.budget ? `<span><b>预算</b><em>${escapeHtml(p.budget)}</em></span>` : ''}
                 ${p.time ? `<span><b>时间</b><em>${escapeHtml(p.time)}</em></span>` : ''}
-                <span><b>发起人</b><em>${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-star owner-mark" aria-hidden="true" title="发起人"></i>' : ''}</em></span>
             </div>
             <div class="partner-card-footer">
                 <div class="partner-card-stats">
@@ -120,6 +124,13 @@ function bindCardEvents(container) {
     container.querySelectorAll('.partner-card').forEach(card => {
         card.removeEventListener('click', _cardClickHandler);
         card.addEventListener('click', _cardClickHandler);
+    });
+    container.querySelectorAll('.partner-card-author').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const uid = parseInt(btn.getAttribute('data-user-id'));
+            if (uid && window.openUserProfile) window.openUserProfile(uid);
+        });
     });
 }
 

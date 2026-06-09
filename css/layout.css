@@ -282,6 +282,24 @@
 }
 .tab-item i { font-size: 1.15rem; }
 .tab-item.active { color: var(--btn-primary-bg); }
+.tab-item, .desktop-nav-item { position: relative; }
+.nav-unread-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #e5484d;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+}
+.desktop-nav-item .nav-unread-badge { top: 8px; right: 4px; }
 
 /* ========== 按钮美化覆盖 ========== */
 .logout-btn, .map-expand-btn, .primary-btn,

@@ -2,12 +2,14 @@
 // profile.js - 个人中心模块（含封面裁剪高清版）
 // ================================================================
 
-import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
+import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
-import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey } from '../utils.js';
+import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser } from '../utils.js';
 
 let currentProfileTab = 'posts';
 let _profileBioCache = null;
+let _viewingUserId = null;
+let _viewingProfileCache = null;
 
 const CROPPER_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css';
 const CROPPER_JS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
@@ -158,12 +160,18 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
     if (!storageKey) throw new Error('请先登录');
     const base64 = canvas.toDataURL('image/jpeg', 0.9);
     localStorage.setItem(storageKey, base64);
-    // 保存裁剪前原图（缩放后）供“查看原图”
     const origKey = getAvatarOriginalKey();
     if (origKey && originalDataUrl) {
         safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1280, 0.88));
     }
-    // 同步刷新个人页头像、编辑弹窗预览，以及顶栏头像
+    try {
+        const res = await uploadAvatar(base64);
+        if (res?.avatar_url) {
+            updateUserFromLogin({ ...getUser(), avatar_url: res.avatar_url });
+        }
+    } catch (e) {
+        console.warn('头像上传服务端失败，已保存本地:', e?.message);
+    }
     renderAvatar(getUser());
     if (typeof window.updateNavBar === 'function') window.updateNavBar();
 }
@@ -326,7 +334,89 @@ function initCoverEditor() {
 }
 
 // ========== 个人中心头部渲染 ==========
-function renderProfileHeader() {
+function isViewingSelf() {
+    const me = getUser();
+    return !_viewingUserId || (me && String(me.id) === String(_viewingUserId));
+}
+
+function applyProfileModeUI(isSelf) {
+    const editBtn = document.getElementById('editProfileBtn');
+    const coverEdit = document.getElementById('coverEditBtn');
+    const emailLine = document.getElementById('profileEmailLine');
+    const statusRow = document.querySelector('.profile-status-row');
+    const socialActions = document.getElementById('profileSocialActions');
+    if (editBtn) editBtn.style.display = isSelf ? '' : 'none';
+    if (coverEdit) coverEdit.style.display = isSelf ? '' : 'none';
+    if (emailLine) emailLine.style.display = isSelf ? '' : 'none';
+    if (statusRow) statusRow.style.display = isSelf ? '' : 'none';
+    if (socialActions) socialActions.style.display = isSelf ? 'none' : 'flex';
+    document.querySelectorAll('.profile-stat-self').forEach((el) => {
+        el.style.display = isSelf ? '' : 'none';
+    });
+    document.querySelectorAll('.profile-tab').forEach((tab) => {
+        const id = tab.getAttribute('data-profile-tab');
+        if (['comments', 'favorites', 'activities'].includes(id)) {
+            tab.style.display = isSelf ? '' : 'none';
+        }
+        if (id === 'posts') {
+            tab.innerHTML = isSelf
+                ? '<i class="fas fa-file-lines"></i> 我发布的'
+                : '<i class="fas fa-file-lines"></i> TA 的帖子';
+        }
+    });
+    const cover = document.getElementById('profileCover');
+    if (cover) cover.style.cursor = isSelf ? 'pointer' : 'default';
+}
+
+async function renderSocialActions(profile) {
+    const box = document.getElementById('profileSocialActions');
+    if (!box || isViewingSelf()) return;
+    const status = profile.friendship_status || 'none';
+    let html = '';
+    if (status === 'none') {
+        html = `<button class="profile-social-btn primary" id="profileAddFriendBtn" type="button"><i class="fas fa-user-plus"></i> 加好友</button>`;
+    } else if (status === 'pending_sent') {
+        html = `<button class="profile-social-btn" disabled type="button">已发送请求</button>`;
+    } else if (status === 'pending_received') {
+        html = `<button class="profile-social-btn" disabled type="button">对方已请求加你</button>`;
+    } else if (status === 'friends') {
+        html = `<button class="profile-social-btn primary" id="profileDmBtn" type="button"><i class="fas fa-comment"></i> 发消息</button>`;
+    }
+    box.innerHTML = html;
+    document.getElementById('profileAddFriendBtn')?.addEventListener('click', async () => {
+        try {
+            await sendFriendRequest(profile.id);
+            showToast('好友请求已发送');
+            await viewUserProfile(profile.id);
+        } catch (e) { showToast(e.message); }
+    });
+    document.getElementById('profileDmBtn')?.addEventListener('click', () => {
+        if (window.openChatWith) window.openChatWith(profile.id);
+        else window.switchPage('messages');
+    });
+}
+
+async function renderProfileHeader() {
+    const isSelf = isViewingSelf();
+    applyProfileModeUI(isSelf);
+
+    if (!isSelf && _viewingUserId) {
+        try {
+            const profile = _viewingProfileCache || await getUserProfile(_viewingUserId);
+            _viewingProfileCache = profile;
+            document.getElementById('profileUsername').innerText = profile.username || '用户';
+            renderAvatarInto(document.getElementById('profileAvatarLarge'), profile, '2rem');
+            _applyProfileBio(profile);
+            document.getElementById('postCount').innerText = profile.post_count ?? 0;
+            document.getElementById('friendCount').innerText = profile.friend_count ?? 0;
+            document.getElementById('likeReceivedCount').innerText = profile.like_received_count ?? 0;
+            await renderSocialActions(profile);
+        } catch (e) {
+            showToast('无法加载用户资料');
+        }
+        return;
+    }
+
     const user = getUser();
     const email = user?.email || '';
     const username = user?.username || (email ? email.split('@')[0] : '同学');
@@ -350,6 +440,12 @@ function renderProfileHeader() {
         statusEl.className = `profile-status ${verified ? 'is-verified' : 'is-unverified'}`;
     }
     if (resendBtn) resendBtn.style.display = verified ? 'none' : 'inline-flex';
+
+    try {
+        const stats = await getUserProfile(user.id);
+        document.getElementById('friendCount').innerText = stats.friend_count ?? 0;
+        if (stats.avatar_url) updateUserFromLogin({ ...user, avatar_url: stats.avatar_url });
+    } catch (e) { /* 静默 */ }
 }
 
 function renderAvatar(user) {
@@ -522,11 +618,17 @@ function initProfileStatJump() {
 async function loadProfileTabContent(tabId) {
     const container = document.getElementById('profileTabContent');
     if (!container) return;
+    if (!isViewingSelf() && ['comments', 'favorites', 'activities'].includes(tabId)) {
+        tabId = 'posts';
+    }
     container.innerHTML = '<div class="profile-loading">加载中...</div>';
 
     try {
         switch (tabId) {
             case 'posts': await renderMyPosts(container); break;
+            case 'friends':
+                if (typeof window.switchPage === 'function') window.switchPage('messages');
+                break;
             case 'comments': await renderMyComments(container); break;
             case 'favorites': await renderMyFavorites(container); break;
             case 'activities': await renderMyActivities(container); break;
@@ -539,24 +641,23 @@ async function loadProfileTabContent(tabId) {
 
 // ========== 我发布的组局 ==========
 async function renderMyPosts(container) {
-    const user = getUser();
-    if (!user?.id) {
+    const userId = isViewingSelf() ? getUser()?.id : _viewingUserId;
+    if (!userId) {
         container.innerHTML = '<div class="profile-empty-state"><i class="fas fa-file-lines"></i>请先登录</div>';
         return;
     }
     try {
-        const data = await listPosts({ user_id: user.id, page_size: 50 });
+        const data = await listPosts({ user_id: userId, page_size: 50 });
         const posts = data.items || [];
-        document.getElementById('postCount').innerText = posts.length;
+        if (isViewingSelf()) document.getElementById('postCount').innerText = posts.length;
         if (!posts.length) {
             container.innerHTML = `
                 <div class="profile-empty-state">
                     <i class="fas fa-file-lines"></i>
-                    <p>还没有发布过组局</p>
-                    <button class="primary-btn small" id="gotoCreatePostBtn"><i class="fas fa-plus" aria-hidden="true"></i> 发起第一个组局</button>
+                    <p>${isViewingSelf() ? '还没有发布过组局' : 'TA 还没有发布过组局'}</p>
+                    ${isViewingSelf() ? '<button class="primary-btn small" id="gotoCreatePostBtn"><i class="fas fa-plus" aria-hidden="true"></i> 发起第一个组局</button>' : ''}
                 </div>`;
-            const gotoBtn = document.getElementById('gotoCreatePostBtn');
-            if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('partner'));
+            document.getElementById('gotoCreatePostBtn')?.addEventListener('click', () => window.switchPage('partner'));
             return;
         }
         container.innerHTML = posts.map(p => `
@@ -579,7 +680,7 @@ async function renderMyPosts(container) {
             card.style.cursor = 'pointer';
         });
         const totalLikes = posts.reduce((sum, p) => sum + (p.like_count || 0), 0);
-        document.getElementById('likeReceivedCount').innerText = totalLikes;
+        if (isViewingSelf()) document.getElementById('likeReceivedCount').innerText = totalLikes;
     } catch (e) {
         container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
     }
@@ -837,12 +938,44 @@ function initEditProfile() {
 }
 
 // ========== 对外刷新接口 ==========
+export async function viewUserProfile(userId) {
+    if (!isLoggedIn()) {
+        const modal = document.getElementById('authModal');
+        if (modal) modal.style.display = 'flex';
+        return;
+    }
+    const me = getUser();
+    if (me && String(me.id) === String(userId)) {
+        _viewingUserId = null;
+        _viewingProfileCache = null;
+    } else {
+        _viewingUserId = userId;
+        _viewingProfileCache = null;
+    }
+    currentProfileTab = 'posts';
+    window._profileViewPending = true;
+    if (typeof window.switchPage === 'function') {
+        await window.switchPage('profile');
+    } else {
+        await refreshProfile();
+    }
+}
+
 export async function refreshProfile() {
     if (!isLoggedIn()) return;
-    renderProfileHeader();
-    loadProfileCover();
+    if (_viewingUserId && getUser() && String(getUser().id) === String(_viewingUserId)) {
+        _viewingUserId = null;
+        _viewingProfileCache = null;
+    }
+    await renderProfileHeader();
+    if (isViewingSelf()) loadProfileCover();
     syncProfileTabUI(currentProfileTab);
     loadProfileTabContent(currentProfileTab);
+}
+
+export function resetProfileView() {
+    _viewingUserId = null;
+    _viewingProfileCache = null;
 }
 
 // ========== 初始化入口 ==========

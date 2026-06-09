@@ -153,6 +153,32 @@
     font-weight: 800;
     color: var(--atlas-ink);
 }
+.profile-social-actions {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 6px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.profile-social-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--btn-border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.profile-social-btn.primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-bg);
+}
+.profile-social-btn:disabled { opacity: 0.55; cursor: default; }
 .profile-edit-btn {
     height: 32px;
     padding: 0 12px;

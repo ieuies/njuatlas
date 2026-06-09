@@ -96,6 +96,8 @@ export function mapPost(p) {
         time: formatPostTime(p.event_time, p.urgency),
         publisher: p.username || '匿名同学',
         publisherId: p.user_id,
+        publisherAvatar: p.avatar_url || '',
+        coverImage: p.cover_image || '',
         members: p.participant_count || 0,
         slots: p.max_participants || 1,
         budget: p.budget || '',

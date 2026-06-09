@@ -205,6 +205,7 @@
                                     <h2 id="profileUsername">个人中心</h2>
                                     <button id="editProfileBtn" class="profile-edit-btn" type="button" title="编辑资料"><i class="fas fa-pen"></i> 编辑资料</button>
                                 </div>
+                                <div class="profile-social-actions" id="profileSocialActions" style="display:none;"></div>
                                 <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
                                 <div class="profile-tags-wrapper" id="profileTags" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0 4px;"></div>
                                 <p class="profile-email-line" id="profileEmailLine"></p>
@@ -216,16 +217,19 @@
                             </div>
                         </div>
                         <div class="profile-stats-row" id="profileStatsRow">
-                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看我发布的">
+                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看发布">
                                 <span class="profile-stat-num" id="postCount">0</span><span class="profile-stat-label">发布</span>
                             </button>
-                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看我发布的">
+                            <button type="button" class="profile-stat-item profile-stat-friends" data-profile-tab="friends" aria-label="查看好友">
+                                <span class="profile-stat-num" id="friendCount">0</span><span class="profile-stat-label">好友</span>
+                            </button>
+                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看获赞">
                                 <span class="profile-stat-num" id="likeReceivedCount">0</span><span class="profile-stat-label">获赞</span>
                             </button>
-                            <button type="button" class="profile-stat-item" data-profile-tab="comments" aria-label="查看我的评论">
+                            <button type="button" class="profile-stat-item profile-stat-self" data-profile-tab="comments" aria-label="查看评论">
                                 <span class="profile-stat-num" id="commentMadeCount">0</span><span class="profile-stat-label">评论</span>
                             </button>
-                            <button type="button" class="profile-stat-item" data-profile-tab="favorites" aria-label="查看我的收藏">
+                            <button type="button" class="profile-stat-item profile-stat-self" data-profile-tab="favorites" aria-label="查看收藏">
                                 <span class="profile-stat-num" id="favoriteCount2">0</span><span class="profile-stat-label">收藏</span>
                             </button>
                         </div>
@@ -248,11 +252,13 @@
                         <p>和好友私聊、管理你的好友关系</p>
                     </div>
                     <div class="msg-tabs">
-                        <button class="msg-tab active" data-tab="chats" type="button"><i class="fas fa-comment-dots"></i> 私聊</button>
+                        <button class="msg-tab active" data-tab="chats" type="button"><i class="fas fa-comment-dots"></i> 私信</button>
                         <button class="msg-tab" data-tab="friends" type="button"><i class="fas fa-user-group"></i> 好友</button>
+                        <button class="msg-tab" data-tab="interact" type="button"><i class="fas fa-bell"></i> 互动</button>
                     </div>
                     <div id="msgChatsView" class="msg-view"></div>
                     <div id="msgFriendsView" class="msg-view" style="display:none;"></div>
+                    <div id="msgInteractView" class="msg-view" style="display:none;"></div>
                 </div>
             </div>
 

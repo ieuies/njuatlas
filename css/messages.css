@@ -288,6 +288,50 @@
     color: var(--text-tertiary);
     font-size: 0.86rem;
 }
+.msg-unread-dot {
+    display: inline-block;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--danger, #e5484d);
+    color: #fff;
+    font-size: 0.66rem;
+    line-height: 18px;
+    text-align: center;
+}
+.msg-tag-friends, .msg-tag-pending {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    padding: 6px 10px;
+}
+.msg-notif-list { display: flex; flex-direction: column; }
+.msg-notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--atlas-line);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 10px;
+}
+.msg-notif-item.unread { background: rgba(107, 33, 165, 0.06); }
+.msg-notif-item:hover { background: var(--bg-tertiary); }
+.msg-notif-main { flex: 1; min-width: 0; }
+.msg-notif-text { font-weight: 700; color: var(--atlas-ink); font-size: 0.9rem; }
+.msg-notif-sub {
+    margin-top: 2px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.msg-notif-time { margin-top: 4px; font-size: 0.72rem; color: var(--text-tertiary); }
 
 /* ── 暗色模式 ── */
 :root[data-theme="dark"] .msg-chatroom,

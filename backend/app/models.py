@@ -328,3 +328,56 @@ class MatchRecord(db.Model):
     reason = db.Column(db.String(300))                              # 理由摘要
     feedback = db.Column(db.String(20))                             # liked / dismissed / ignored
     created_at = db.Column(db.DateTime, default=_utcnow, index=True)
+
+
+# ── 社交层（好友 / 私信 / 通知）────────────────────────────────────
+
+class Friendship(db.Model):
+    """好友关系：requester 向 addressee 发起请求，accepted 后互为好友。"""
+    __tablename__ = "friendships"
+
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    addressee_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    created_at = db.Column(db.DateTime, default=_utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
+
+    requester = db.relationship("User", foreign_keys=[requester_id], lazy="joined")
+    addressee = db.relationship("User", foreign_keys=[addressee_id], lazy="joined")
+
+    __table_args__ = (
+        db.UniqueConstraint("requester_id", "addressee_id", name="_friendship_pair_uc"),
+    )
+
+
+class DirectMessage(db.Model):
+    """用户间私信（与 AI ConversationMessage 分离）。"""
+    __tablename__ = "direct_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    content = db.Column(db.String(1000), nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, index=True)
+
+    sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], lazy="joined")
+
+
+class Notification(db.Model):
+    """互动通知：赞、评论、好友请求、好友接受等。"""
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    type = db.Column(db.String(30), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey("event_posts.id"), nullable=True)
+    friendship_id = db.Column(db.Integer, db.ForeignKey("friendships.id"), nullable=True)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, index=True)
+
+    actor = db.relationship("User", foreign_keys=[actor_id], lazy="joined")
+    post = db.relationship("EventPost", lazy="joined")

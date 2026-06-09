@@ -43,6 +43,7 @@ def create_app():
     from app.routes.note_routes import note_bp
     from app.routes.places import places_bp
     from app.routes.profile import profile_bp
+    from app.routes.social import social_bp
 
     app.register_blueprint(places_bp)
     app.register_blueprint(auth_bp)
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(llm_bp)
     app.register_blueprint(note_bp)
     app.register_blueprint(profile_bp)
+    app.register_blueprint(social_bp)
     register_error_handlers(app)
     init_rate_limiter(app)
 

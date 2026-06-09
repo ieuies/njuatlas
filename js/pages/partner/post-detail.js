@@ -1,4 +1,4 @@
-import { showToast, formatDate, escapeHtml } from '../../utils.js';
+import { showToast, formatDate, escapeHtml, avatarHtmlForUser } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import {
     getPost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent,
@@ -228,7 +228,18 @@ function _renderPostDetail(post) {
     const tags = post.tags || [];
     document.getElementById('detailTags').innerHTML = tags.map(t => `<span class="post-detail-tag">${escapeHtml(t)}</span>`).join('');
 
-    document.getElementById('detailPublisher').innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
+    const pubEl = document.getElementById('detailPublisher');
+    if (pubEl && post.user_id) {
+        pubEl.innerHTML = `<button type="button" class="detail-publisher-btn" data-user-id="${post.user_id}">
+            ${avatarHtmlForUser({ id: post.user_id, username: post.username, avatar_url: post.avatar_url }, 28)}
+            <span>${escapeHtml(post.username || '匿名')}</span>
+        </button>`;
+        pubEl.querySelector('.detail-publisher-btn')?.addEventListener('click', () => {
+            if (window.openUserProfile) window.openUserProfile(post.user_id);
+        });
+    } else if (pubEl) {
+        pubEl.innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
+    }
     const timeStr = formatPostTime(post.event_time, post.urgency);
     document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
     if (post.location_name) {

@@ -38,7 +38,8 @@ function userFromAuthPayload(data, fallback = {}) {
         email: data.email ?? fallback.email ?? '',
         username: data.username ?? fallback.username ?? '',
         email_verified: Boolean(data.email_verified ?? fallback.email_verified),
-        campus: data.campus ?? fallback.campus ?? ''
+        campus: data.campus ?? fallback.campus ?? '',
+        avatar_url: data.avatar_url ?? fallback.avatar_url ?? '',
     };
 }
 

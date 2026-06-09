@@ -1,5 +1,6 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast, renderAvatarInto } from './utils.js';
+import { getUnreadCounts } from './api.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 
@@ -184,11 +185,14 @@ async function switchPage(pageId) {
         mod.loadPartnerData();
     } else if (pageId === 'profile') {
         const mod = await _loadProfile();
-        // 首次加载时绑定编辑资料等按钮事件
         if (!_profilePageInited) {
             _profilePageInited = true;
             mod.initProfilePage();
         }
+        if (!window._profileViewPending && mod.resetProfileView) {
+            mod.resetProfileView();
+        }
+        window._profileViewPending = false;
         mod.refreshProfile();
     } else if (pageId === 'messages') {
         const mod = await _loadMessages();
@@ -629,9 +633,10 @@ async function init() {
     initFullMapPage();
     initBottomBarAutoHide();
 
-    // 默认加载首页。partner / profile 等大模块由 switchPage 按需懒加载。
     await switchPage('home');
     prefetchCommonAssets();
+    refreshUnreadBadge();
+    setInterval(refreshUnreadBadge, 30000);
 }
 
 // 全局事件
@@ -656,5 +661,44 @@ document.getElementById('authModal')?.addEventListener('click', (e) => {
 // 暴露给全局
 window.switchPage = switchPage;
 window.updateNavBar = updateNavBar;
+
+async function refreshUnreadBadge() {
+    if (!isLoggedIn()) return;
+    try {
+        const data = await getUnreadCounts();
+        const total = data.total || 0;
+        document.querySelectorAll('.tab-item[data-page="messages"], .desktop-nav-item[data-page="messages"]').forEach((el) => {
+            let badge = el.querySelector('.nav-unread-badge');
+            if (total > 0) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'nav-unread-badge';
+                    el.appendChild(badge);
+                }
+                badge.textContent = total > 99 ? '99+' : String(total);
+                badge.style.display = '';
+            } else if (badge) {
+                badge.style.display = 'none';
+            }
+        });
+    } catch (e) { /* 静默 */ }
+}
+
+window.refreshUnreadBadge = refreshUnreadBadge;
+
+window.openUserProfile = async (userId) => {
+    const mod = await _loadProfile();
+    mod.viewUserProfile(userId);
+};
+
+window.openChatWith = async (userId) => {
+    const mod = await _loadMessages();
+    if (!_messagesPageInited) {
+        _messagesPageInited = true;
+        mod.initMessagesPage();
+    }
+    await switchPage('messages');
+    mod.openChatWith(userId);
+};
 
 init();

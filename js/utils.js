@@ -24,11 +24,15 @@ export function formatDate(iso) {
 }
 
 // ============================================================
-// 用户头像（本地存储，仅本人可见）
-// 头像以裁剪后的 dataURL 形式保存在 localStorage，键按用户 ID 隔离。
-// 由于没有“查看他人头像”的接口，头像仅存在于本人浏览器中。
-// 未上传时回退为基于用户名生成的首字母色块。
+// 用户头像：优先服务端 avatar_url，本人可回退 localStorage 裁剪图
 // ============================================================
+export function resolveAvatarUrl(url) {
+    if (!url) return null;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    const base = API_BASE.replace(/\/api$/, '');
+    return `${base}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
 export function avatarStorageKey(user) {
     if (!user || user.id == null) return null;
     return `user_avatar_${user.id}`;
@@ -36,6 +40,8 @@ export function avatarStorageKey(user) {
 
 /** 返回头像描述对象：{ type:'image', src } 或 { type:'initial', initial, bg } */
 export function getUserAvatar(user) {
+    const serverUrl = resolveAvatarUrl(user?.avatar_url);
+    if (serverUrl) return { type: 'image', src: serverUrl };
     const key = avatarStorageKey(user);
     const saved = key ? localStorage.getItem(key) : null;
     if (saved) return { type: 'image', src: saved };
@@ -45,7 +51,7 @@ export function getUserAvatar(user) {
     return { type: 'initial', initial, bg: `hsl(${hue}, 55%, 55%)` };
 }
 
-/** 把用户头像渲染进指定容器元素（自适应容器圆角）。 */
+/** 渲染用户头像到容器；user 可为 { id, username, avatar_url } */
 export function renderAvatarInto(el, user, fontSize = '2rem') {
     if (!el) return;
     const avatar = getUserAvatar(user);
@@ -56,6 +62,15 @@ export function renderAvatarInto(el, user, fontSize = '2rem') {
         el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;background:${avatar.bg};border-radius:inherit;">${escapeHtml(avatar.initial)}</span>`;
         el.style.background = avatar.bg;
     }
+}
+
+/** 生成可复用的头像 HTML 字符串（用于列表卡片等） */
+export function avatarHtmlForUser(user, size = 40) {
+    const avatar = getUserAvatar(user);
+    if (avatar.type === 'image') {
+        return `<img class="user-avatar-img" src="${avatar.src}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;">`;
+    }
+    return `<span class="user-avatar-initial" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;font-size:${size * 0.42}px;font-weight:800;color:#fff;background:${avatar.bg};">${escapeHtml(avatar.initial)}</span>`;
 }
 
 // ============================================================

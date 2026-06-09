@@ -183,3 +183,50 @@ export async function getConversationMessages(sessionId) {
 export async function deleteConversation(sessionId) {
     return request(`/llm/conversation/${sessionId}`, 'DELETE');
 }
+
+// ── 社交（好友 / 私信 / 通知 / 公开资料）──
+export async function getUserProfile(userId) {
+    return request(`/social/users/${userId}`, 'GET');
+}
+export async function searchUsers(q) {
+    return request(`/social/users/search?q=${encodeURIComponent(q)}`, 'GET');
+}
+export async function listFriends() {
+    return request('/social/friends', 'GET');
+}
+export async function listFriendRequests() {
+    return request('/social/friends/requests', 'GET');
+}
+export async function sendFriendRequest(userId) {
+    return request('/social/friends/request', 'POST', { user_id: userId });
+}
+export async function acceptFriendRequest(requestId) {
+    return request(`/social/friends/requests/${requestId}/accept`, 'POST');
+}
+export async function rejectFriendRequest(requestId) {
+    return request(`/social/friends/requests/${requestId}/reject`, 'POST');
+}
+export async function removeFriend(userId) {
+    return request(`/social/friends/${userId}`, 'DELETE');
+}
+export async function listDmConversations() {
+    return request('/social/messages/conversations', 'GET');
+}
+export async function getDmMessages(peerId, { page = 1, page_size = 50 } = {}) {
+    return request(`/social/messages/${peerId}?page=${page}&page_size=${page_size}`, 'GET');
+}
+export async function sendDmMessage(peerId, content) {
+    return request(`/social/messages/${peerId}`, 'POST', { content });
+}
+export async function listNotifications({ page = 1, page_size = 30 } = {}) {
+    return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');
+}
+export async function getUnreadCounts() {
+    return request('/social/notifications/unread', 'GET');
+}
+export async function markNotificationsRead(ids = null) {
+    return request('/social/notifications/read', 'POST', ids ? { ids } : {});
+}
+export async function uploadAvatar(dataUrl) {
+    return request('/social/me/avatar', 'POST', { avatar: dataUrl });
+}

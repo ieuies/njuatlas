@@ -162,6 +162,7 @@ class SingleNote:
     # ── 互动 ──────────────────────────────────────────────────
     def toggle_like(self, user_id):
         """切换点赞状态。返回 True=已赞, False=已取消。"""
+        from app.services.social import create_notification
         existing = PostLike.query.filter_by(post_id=self._m.id, user_id=user_id).first()
         if existing:
             db.session.delete(existing)
@@ -173,12 +174,20 @@ class SingleNote:
         db.session.add(PostLike(post_id=self._m.id, user_id=user_id))
         self._m.like_count = (self._m.like_count or 0) + 1
         compute_hot(self._m)
+        if self._m.user_id != user_id:
+            create_notification(
+                user_id=self._m.user_id,
+                actor_id=user_id,
+                ntype="like",
+                post_id=self._m.id,
+            )
         db.session.commit()
         _clear_search_cache()
         return True
 
     def add_comment(self, user_id, content, parent_id=None):
         """添加一条评论。返回新评论的 ORM 对象。"""
+        from app.services.social import create_notification
         comment = PostComment(
             post_id=self._m.id,
             user_id=user_id,
@@ -188,6 +197,13 @@ class SingleNote:
         db.session.add(comment)
         self._m.comment_count = (self._m.comment_count or 0) + 1
         compute_hot(self._m)
+        if self._m.user_id != user_id:
+            create_notification(
+                user_id=self._m.user_id,
+                actor_id=user_id,
+                ntype="comment",
+                post_id=self._m.id,
+            )
         db.session.commit()
         _clear_search_cache()
         return comment
@@ -217,6 +233,7 @@ class SingleNote:
                     "id": c.id,
                     "user_id": c.user_id,
                     "username": c.user.username if c.user else "",
+                    "avatar_url": (c.user.avatar_url if c.user else "") or "",
                     "content": c.content,
                     "created_at": c.created_at.isoformat() if c.created_at else None,
                     "is_owner": (current_user_id is not None and c.user_id == current_user_id),
@@ -225,6 +242,7 @@ class SingleNote:
                             "id": r.id,
                             "user_id": r.user_id,
                             "username": r.user.username if r.user else "",
+                            "avatar_url": (r.user.avatar_url if r.user else "") or "",
                             "content": r.content,
                             "created_at": r.created_at.isoformat() if r.created_at else None,
                             "is_owner": (current_user_id is not None and r.user_id == current_user_id),
@@ -300,6 +318,7 @@ class SingleNote:
             {
                 "user_id": r.user_id,
                 "username": r.user.username if r.user else "",
+                "avatar_url": (r.user.avatar_url if r.user else "") or "",
                 "status": r.status,
                 "is_organizer": r.user_id == self._m.user_id,
             }
@@ -341,6 +360,7 @@ class SingleNote:
             "cover_image": m.cover_image,
             "user_id": m.user_id,
             "username": m.user.username if m.user else "",
+            "avatar_url": (m.user.avatar_url if m.user else "") or "",
             "place_id": m.place_id,
             "event_time": m.event_time.isoformat() if m.event_time else None,
             "urgency": m.urgency,
