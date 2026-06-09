@@ -15,20 +15,14 @@ import {
     listNotifications,
     markNotificationsRead,
 } from '../api.js';
-import { showToast, escapeHtml, avatarHtmlForUser } from '../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
 
 let currentTab = 'chats';
 let openChatPeerId = null;
 let _bound = false;
 
 function fmtTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    const now = new Date();
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    if (d.toDateString() === now.toDateString()) return `${hh}:${mm}`;
-    return `${d.getMonth() + 1}/${d.getDate()}`;
+    return formatTimeBrief(iso);
 }
 
 function notifText(n) {

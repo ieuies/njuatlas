@@ -1,4 +1,4 @@
-import { formatDate, escapeHtml, wgs84ToGcj02 } from '../../utils.js';
+import { formatDate, parseApiDate, beijingDateKey, BEIJING_TZ, escapeHtml, wgs84ToGcj02 } from '../../utils.js';
 import { getUser } from '../../auth.js';
 
 export const PAGE_SIZE = 20;
@@ -118,13 +118,30 @@ export function formatPostTime(iso, urgency) {
     if (urgency === 'now') return '立即';
     if (urgency === 'long_term') return '长期有效';
     if (!iso) return urgency === 'scheduled' ? '已设定' : '';
-    const d = new Date(iso);
-    const now = new Date();
-    const diffDays = Math.floor((d - now) / (1000 * 60 * 60 * 24));
-    const time = d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', weekday: 'short' });
-    if (diffDays === 0) return `今天 ${time.split(' ')[1] || ''}`;
-    if (diffDays === 1) return `明天 ${time.split(' ')[1] || ''}`;
-    return time;
+    const d = parseApiDate(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+    const todayKey = beijingDateKey(new Date());
+    const eventKey = beijingDateKey(d);
+    const timePart = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    const full = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'short',
+        hour12: false,
+    });
+    if (eventKey === todayKey) return `今天 ${timePart}`;
+    const [y, m, day] = todayKey.split('-').map(Number);
+    const tomorrowKey = new Date(Date.UTC(y, m - 1, day + 1)).toISOString().slice(0, 10);
+    if (eventKey === tomorrowKey) return `明天 ${timePart}`;
+    return full;
 }
 
 // ============================================================

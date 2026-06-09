@@ -1,5 +1,5 @@
 import { chatRecommend, getConversationList, getConversationMessages, deleteConversation } from '../api.js';
-import { showToast } from '../utils.js';
+import { showToast, formatDateShort, formatRelativeTime } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
 let currentSessionId = null;
@@ -158,7 +158,7 @@ async function loadConversationList(force = false) {
             <div class="ai-conv-item" data-session-id="${escapeHtml(session.session_id)}">
                 <div class="ai-conv-content">
                     <div class="ai-conv-title">${escapeHtml(session.last_message?.substring(0, 30) || '新对话')}</div>
-                    <div class="ai-conv-preview">${escapeHtml(formatSessionTime(session.last_at))}</div>
+                    <div class="ai-conv-preview">${escapeHtml(formatDateShort(session.last_at))}</div>
                 </div>
                 <div class="ai-conv-time">${formatRelativeTime(session.last_at)}</div>
                 <button class="ai-conv-delete" data-session-id="${escapeHtml(session.session_id)}" title="删除会话"><i class="fas fa-trash-can"></i></button>
@@ -191,27 +191,6 @@ async function loadConversationList(force = false) {
         console.warn('加载会话列表失败:', err);
         listContainer.innerHTML = '<div class="ai-conv-empty">加载失败，请刷新重试</div>';
     }
-}
-
-function formatSessionTime(isoString) {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    return d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function formatRelativeTime(isoString) {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 1) return '刚刚';
-    if (diffMins < 60) return `${diffMins}分钟前`;
-    if (diffHours < 24) return `${diffHours}小时前`;
-    if (diffDays < 7) return `${diffDays}天前`;
-    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 }
 
 function highlightCurrentSession(sessionId) {

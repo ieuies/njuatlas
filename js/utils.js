@@ -18,9 +18,93 @@ export function escapeHtml(str) {
     });
 }
 
-export function formatDate(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleString();
+export const BEIJING_TZ = 'Asia/Shanghai';
+
+/** 解析 API 返回的时间：无时区的 ISO 字符串按 UTC 处理（SQLite 存 UTC） */
+export function parseApiDate(iso) {
+    if (iso == null || iso === '') return null;
+    if (iso instanceof Date) return iso;
+    const s = String(iso).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) {
+        return new Date(`${s}Z`);
+    }
+    return new Date(s);
+}
+
+export function beijingDateKey(date) {
+    if (!date || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-CA', { timeZone: BEIJING_TZ });
+}
+
+export function formatDate(iso, options = {}) {
+    const d = parseApiDate(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        ...options,
+    });
+}
+
+/** 月/日 时:分（AI 会话列表等） */
+export function formatDateShort(iso, options = {}) {
+    const d = parseApiDate(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        ...options,
+    });
+}
+
+/** 相对时间 + 过久则显示北京日期 */
+export function formatRelativeTime(iso) {
+    const date = parseApiDate(iso);
+    if (!date || Number.isNaN(date.getTime())) return '';
+    const diffMs = Date.now() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins}分钟前`;
+    if (diffHours < 24) return `${diffHours}小时前`;
+    if (diffDays < 7) return `${diffDays}天前`;
+    return date.toLocaleDateString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'short',
+        day: 'numeric',
+    });
+}
+
+/** 消息列表：今天显示 HH:mm，否则 M/D（北京时间） */
+export function formatTimeBrief(iso) {
+    const d = parseApiDate(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+    const todayKey = beijingDateKey(new Date());
+    const dateKey = beijingDateKey(d);
+    const time = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    if (dateKey === todayKey) return time;
+    const md = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'numeric',
+        day: 'numeric',
+    });
+    return md;
 }
 
 // ============================================================
