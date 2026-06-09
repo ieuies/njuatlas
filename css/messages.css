@@ -165,24 +165,13 @@
     font-size: 0.9rem;
     line-height: 1.45;
     word-break: break-word;
-    background: var(--bubble-bg, var(--bg-tertiary));
+    background-color: var(--bubble-bg, var(--bg-tertiary));
+    background-image: var(--bubble-image, none);
+    background-size: var(--bubble-image-size, cover);
+    background-position: var(--bubble-image-position, center);
+    background-repeat: var(--bubble-image-repeat, no-repeat);
     color: var(--bubble-color, var(--atlas-ink));
     border: 1px solid var(--bubble-border, transparent);
-    overflow: hidden;
-}
-.msg-bubble::after {
-    content: '';
-    position: absolute;
-    right: 6px;
-    bottom: 4px;
-    width: 30px;
-    height: 30px;
-    background-image: var(--bubble-texture, none);
-    background-repeat: no-repeat;
-    background-size: contain;
-    background-position: center;
-    opacity: 0.22;
-    pointer-events: none;
 }
 .msg-bubble-row.them .msg-bubble {
     border-bottom-left-radius: 4px;
