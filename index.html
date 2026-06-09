@@ -127,6 +127,15 @@
 
             <!-- 找搭子页面 -->
             <div id="partnerPage" class="page">
+                <div class="partner-search-bar" id="partnerSearchBar">
+                    <label class="partner-search-input-wrap" for="partnerSearchInput">
+                        <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                        <input type="search" id="partnerSearchInput" placeholder="搜索搭子帖子：标题、地点、标签…" autocomplete="off" maxlength="50" enterkeyhint="search">
+                        <button type="button" class="partner-search-clear" id="partnerSearchClear" aria-label="清除搜索" hidden>
+                            <i class="fas fa-times" aria-hidden="true"></i>
+                        </button>
+                    </label>
+                </div>
                 <div class="partner-filter" id="partnerFilter">
                     <span data-category="all" class="filter-chip active">全部</span>
                     <span data-category="饭搭子" class="filter-chip"><i class="fas fa-utensils" aria-hidden="true"></i> 饭搭子</span>

@@ -23,6 +23,9 @@ export async function loadPostsByPage(page, append = false) {
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;
         }
+        if (partnerStore.searchQuery) {
+            params.q = partnerStore.searchQuery;
+        }
 
         const result = await listPosts(params);
         let newPosts = (result.items || []).map(mapPost);
@@ -156,7 +159,10 @@ function renderWaterfall() {
     if (!container) return;
 
     if (!partnerStore.allPartnersData.length) {
-        container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary);">暂无组局，快来发起第一个吧~</div>';
+        const q = partnerStore.searchQuery;
+        container.innerHTML = q
+            ? `<div class="partner-empty-state">未找到与「${escapeHtml(q)}」相关的帖子，试试换个关键词</div>`
+            : '<div class="partner-empty-state">暂无组局，快来发起第一个吧~</div>';
         return;
     }
 
@@ -185,7 +191,28 @@ export async function switchCategory(category) {
     partnerStore.partnersData = [];
 
     const container = document.getElementById('partnerWaterfall');
-    if (container) container.innerHTML = '<div style="text-align:center;padding:2rem;">加载中...</div>';
+    if (container) container.innerHTML = '<div class="partner-empty-state">加载中...</div>';
+
+    await loadPostsByPage(1, false);
+    refreshPreviewMarkers();
+}
+
+/** 关键词搜索：重置分页并重新加载 */
+export async function switchSearch(query) {
+    const next = (query || '').trim();
+    if (partnerStore.searchQuery === next) return;
+    partnerStore.searchQuery = next;
+    partnerStore.currentPage = 1;
+    partnerStore.hasMore = true;
+    partnerStore.allPartnersData = [];
+    partnerStore.partnersData = [];
+
+    const container = document.getElementById('partnerWaterfall');
+    if (container) {
+        container.innerHTML = next
+            ? '<div class="partner-empty-state">搜索中...</div>'
+            : '<div class="partner-empty-state">加载中...</div>';
+    }
 
     await loadPostsByPage(1, false);
     refreshPreviewMarkers();
@@ -259,6 +286,9 @@ export async function silentRefreshCurrentPage() {
         };
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;
+        }
+        if (partnerStore.searchQuery) {
+            params.q = partnerStore.searchQuery;
         }
         const result = await listPosts(params);
         const newPosts = (result.items || []).map(mapPost);

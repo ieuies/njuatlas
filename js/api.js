@@ -117,7 +117,7 @@ export async function chatRecommend(message, sessionId = null, city = '南京', 
 export async function createPost({ type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact } = {}) {
     return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact });
 }
-export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size } = {}) {
+export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q } = {}) {
     const params = new URLSearchParams();
     if (type) params.set('type', type);
     if (tags) params.set('tags', Array.isArray(tags) ? tags.join(',') : tags);
@@ -129,6 +129,7 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (user_id) params.set('user_id', user_id);
     if (page) params.set('page', page);
     if (page_size) params.set('page_size', page_size);
+    if (q) params.set('q', q);
     const qs = params.toString();
     return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, false);
 }

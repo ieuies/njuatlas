@@ -2,6 +2,76 @@
 
 /* 页面容器宽度见 layout.css（guide/profile 首访也依赖该规则） */
 
+/* ========== 搜索栏 ========== */
+.partner-search-bar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+}
+.partner-search-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+}
+.partner-search-input-wrap > i {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    font-size: 0.88rem;
+}
+.partner-search-input-wrap input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--atlas-ink);
+    font-size: 0.88rem;
+    outline: none;
+}
+.partner-search-input-wrap input::placeholder {
+    color: var(--text-tertiary);
+}
+.partner-search-input-wrap input::-webkit-search-cancel-button {
+    display: none;
+}
+.partner-search-clear {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(107, 33, 165, 0.08);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.partner-search-clear:hover {
+    background: rgba(107, 33, 165, 0.14);
+    color: var(--btn-primary-bg);
+}
+.partner-search-clear[hidden] {
+    display: none !important;
+}
+.partner-empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-tertiary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
 /* ========== 分类筛选栏（滑动容器） ========== */
 .filter-slider-container {
     position: relative;
