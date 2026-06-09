@@ -212,20 +212,47 @@
     color: var(--text-secondary);
     line-height: 1.5;
 }
+.profile-tags-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 4px;
+}
 .profile-campus {
     margin: 0 0 2px;
     font-size: 0.85rem;
     color: var(--atlas-primary, #6B21A5);
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    line-height: 1.4;
 }
 .profile-email-line {
     margin: 0;
     font-size: 0.8rem;
     color: var(--text-tertiary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+.profile-email-line i.fas,
+.profile-campus i.fas {
+    flex-shrink: 0;
+    width: 1em;
+    text-align: center;
+    font-size: 0.92em;
+    line-height: 1;
 }
 .profile-status-row {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 8px;
     margin-top: 6px;
 }
@@ -250,20 +277,51 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
-        padding-top: 12px;
+        margin-top: -16px;
+        padding: 10px 16px 0;
+        gap: 10px;
+    }
+    .profile-avatar-wrap {
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+        margin-top: -28px;
     }
     .profile-avatar-lg {
         width: 72px;
         height: 72px;
         min-width: 72px;
     }
-    .profile-avatar-wrap {
-        width: 72px;
-        height: 72px;
-        min-width: 72px;
+    .profile-header-info {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
     }
     .profile-name-row {
         justify-content: center;
+        width: 100%;
+    }
+    .profile-social-actions {
+        justify-content: center;
+    }
+    .profile-bio {
+        width: 100%;
+        text-align: center;
+    }
+    .profile-tags-wrapper {
+        justify-content: center;
+        width: 100%;
+    }
+    .profile-email-line,
+    .profile-campus {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+    }
+    .profile-status-row {
+        justify-content: center;
+        width: 100%;
     }
     .profile-edit-btn {
         margin-top: 2px;
