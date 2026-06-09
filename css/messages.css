@@ -161,23 +161,30 @@
 .msg-bubble {
     position: relative;
     padding: 9px 13px;
-    border-radius: 14px;
+    border-radius: var(--bubble-radius, 14px);
     font-size: 0.9rem;
     line-height: 1.45;
     word-break: break-word;
+    min-width: var(--bubble-min-width, 0);
+    min-height: var(--bubble-min-height, 0);
     background-color: var(--bubble-bg, var(--bg-tertiary));
     background-image: var(--bubble-image, none);
     background-size: var(--bubble-image-size, cover);
     background-position: var(--bubble-image-position, center);
     background-repeat: var(--bubble-image-repeat, no-repeat);
     color: var(--bubble-color, var(--atlas-ink));
-    border: 1px solid var(--bubble-border, transparent);
+    border: var(--bubble-frame-width, 1px) solid var(--bubble-border, transparent);
+    border-image-source: var(--bubble-nine-source, none);
+    border-image-slice: var(--bubble-nine-slice, 0);
+    border-image-width: var(--bubble-nine-width, 1);
+    border-image-outset: var(--bubble-nine-outset, 0);
+    border-image-repeat: var(--bubble-nine-repeat, stretch);
 }
 .msg-bubble-row.them .msg-bubble {
-    border-bottom-left-radius: 4px;
+    border-bottom-left-radius: var(--bubble-tail-radius-them, 4px);
 }
 .msg-bubble-row.me .msg-bubble {
-    border-bottom-right-radius: 4px;
+    border-bottom-right-radius: var(--bubble-tail-radius-me, 4px);
 }
 .msg-chat-input {
     display: flex;

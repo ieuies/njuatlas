@@ -5,13 +5,20 @@ export const BUBBLE_THEME_PRESETS = [
     {
         id: 'nailong-style-1',
         name: '奶龙·小黄鸭',
-        // 使用整张图拉伸作为气泡底图（保留眼睛等图案元素）
-        image: "url('image/chat-bubbles/nailong-style-1.png')",
-        imageSize: '100% 100%',
-        imagePosition: 'center',
+        // 非九宫格：不强行限定边框形状，直接用原图做自由背景。
+        bg: '#f0dc7c',
+        image: "url('image/chat-bubbles/nailong-style-1.jpg')",
+        imageSize: '185% 185%',
+        imagePosition: '22% 42%',
         imageRepeat: 'no-repeat',
+        frameWidth: '0px',
+        radius: '0px',
+        tailRadiusThem: '0px',
+        tailRadiusMe: '0px',
+        minWidth: '72px',
+        minHeight: '42px',
         color: '#2f2a1d',
-        border: 'rgba(125, 110, 43, 0.45)',
+        border: 'transparent',
     },
     {
         id: 'atlas-classic',
@@ -59,10 +66,21 @@ export function bubbleThemeCssVars(styleId) {
     return [
         `--bubble-color:${theme.color}`,
         `--bubble-border:${theme.border}`,
+        `--bubble-frame-width:${theme.frameWidth || '1px'}`,
+        `--bubble-radius:${theme.radius || '14px'}`,
+        `--bubble-tail-radius-them:${theme.tailRadiusThem || '4px'}`,
+        `--bubble-tail-radius-me:${theme.tailRadiusMe || '4px'}`,
+        `--bubble-min-width:${theme.minWidth || '0'}`,
+        `--bubble-min-height:${theme.minHeight || '0'}`,
         `--bubble-image:${theme.image || 'none'}`,
         `--bubble-image-size:${theme.imageSize || 'cover'}`,
         `--bubble-image-position:${theme.imagePosition || 'center'}`,
         `--bubble-image-repeat:${theme.imageRepeat || 'no-repeat'}`,
+        `--bubble-nine-source:${theme.nineSource || 'none'}`,
+        `--bubble-nine-slice:${theme.nineSlice || '0'}`,
+        `--bubble-nine-width:${theme.nineWidth || '1'}`,
+        `--bubble-nine-outset:${theme.nineOutset || '0'}`,
+        `--bubble-nine-repeat:${theme.nineRepeat || 'stretch'}`,
         `--bubble-bg:${theme.bg || 'transparent'}`,
     ].join(';');
 }

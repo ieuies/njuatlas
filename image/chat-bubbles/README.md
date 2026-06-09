@@ -4,9 +4,9 @@
 
 当前已接入的第一种样式：
 
-- 文件名：`nailong-style-1.png`
+- 文件名：`nailong-style-1.jpg`
 - 对应主题 ID：`nailong-style-1`
-- 预期路径：`image/chat-bubbles/nailong-style-1.png`
+- 预期路径：`image/chat-bubbles/nailong-style-1.jpg`
 
 建议图片尺寸：
 
