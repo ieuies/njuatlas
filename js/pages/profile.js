@@ -3,7 +3,7 @@
 // ================================================================
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts } from '../api.js';
-import { resendVerificationEmail, getUser, isLoggedIn, doLogout } from '../auth.js';
+import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
 import { showToast, escapeHtml, formatDate } from '../utils.js';
 
 let currentProfileTab = 'posts';
@@ -40,13 +40,16 @@ function ensureCropperLoaded() {
     return _cropperLoadPromise;
 }
 
-// 封面相关常量
+// 封面相关常量（全端统一 3:1）
+const COVER_ASPECT = 3 / 1;
+const COVER_EXPORT_WIDTH = 1500;
+const COVER_EXPORT_HEIGHT = 500;
 const COVER_PRESETS = [
-    'https://picsum.photos/id/104/1920/720',
-    'https://picsum.photos/id/15/1920/720',
-    'https://picsum.photos/id/96/1920/720',
-    'https://picsum.photos/id/42/1920/720',
-    'https://picsum.photos/id/29/1920/720',
+    'https://picsum.photos/id/104/1500/500',
+    'https://picsum.photos/id/15/1500/500',
+    'https://picsum.photos/id/96/1500/500',
+    'https://picsum.photos/id/42/1500/500',
+    'https://picsum.photos/id/29/1500/500',
 ];
 
 // 获取当前用户的封面存储 Key（用户隔离）
@@ -80,9 +83,7 @@ function saveCoverFromCropped(canvas) {
             reject(new Error('请先登录'));
             return;
         }
-        // 输出高清图片：宽度 1920px，高度 720px（保持 16:6 比例）
-        // 使用最高质量 JPEG（也可改为 PNG / WebP）
-        const base64 = canvas.toDataURL('image/jpeg', 1.0);
+        const base64 = canvas.toDataURL('image/jpeg', 0.92);
         localStorage.setItem(storageKey, base64);
         const coverDiv = document.getElementById('profileCover');
         if (coverDiv) coverDiv.style.backgroundImage = `url('${base64}')`;
@@ -109,16 +110,8 @@ function openCropModal(file) {
             img.src = e.target.result;
             img.onload = () => {
                 if (cropper) cropper.destroy();
-                // 获取封面容器实际宽高比（用于锁定裁剪比例）
-                const coverDiv = document.getElementById('profileCover');
-                const containerWidth = coverDiv.clientWidth;
-                const containerHeight = coverDiv.clientHeight;
-                let aspectRatio = 16 / 6; // 默认 2.6667
-                if (containerWidth && containerHeight) {
-                    aspectRatio = containerWidth / containerHeight;
-                }
                 cropper = new Cropper(img, {
-                    aspectRatio: aspectRatio,
+                    aspectRatio: COVER_ASPECT,
                     viewMode: 1,
                     dragMode: 'move',
                     cropBoxMovable: true,
@@ -138,10 +131,9 @@ function openCropModal(file) {
 
         const onConfirm = () => {
             if (cropper) {
-                // 高清输出：宽度 1920，高度按比例计算
                 const canvas = cropper.getCroppedCanvas({
-                    width: 1920,
-                    height: 720,
+                    width: COVER_EXPORT_WIDTH,
+                    height: COVER_EXPORT_HEIGHT,
                     imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high',
                 });
@@ -253,7 +245,7 @@ function renderAvatar(user) {
 
     avatarEls.forEach(el => {
         if (!el) return;
-        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:2rem;font-weight:800;color:#fff;background:${bg};border-radius:50%;">${initial}</span>`;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:2rem;font-weight:800;color:#fff;background:${bg};border-radius:inherit;">${initial}</span>`;
         el.style.background = bg;
     });
 }
@@ -276,7 +268,7 @@ async function loadAndRenderBio(force = false) {
 
 function _applyProfileBio(profile) {
     const bioEl = document.getElementById('profileBio');
-    if (bioEl && profile.bio) bioEl.innerText = profile.bio;
+    if (bioEl) bioEl.innerText = profile.bio || '这个人很懒，什么都没写...';
     const campusEl = document.getElementById('profileCampus');
     if (campusEl) campusEl.innerHTML = profile.campus ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(profile.campus)}校区` : '';
 
@@ -313,12 +305,28 @@ function initProfileTabs() {
     });
 }
 
-function switchProfileTab(tabId) {
-    currentProfileTab = tabId;
+function syncProfileTabUI(tabId) {
     document.querySelectorAll('.profile-tab').forEach(t => {
         t.classList.toggle('active', t.getAttribute('data-profile-tab') === tabId);
     });
+    document.querySelectorAll('.profile-stat-item[data-profile-tab]').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-profile-tab') === tabId);
+    });
+}
+
+function switchProfileTab(tabId) {
+    currentProfileTab = tabId;
+    syncProfileTabUI(tabId);
     loadProfileTabContent(tabId);
+}
+
+function initProfileStatJump() {
+    document.querySelectorAll('.profile-stat-item[data-profile-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-profile-tab');
+            if (tabId) switchProfileTab(tabId);
+        });
+    });
 }
 
 async function loadProfileTabContent(tabId) {
@@ -591,7 +599,7 @@ function initEditProfile() {
         saveBtn.disabled = true;
         saveBtn.innerText = '保存中...';
         try {
-            await updateMyProfile({ username, bio, campus, tags });
+            const profile = await updateMyProfile({ username, bio, campus, tags });
             if (newPwd) {
                 if (!oldPwd) { showToast('请输入当前密码以修改密码'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
                 if (newPwd.length < 8) { showToast('新密码至少 8 位'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
@@ -601,15 +609,11 @@ function initEditProfile() {
                 showToast('资料已更新');
             }
             modal.style.display = 'none';
-            if (username) document.getElementById('profileUsername').innerText = username;
-            if (bio) document.getElementById('profileBio').innerText = bio;
-            const user = getUser();
-            if (user && campus !== undefined) {
-                user.campus = campus;
-                localStorage.setItem('current_user', JSON.stringify(user));
-            }
-            _profileBioCache = null;
-            loadAndRenderBio(true);
+            updateUserFromLogin(profile);
+            _profileBioCache = profile;
+            renderProfileHeader();
+            _applyProfileBio(profile);
+            if (typeof window.updateNavBar === 'function') window.updateNavBar();
         } catch (err) {
             showToast(err.message || '保存失败');
         } finally {
@@ -647,12 +651,14 @@ export async function refreshProfile() {
     if (!isLoggedIn()) return;
     renderProfileHeader();
     loadProfileCover();
+    syncProfileTabUI(currentProfileTab);
     loadProfileTabContent(currentProfileTab);
 }
 
 // ========== 初始化入口 ==========
 export function initProfilePage() {
     initProfileTabs();
+    initProfileStatJump();
     initEditProfile();
     initCoverEditor();
     loadProfileCover();

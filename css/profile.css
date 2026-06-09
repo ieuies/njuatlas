@@ -6,21 +6,23 @@
     gap: 16px;
 }
 
-/* ========== 封面区域 ========== */
+/* ========== 封面区域（全端统一 3:1） ========== */
 .profile-cover-container {
     width: 100%;
     overflow: hidden;
-    border-radius: 18px 18px 0 0;
 }
 .profile-cover {
     position: relative;
     width: 100%;
-    height: 130px;
+    aspect-ratio: 3 / 1;
+    height: auto;
+    min-height: 88px;
     background-size: cover;
     background-position: center;
-    background-color: var(--atlas-purple-soft);
+    background-repeat: no-repeat;
+    background-color: var(--bg-tertiary);
     transition: background-image 0.2s;
-    border-radius: 18px 18px 0 0;
+    border-radius: calc(var(--btn-radius) - 1px) calc(var(--btn-radius) - 1px) 0 0;
 }
 .cover-edit-btn {
     position: absolute;
@@ -28,25 +30,27 @@
     right: 12px;
     width: 36px;
     height: 36px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(6px);
-    border: none;
-    color: white;
-    font-size: 1rem;
+    border-radius: var(--btn-radius);
+    background: var(--bg-primary);
+    border: 1.5px solid var(--btn-border);
+    color: var(--text-primary);
+    font-size: 0.9rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
     z-index: 5;
 }
 .cover-edit-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
-    transform: scale(1.05);
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
+}
+.cover-edit-btn i.fas {
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke: 0;
 }
 @media (max-width: 768px) {
-    .profile-cover { height: 100px; }
+    .profile-cover { min-height: 80px; }
     .cover-edit-btn {
         width: 32px;
         height: 32px;
@@ -56,34 +60,38 @@
     }
 }
 
-/* ========== 个人信息卡片 ========== */
+/* ========== 个人信息卡片（Scheme E） ========== */
 .profile-header-card {
     background: var(--atlas-card) !important;
-    border-radius: 18px;
-    padding: 24px 20px 16px;
-    box-shadow: var(--atlas-shadow);
-    backdrop-filter: blur(16px);
-    transition: background-color 0.3s;
+    border: 1px solid var(--btn-border);
+    border-radius: var(--btn-radius);
+    padding: 0 0 16px;
+    box-shadow: none;
+    overflow: hidden;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 .profile-header-top {
     display: flex;
     align-items: flex-start;
     gap: 18px;
     margin-bottom: 20px;
+    padding: 16px 20px 0;
 }
 .profile-avatar-lg {
     width: 80px;
     height: 80px;
     min-width: 80px;
-    border-radius: 50%;
+    border-radius: var(--btn-radius);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--gradient-primary);
-    color: #fff;
+    background: var(--bg-primary);
+    border: 2px solid var(--btn-border);
+    color: var(--text-primary);
     font-size: 2rem;
-    box-shadow: 0 16px 36px rgba(107,33,165,0.22);
+    box-shadow: none;
     overflow: hidden;
+    flex-shrink: 0;
 }
 .profile-avatar-lg img {
     width: 100%;
@@ -97,7 +105,8 @@
 .profile-name-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
     margin-bottom: 4px;
 }
 .profile-name-row h2 {
@@ -107,24 +116,31 @@
     color: var(--atlas-ink);
 }
 .profile-edit-btn {
-    width: 32px;
     height: 32px;
-    border-radius: 50%;
-    border: 1px solid var(--atlas-line);
-    background: var(--atlas-card);
-    color: var(--atlas-muted);
+    padding: 0 12px;
+    border-radius: var(--btn-radius);
+    border: 1.5px solid var(--btn-border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.8rem;
-    transition: all 0.2s;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: inherit;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 .profile-edit-btn:hover {
-    color: var(--atlas-purple);
-    border-color: var(--atlas-purple);
-    transform: scale(1.05);
+    color: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+    background: var(--bg-tertiary);
+}
+.profile-edit-btn i.fas {
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke: 0;
 }
 .profile-bio {
     margin: 4px 0;
@@ -170,6 +186,7 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
+        padding-top: 12px;
     }
     .profile-avatar-lg {
         width: 72px;
@@ -179,20 +196,42 @@
     .profile-name-row {
         justify-content: center;
     }
+    .profile-edit-btn {
+        margin-top: 2px;
+    }
 }
 
 /* ========== 统计卡片 ========== */
 .profile-stats-row {
     display: flex;
     justify-content: space-around;
-    padding-top: 16px;
-    border-top: 1px solid var(--atlas-line);
+    padding: 16px 12px 0;
+    margin: 0 8px;
+    border-top: 1px solid var(--btn-border);
 }
 .profile-stat-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: var(--btn-radius);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.profile-stat-item:hover {
+    background: var(--bg-tertiary);
+}
+.profile-stat-item.active .profile-stat-num,
+.profile-stat-item.active .profile-stat-label {
+    color: var(--btn-primary-bg);
+}
+.profile-stat-item.active {
+    box-shadow: inset 0 -2px 0 var(--btn-primary-bg);
 }
 .profile-stat-num {
     font-size: 1.2rem;
@@ -333,16 +372,27 @@
     flex-wrap: wrap;
 }
 .profile-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     text-align: center;
-    padding: 2rem;
+    padding: 2.5rem 1.5rem;
     color: var(--text-tertiary);
     font-size: 0.9rem;
 }
 .profile-empty-state i {
     font-size: 2rem;
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
     opacity: 0.5;
+}
+.profile-empty-state p {
+    margin: 0;
+    line-height: 1.5;
+}
+.profile-empty-state .primary-btn {
+    margin-top: 10px;
 }
 .profile-tag-chip {
     display: inline-block;
@@ -476,13 +526,30 @@
     color: var(--atlas-ink);
 }
 :root[data-theme="dark"] .profile-edit-btn {
-    background: var(--atlas-card);
-    border-color: var(--atlas-line);
-    color: var(--atlas-muted);
+    background: var(--bg-secondary);
+    border-color: var(--btn-border);
+    color: var(--text-primary);
 }
 :root[data-theme="dark"] .profile-edit-btn:hover {
-    color: var(--atlas-purple);
-    border-color: var(--atlas-purple);
+    color: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+    background: var(--bg-tertiary);
+}
+:root[data-theme="dark"] .cover-edit-btn {
+    background: var(--bg-primary);
+    border-color: var(--btn-border);
+    color: var(--text-primary);
+}
+:root[data-theme="dark"] .cover-edit-btn:hover {
+    border-color: var(--btn-primary-bg);
+    color: var(--btn-primary-bg);
+}
+:root[data-theme="dark"] .profile-stat-item:hover {
+    background: var(--bg-tertiary);
+}
+:root[data-theme="dark"] .profile-stat-item.active .profile-stat-num,
+:root[data-theme="dark"] .profile-stat-item.active .profile-stat-label {
+    color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .profile-bio {
     color: var(--text-secondary);
@@ -500,7 +567,7 @@
     color: var(--text-tertiary);
 }
 :root[data-theme="dark"] .profile-stats-row {
-    border-top-color: var(--atlas-line);
+    border-top-color: var(--btn-border);
 }
 :root[data-theme="dark"] .profile-tabs {
     background: transparent;

@@ -22,6 +22,10 @@ export function loadAmapScript() {
     const existing = document.querySelector('script[data-amap-loader="true"]');
     if (existing) {
         return new Promise((resolve, reject) => {
+            if (window.AMap) {
+                resolve(window.AMap);
+                return;
+            }
             existing.addEventListener('load', () => resolve(window.AMap));
             existing.addEventListener('error', reject);
         });
@@ -42,4 +46,18 @@ export function loadAmapScript() {
         script.onerror = reject;
         document.head.appendChild(script);
     });
+}
+
+let _amapPrefetchPromise = null;
+
+/** 首页空闲时预加载高德 JS SDK，进入找搭子/地图页时可直接复用 */
+export function prefetchAmapScript() {
+    if (window.AMap) return Promise.resolve(window.AMap);
+    if (_amapPrefetchPromise) return _amapPrefetchPromise;
+    _amapPrefetchPromise = loadAmapScript().catch((err) => {
+        _amapPrefetchPromise = null;
+        console.warn('高德地图预加载失败:', err.message);
+        return null;
+    });
+    return _amapPrefetchPromise;
 }

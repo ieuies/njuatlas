@@ -197,7 +197,7 @@
                             <div class="profile-header-info">
                                 <div class="profile-name-row">
                                     <h2 id="profileUsername">个人中心</h2>
-                                    <button id="editProfileBtn" class="profile-edit-btn" title="编辑资料"><i class="fas fa-pen"></i></button>
+                                    <button id="editProfileBtn" class="profile-edit-btn" type="button" title="编辑资料"><i class="fas fa-pen"></i> 编辑资料</button>
                                 </div>
                                 <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
                                 <div class="profile-tags-wrapper" id="profileTags" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0 4px;"></div>
@@ -210,10 +210,18 @@
                             </div>
                         </div>
                         <div class="profile-stats-row" id="profileStatsRow">
-                            <div class="profile-stat-item"><span class="profile-stat-num" id="postCount">0</span><span class="profile-stat-label">发布</span></div>
-                            <div class="profile-stat-item"><span class="profile-stat-num" id="likeReceivedCount">0</span><span class="profile-stat-label">获赞</span></div>
-                            <div class="profile-stat-item"><span class="profile-stat-num" id="commentMadeCount">0</span><span class="profile-stat-label">评论</span></div>
-                            <div class="profile-stat-item"><span class="profile-stat-num" id="favoriteCount2">0</span><span class="profile-stat-label">收藏</span></div>
+                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看我发布的">
+                                <span class="profile-stat-num" id="postCount">0</span><span class="profile-stat-label">发布</span>
+                            </button>
+                            <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看我发布的">
+                                <span class="profile-stat-num" id="likeReceivedCount">0</span><span class="profile-stat-label">获赞</span>
+                            </button>
+                            <button type="button" class="profile-stat-item" data-profile-tab="comments" aria-label="查看我的评论">
+                                <span class="profile-stat-num" id="commentMadeCount">0</span><span class="profile-stat-label">评论</span>
+                            </button>
+                            <button type="button" class="profile-stat-item" data-profile-tab="favorites" aria-label="查看我的收藏">
+                                <span class="profile-stat-num" id="favoriteCount2">0</span><span class="profile-stat-label">收藏</span>
+                            </button>
                         </div>
                     </section>
                     <nav class="profile-tabs" id="profileTabs">
@@ -241,7 +249,7 @@
                         <button id="cropConfirmBtn" class="primary-btn">确认裁剪</button>
                         <button id="cropCancelBtn" class="secondary-btn">取消</button>
                     </div>
-                    <p class="crop-hint">拖拽或缩放图片，选择要显示的区域</p>
+                    <p class="crop-hint">拖拽或缩放图片，封面在所有设备上按 3:1 比例显示</p>
                 </div>
             </div>
         </div>

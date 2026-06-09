@@ -106,33 +106,39 @@
     align-items: center;
     gap: 6px;
     background: transparent;
-    padding: 4px 4px 4px 12px;
-    border-radius: var(--btn-radius);
-    border: 1.5px solid var(--btn-border);
+    padding: 0;
+    border: none;
     box-shadow: none;
 }
 .topbar-username {
-    font-weight: 600;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    max-width: 80px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--atlas-muted);
+    max-width: 72px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
+    line-height: 1;
+}
+.topbar-username:hover {
+    color: var(--btn-primary-bg);
 }
 .logout-btn {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
     border-radius: var(--btn-radius);
     border: 1.5px solid var(--btn-border);
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.72rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
 }
 .logout-btn i.fas {
     -webkit-text-fill-color: currentColor;
@@ -222,6 +228,9 @@
     min-height: 44px;
     border-radius: var(--btn-radius);
 }
+.topbar-user .logout-btn {
+    min-height: 28px;
+}
 .login-round-btn {
     width: auto;
     height: 44px;
@@ -288,9 +297,12 @@
 }
 :root[data-theme="dark"] .topbar-user {
     background: transparent;
-    border-color: var(--btn-border);
+    border: none;
 }
 :root[data-theme="dark"] .topbar-username {
+    color: var(--atlas-muted);
+}
+:root[data-theme="dark"] .topbar-username:hover {
     color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .logout-btn {
@@ -363,6 +375,26 @@
         z-index: 1;
     }
     .bottom-tab-bar { display: none !important; }
+    .topbar-user {
+        align-self: stretch;
+        height: 100%;
+        padding-bottom: 1px;
+    }
+    .topbar-username {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        max-width: 80px;
+        font-size: 0.88rem;
+    }
+    .topbar-user .logout-btn {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+        flex-shrink: 0;
+        align-self: center;
+    }
 }
 
 /* ========== 移动端顶部栏调整 ========== */

@@ -29,6 +29,7 @@ let _guideCache = {};
 let _isRefreshing = false;
 let _randomOrder = false;   // 随机排序标志
 const CATEGORY_NAMES = Object.keys(CATEGORY_CONFIG);
+let _lastRenderKey = '';
 
 // ── 工具 ──
 function _getCampusLocation(campus) {
@@ -46,6 +47,35 @@ function _resolveCampus() {
 
 function _clearGuideCache() {
     _guideCache = {};
+    _lastRenderKey = '';
+}
+
+function _renderKey(campus, cat, items) {
+    const names = (items || []).map(i => `${i.name}:${i.type}`).join('\0');
+    return `${campus}\x1f${cat}\x1f${names}`;
+}
+
+function _setPrefetchHint(visible) {
+    const container = document.getElementById('guideGrid');
+    if (!container) return;
+    let hint = container.querySelector('.guide-prefetch-hint');
+    if (visible) {
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'guide-prefetch-hint';
+            hint.textContent = '正在加载更多推荐…';
+            container.appendChild(hint);
+        }
+        hint.hidden = false;
+    } else if (hint) {
+        hint.remove();
+    }
+}
+
+function _isPrefetchComplete(campus) {
+    const cache = _guideCache[campus];
+    if (!cache) return true;
+    return CATEGORY_NAMES.every(cat => cache.cats[cat] !== undefined);
 }
 
 function _ensureCampusCache(campus) {
@@ -153,13 +183,22 @@ async function _loadCategory(campus, cat, gen) {
     return cache._inflight[cat];
 }
 
-function _maybeRender(campus, gen) {
+function _maybeRender(campus, gen, { force = false } = {}) {
     if (_resolveCampus() !== campus) return;
     const cache = _guideCache[campus];
     if (!cache || cache.gen !== gen) return;
 
     const items = _getDisplayItems(campus, currentGuideCat);
-    if (items !== null) renderGuideGrid(items);
+    if (items === null) return;
+
+    const key = _renderKey(campus, currentGuideCat, items);
+    if (!force && key === _lastRenderKey) return;
+
+    renderGuideGrid(items, { campus, cat: currentGuideCat, renderKey: key });
+
+    if (_isPrefetchComplete(campus)) {
+        _setPrefetchHint(false);
+    }
 }
 
 function _kickPrefetch(campus) {
@@ -173,14 +212,22 @@ function _kickPrefetch(campus) {
     if (remaining.length === 0) return;
 
     cache.prefetching = true;
+    if (currentGuideCat === 'all' && _resolveCampus() === campus) {
+        _setPrefetchHint(true);
+    }
     (async () => {
         for (const cat of remaining) {
             if (_guideCache[campus]?.gen !== gen) break;
             await _loadCategory(campus, cat, gen);
-            _maybeRender(campus, gen);
+            // 预加载过程中不重绘列表，避免卡片不断重排闪烁
         }
         if (_guideCache[campus]?.gen === gen) {
             _guideCache[campus].prefetching = false;
+            if (currentGuideCat === 'all' && _resolveCampus() === campus) {
+                _maybeRender(campus, gen, { force: true });
+            } else {
+                _setPrefetchHint(false);
+            }
         }
     })();
 }
@@ -201,18 +248,25 @@ async function _searchPlacesQuiet(keyword, city, location, page, pageSize, radiu
 }
 
 // ── 渲染 ──
-function renderGuideGrid(items) {
+function renderGuideGrid(items, meta = {}) {
     const container = document.getElementById('guideGrid');
     if (!container) return;
 
     if (!items || items.length === 0) {
+        _lastRenderKey = '';
         container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
         return;
     }
 
+    const campus = meta.campus ?? _resolveCampus();
+    const cat = meta.cat ?? currentGuideCat;
+    const renderKey = meta.renderKey ?? _renderKey(campus, cat, items);
+    if (renderKey === _lastRenderKey) return;
+    _lastRenderKey = renderKey;
+
     container.innerHTML = items.map((item, idx) => `
-        <div class="guide-card" data-guide-idx="${idx}">
-            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy">
+        <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
+            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy" decoding="async">
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
@@ -231,7 +285,7 @@ function renderGuideGrid(items) {
 
     container.querySelectorAll('.guide-card').forEach(card => {
         card.addEventListener('click', () => {
-            const idx = parseInt(card.getAttribute('data-guide-idx'));
+            const idx = parseInt(card.getAttribute('data-guide-idx'), 10);
             openGuideDetail(items[idx]);
         });
     });
@@ -248,11 +302,13 @@ async function _applyGuideFilters(force = false) {
         c.cats = {};
         c._inflight = {};
         c.prefetching = false;
+        _lastRenderKey = '';
+        _setPrefetchHint(false);
     }
 
     const cached = _getDisplayItems(campus, currentGuideCat);
     if (!force && cached !== null) {
-        renderGuideGrid(cached);
+        renderGuideGrid(cached, { campus, cat: currentGuideCat });
         _kickPrefetch(campus);
         return;
     }
@@ -271,8 +327,9 @@ async function _applyGuideFilters(force = false) {
 
     const items = _getDisplayItems(campus, currentGuideCat);
     if (items !== null) {
-        renderGuideGrid(items);
+        renderGuideGrid(items, { campus, cat: currentGuideCat });
     } else if (container) {
+        _lastRenderKey = '';
         container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
     }
 
@@ -311,7 +368,8 @@ export async function refreshGuideData() {
 
 function filterGuideItems(cat) {
     currentGuideCat = cat;
-    _randomOrder = false;   // 切换分类后恢复按评分排序
+    _randomOrder = false;
+    _lastRenderKey = '';
     document.querySelectorAll('#guideFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === cat);
     });
@@ -320,7 +378,8 @@ function filterGuideItems(cat) {
 
 function _filterGuideCampus(campus) {
     currentGuideCampus = campus;
-    _randomOrder = false;   // 切换校区后恢复按评分排序
+    _randomOrder = false;
+    _lastRenderKey = '';
     document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === campus);
     });

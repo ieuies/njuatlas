@@ -1,6 +1,7 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
 import { showToast } from './utils.js';
 import { showHomePage } from './pages/home.js';
+import { prefetchAmapScript } from './config.js';
 
 // ── 动态加载 CSS（避免重复加载）────────────────────────────────
 const loadedStyles = new Set();
@@ -91,6 +92,8 @@ function prefetchCommonAssets() {
         if (window.requestIdleCallback) window.requestIdleCallback(cb, { timeout: 4000 });
         else setTimeout(cb, 1200);
     };
+    // 首页展示后尽早拉高德 SDK（与首屏渲染错开约 0.5s，避免抢带宽）
+    setTimeout(() => prefetchAmapScript(), 500);
     run(() => {
         ['css/partner.css', 'css/guide.css', 'css/profile.css', 'css/components.css', 'css/ai.css']
             .forEach((href) => loadStyle(href));
@@ -98,6 +101,7 @@ function prefetchCommonAssets() {
         _loadGuide();
         _loadProfile();
         _loadAI();
+        prefetchAmapScript();
     });
 }
 
