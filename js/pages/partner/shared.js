@@ -1,0 +1,144 @@
+import { formatDate, escapeHtml, wgs84ToGcj02 } from '../../utils.js';
+import { getUser } from '../../auth.js';
+
+export const PAGE_SIZE = 20;
+
+/** 跨模块共享可变状态（import 的 let 绑定在其它模块里只读，须用对象属性） */
+export const partnerStore = {
+    allPartnersData: [],
+    partnersData: [],
+    currentCategory: 'all',
+    currentPage: 1,
+    hasMore: true,
+    isLoading: false,
+    modalDuration: 'short',
+    modalUrgency: 'now',
+    modalLocationCoords: null,
+    partnerDataLoaded: false,
+    partnerPageInitialized: false,
+    currentMapParent: null,
+};
+
+// 校区坐标映射（WGS-84 → 高德 GCJ-02 转换前）
+const CAMPUS_COORDS = {
+    '鼓楼': [118.780, 32.058],
+    '仙林': [118.954, 32.114],
+    '浦口': [118.652, 32.157],
+    '苏州': [120.385, 31.355],
+};
+export function getMapCenter() {
+    const user = getUser();
+    const campus = user?.campus || '';
+    const coords = CAMPUS_COORDS[campus];
+    if (coords) return wgs84ToGcj02(coords[0], coords[1]);
+    // 默认：鼓楼校区
+    return wgs84ToGcj02(118.780, 32.058);
+}
+
+// 动态分类颜色（根据标签名生成 HSL 色相）
+const categoryColorCache = {};
+export function categoryStyle(cat) {
+    if (!cat) return { color: '#999', icon: '', tagClass: 'tag-default' };
+    if (!categoryColorCache[cat]) {
+        const hue = [...cat].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+        categoryColorCache[cat] = {
+            color: `hsl(${hue}, 65%, 50%)`,
+            icon: '',
+            tagClass: 'tag-dynamic',
+        };
+    }
+    return categoryColorCache[cat];
+}
+
+const TYPE_ICONS = {
+    '饭搭子': 'fa-utensils',
+    '运动搭子': 'fa-futbol',
+    '学习搭子': 'fa-book',
+    '游戏搭子': 'fa-gamepad',
+    '电影搭子': 'fa-film',
+    '旅游搭子': 'fa-plane',
+    '音乐搭子': 'fa-music',
+    '摄影搭子': 'fa-camera',
+};
+export function typeIcon(category) {
+    return TYPE_ICONS[category] || 'fa-user-group';
+}
+export function typeLabel(post) {
+    const icon = typeIcon(post.category);
+    const suffix = post.type === 'event' ? '活动组局' : '长期招募';
+    return `<i class="fas ${icon}" aria-hidden="true"></i> ${suffix}`;
+}
+export function categoryChipHtml(c) {
+    const icon = c.icon ? `<i class="fas ${c.icon}" aria-hidden="true"></i> ` : '';
+    return `${icon}${escapeHtml(c.label)}`;
+}
+
+export function isCurrentUserOwner(item) {
+    const user = getUser();
+    if (!item || !user) return Boolean(item?.is_owner);
+    const currentId = user.id ?? user.user_id;
+    const ownerId = item.user_id ?? item.author_id ?? item.owner_id ?? item.user?.id;
+    return Boolean(item.is_owner || (currentId != null && ownerId != null && String(currentId) === String(ownerId)));
+}
+
+/** 将后端帖子格式映射为前端卡片和地图所需的字段 */
+export function mapPost(p) {
+    return {
+        id: p.id,
+        type: p.type,
+        category: (p.tags && p.tags.length > 0) ? p.tags[0] : '其他',
+        tags: p.tags || [],
+        title: p.title,
+        description: p.content,
+        location: p.location_name || '',
+        lnglat: p.location ? p.location.split(',').map(Number) : null,
+        urgency: p.urgency || null,
+        time: formatPostTime(p.event_time, p.urgency),
+        publisher: p.username || '匿名同学',
+        publisherId: p.user_id,
+        members: p.participant_count || 0,
+        slots: p.max_participants || 1,
+        budget: p.budget || '',
+        contact: p.contact || '',
+        views: p.view_count || 0,
+        likeCount: p.like_count || 0,
+        commentCount: p.comment_count || 0,
+        hotScore: p.hot_score || 0,
+        isLiked: p.is_liked || false,
+        isOwner: isCurrentUserOwner(p),
+        participationStatus: p.participation_status,
+        createdAt: formatDate(p.created_at),
+        nearby: '',
+    };
+}
+
+export function formatPostTime(iso, urgency) {
+    if (urgency === 'now') return '立即';
+    if (urgency === 'long_term') return '长期有效';
+    if (!iso) return urgency === 'scheduled' ? '已设定' : '';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffDays = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+    const time = d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', weekday: 'short' });
+    if (diffDays === 0) return `今天 ${time.split(' ')[1] || ''}`;
+    if (diffDays === 1) return `明天 ${time.split(' ')[1] || ''}`;
+    return time;
+}
+
+// ============================================================
+// 工具函数
+// ============================================================
+export function safeHtmlWithBreaks(str) {
+    if (!str) return '';
+    let safe = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    safe = safe.replace(/\n/g, '<br>');
+    return safe;
+}
+
+export function debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
