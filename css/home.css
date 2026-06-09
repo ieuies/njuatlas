@@ -4,6 +4,8 @@
 #homePage,
 #homePage.active-page {
     position: relative;
+    width: 100%;
+    max-width: none;
     min-height: calc(100vh - var(--atlas-topbar));
     padding-bottom: var(--atlas-bottombar);
     background: linear-gradient(180deg, #fefdfe 0%, #f8f6fa 30%, #f3eff8 100%) !important;

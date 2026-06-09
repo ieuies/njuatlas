@@ -373,6 +373,8 @@
 @media (max-width: 768px) {
     .profile-stats-row {
         justify-content: space-around;
+        margin: 0;
+        padding: 16px 0 0;
     }
 }
 

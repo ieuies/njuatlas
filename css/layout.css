@@ -5,8 +5,8 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: 100%;
     overflow-x: hidden;
     background: var(--bg-secondary);
     position: relative;
@@ -27,6 +27,9 @@
     /* 必须显式锁定横向：否则 overflow-y:auto 会让 overflow-x 计算为 auto，
        导致移动端页面可被左右拖动（应只占满宽度、仅纵向滚动）。 */
     overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .page { display: none; }
@@ -45,12 +48,22 @@
     box-sizing: border-box;
 }
 @media (max-width: 768px) {
+    .content-area {
+        padding: 0 12px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
     #partnerPage,
     #guidePage,
     #profilePage,
     #messagesPage {
-        width: calc(100% - 24px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
         padding-bottom: calc(92px + var(--atlas-bottombar)) !important;
+        box-sizing: border-box;
     }
 }
 

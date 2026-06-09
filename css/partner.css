@@ -140,8 +140,8 @@
 /* 移动端隐藏箭头，纯手势滑动 */
 @media (max-width: 768px) {
     .filter-slider-container {
-        padding: 6px 36px;
-        margin: 8px 12px 0;
+        padding: 6px 12px;
+        margin: 8px 0 0;
         border-radius: 14px;
     }
     .partner-filter .filter-chip {
@@ -233,7 +233,8 @@
         display: flex !important;
         flex-direction: column;
         gap: 12px;
-        width: calc(100% - 24px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
         padding-bottom: calc(92px + var(--atlas-bottombar)) !important;
         overflow: visible;
     }
@@ -250,7 +251,7 @@
         align-content: start;
     }
     .map-preview-card {
-        margin: 8px 12px 0 !important;
+        margin: 8px 0 0 !important;
         border-radius: 14px !important;
         display: none !important;
     }

@@ -4,6 +4,8 @@
 #aiPage.active-page {
     display: flex !important;
     flex-direction: column !important;
+    width: 100%;
+    max-width: none;
     min-height: calc(100vh - var(--atlas-topbar)) !important;
     height: auto !important;
     overflow: hidden !important;
