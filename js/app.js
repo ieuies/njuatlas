@@ -509,6 +509,23 @@ const LANDMARK_IMAGES = [
     'image/landmarks/tasiting.jpg',
     'image/landmarks/zhongshan.jpg',
     'image/landmarks/zifeng.jpg',
+    'image/landmarks/0F573FC47B8E432838292CDF2CBEF328.jpg',
+    'image/landmarks/07EC4E97F457822F1A177120B4DD25F3.jpg',
+    'image/landmarks/158A6F087F93C9903FE406A43F3A179C.jpg',
+    'image/landmarks/1776F464136BB1052624D57921278A98.jpg',
+    'image/landmarks/2ACFC882AF5D19CE9593799A413703BC.jpg',
+    'image/landmarks/35CF800D4143452513194171D1479BF7.jpg',
+    'image/landmarks/54950325AF3B74D36536C532DD312460.jpg',
+    'image/landmarks/581348DD32242F4B2BDC160FD2F58D4C.jpg',
+    'image/landmarks/6964938EE4F355B2B1065C793BED9A8C.jpg',
+    'image/landmarks/6D02196D6DF66F353BD53217665DABF2.jpg',
+    'image/landmarks/9E2C7CF9030427707864BC6BE94E1BD0.jpg',
+    'image/landmarks/A89C319D390CDF45A7EE9434FDA59E76.jpg',
+    'image/landmarks/AA4F25364A0725373A65BC9C0FD39388.jpg',
+    'image/landmarks/B717DEC699F6403FA2C717EDDDA6B792.jpg',
+    'image/landmarks/C6AF4B76DA0FF5B80515F648B1E73B32.jpg',
+    'image/landmarks/CB11DD0C43F6F197B8BEF09CBD94374D.jpg',
+    'image/landmarks/F62CA83D2424AA058D1C72E8406CFC64.jpg',
 ];
 
 // ========== 移动端首页图片网格（6×7） ==========

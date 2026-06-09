@@ -1,6 +1,6 @@
 import { escapeHtml } from '../../utils.js';
-import { categoryChipHtml } from './shared.js';
-import { switchCategory } from './list.js';
+import { categoryChipHtml, debounce } from './shared.js';
+import { switchCategory, switchSearch } from './list.js';
 
 // ============================================================
 // 分类筛选（固定分类，动态生成）
@@ -36,6 +36,42 @@ export function initFilters() {
     });
 
     setupCategoryScrollArrows();
+}
+
+export function initPartnerSearch() {
+    const input = document.getElementById('partnerSearchInput');
+    const clearBtn = document.getElementById('partnerSearchClear');
+    if (!input || input.dataset.bound === 'true') return;
+    input.dataset.bound = 'true';
+
+    const syncClear = () => {
+        if (clearBtn) clearBtn.hidden = !input.value.trim();
+    };
+
+    const runSearch = debounce(() => {
+        switchSearch(input.value);
+    }, 320);
+
+    input.addEventListener('input', () => {
+        syncClear();
+        runSearch();
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            switchSearch(input.value);
+        }
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        input.value = '';
+        syncClear();
+        switchSearch('');
+        input.focus();
+    });
+
+    syncClear();
 }
 
 export function setupCategoryScrollArrows() {

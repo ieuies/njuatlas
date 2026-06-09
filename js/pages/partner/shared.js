@@ -8,6 +8,7 @@ export const partnerStore = {
     allPartnersData: [],
     partnersData: [],
     currentCategory: 'all',
+    searchQuery: '',
     currentPage: 1,
     hasMore: true,
     isLoading: false,

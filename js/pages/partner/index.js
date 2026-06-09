@@ -6,7 +6,7 @@ import {
 } from './map.js';
 import { initPostDetailModal, openPostDetail } from './post-detail.js';
 import { initPartnerModal } from './partner-form.js';
-import { initFilters, setupCategoryScrollArrows } from './filters.js';
+import { initFilters, setupCategoryScrollArrows, initPartnerSearch } from './filters.js';
 
 // ============================================================
 // 页面入口 & 初始化
@@ -24,6 +24,7 @@ export async function loadPartnerData() {
     }
     partnerStore.partnerDataLoaded = true;
     initFilters();
+    initPartnerSearch();
     await loadPostsByPage(1, false);
     initPreviewMap();
 }
@@ -32,6 +33,7 @@ function ensureRightPanel() {
     const page = document.getElementById('partnerPage');
     if (!page) return;
 
+    const searchBar = page.querySelector('.partner-search-bar');
     const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
     if (!container || !waterfall) return;
@@ -40,12 +42,14 @@ function ensureRightPanel() {
     if (!panel) {
         panel = document.createElement('div');
         panel.className = 'partner-right-panel';
-        page.insertBefore(panel, container);
+        page.insertBefore(panel, searchBar || container);
+        if (searchBar) panel.appendChild(searchBar);
         panel.appendChild(container);
         panel.appendChild(waterfall);
         return;
     }
 
+    if (searchBar && searchBar.parentElement !== panel) panel.insertBefore(searchBar, panel.firstChild);
     if (container.parentElement !== panel) panel.appendChild(container);
     if (waterfall.parentElement !== panel) panel.appendChild(waterfall);
 }

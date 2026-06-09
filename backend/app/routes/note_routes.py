@@ -105,6 +105,7 @@ def list_posts():
     查询参数:
         ?type=event|forum      帖子类型
         ?tags=羽毛球,仙林      标签筛选（逗号分隔，AND 逻辑）
+        ?q=剧本杀              关键词搜索（标题/正文/地点/标签/发布者）
         ?place_id=1            关联指定场所
         ?user_id=1             只看某用户发的帖
         ?sort=hot|new|nearby   排序（默认 hot）
@@ -114,6 +115,11 @@ def list_posts():
     post_type = clean_string(request.args.get("type"), "type", max_length=20)
     tags_raw = request.args.get("tags", "")
     tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else None
+
+    keyword_raw = request.args.get("q") or request.args.get("keyword")
+    keyword = clean_string(keyword_raw, "q", required=False, min_length=1, max_length=50) if keyword_raw else None
+    if keyword == "":
+        keyword = None
 
     place_id = request.args.get("place_id", type=int)
     user_id = request.args.get("user_id", type=int)
@@ -140,6 +146,7 @@ def list_posts():
         user_id=user_id,
         page=page,
         page_size=page_size,
+        keyword=keyword,
     )
     return jsonify(result)
 
