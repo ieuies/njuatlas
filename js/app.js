@@ -4,6 +4,12 @@ import { getUnreadCounts } from './api.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 
+const HOME_INTRO_FIRST_LAYER_MS = 950;
+/** 第三层 delay(240ms) + 动画(650ms) + 缓冲 */
+const HOME_INTRO_CARD_DELAY_MS = 980;
+
+const HOME_INTRO_DONE_ANIMS = new Set(['homeLayerSlideIn', 'homeLayerFirstFade']);
+
 // ── 动态加载 CSS（避免重复加载）────────────────────────────────
 const loadedStyles = new Set();
 
@@ -145,7 +151,15 @@ async function switchPage(pageId) {
     const targetId = pageMap[pageId];
     if (targetId) {
         const target = document.getElementById(targetId);
-        if (target) target.classList.add('active-page');
+        if (target) {
+            if (pageId === 'home') {
+                target.classList.add('home-intro');
+                target.querySelectorAll('.home-intro-layer').forEach((el) => {
+                    el.classList.remove('is-in', 'home-intro-layer--done');
+                });
+            }
+            target.classList.add('active-page');
+        }
     }
 
     const titleEl = document.getElementById('pageTitle');
@@ -210,7 +224,7 @@ async function switchPage(pageId) {
     }
 
     if (pageId === 'home') {
-        window._resumeHomeParticles?.();
+        playHomeIntro();
     } else {
         window._pauseHomeParticles?.();
     }
@@ -521,6 +535,67 @@ function initMobileGrid() {
     grid.appendChild(frag);
 }
 
+// ========== 首页分层入场（每次进入首页） ==========
+function replayHomeCardsEnter(introDelay) {
+    const grid = document.getElementById('homeCardGrid');
+    if (!grid || grid.dataset.ready !== 'true') return;
+
+    const cards = Array.from(grid.querySelectorAll('.home-flip-card'));
+    cards.forEach((el) => el.classList.remove('enter'));
+    void grid.offsetWidth;
+
+    const STAGGER_MS = 30;
+    cards.forEach((el, idx) => {
+        setTimeout(() => el.classList.add('enter'), introDelay + idx * STAGGER_MS);
+    });
+}
+
+function playHomeIntro() {
+    const home = document.getElementById('homePage');
+    if (!home) return;
+
+    document.documentElement.classList.remove('home-intro-pending');
+    initMobileGrid();
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        home.classList.remove('home-intro');
+        home.querySelectorAll('.home-intro-layer').forEach((el) => {
+            el.classList.remove('is-in', 'home-intro-layer--done');
+        });
+        window._resumeHomeParticles?.();
+        replayHomeCardsEnter(0);
+        return;
+    }
+
+    window._pauseHomeParticles?.();
+
+    home.classList.add('home-intro');
+    home.querySelectorAll('.home-intro-layer').forEach((el) => {
+        el.classList.remove('is-in', 'home-intro-layer--done');
+        delete el.dataset.introBound;
+    });
+    void home.offsetWidth;
+
+    const startIntro = () => {
+        home.querySelectorAll('.home-intro-layer').forEach((el) => el.classList.add('is-in'));
+
+        home.querySelectorAll('.home-intro-layer.is-in').forEach((el) => {
+            if (el.dataset.introBound) return;
+            el.dataset.introBound = '1';
+            el.addEventListener('animationend', (e) => {
+                if (e.target !== el || !HOME_INTRO_DONE_ANIMS.has(e.animationName)) return;
+                el.classList.add('home-intro-layer--done');
+            }, { once: true });
+        });
+
+        replayHomeCardsEnter(HOME_INTRO_CARD_DELAY_MS);
+    };
+
+    requestAnimationFrame(() => requestAnimationFrame(startIntro));
+
+    setTimeout(() => window._resumeHomeParticles?.(), HOME_INTRO_FIRST_LAYER_MS);
+}
+
 // ========== 首页卡片网格（9行等大错位 + 翻转） ==========
 function initHomeCards() {
     const grid = document.getElementById('homeCardGrid');
@@ -555,12 +630,10 @@ function initHomeCards() {
         const j = Math.floor(Math.random() * (i + 1));
         [cards[i], cards[j]] = [cards[j], cards[i]];
     }
-    // 更快的间隔：30ms，每个卡片动画时长由 CSS 控制
-    const STAGGER_MS = 30;
-    cards.forEach((el, idx) => {
-        const delay = idx * STAGGER_MS;
-        setTimeout(() => el.classList.add('enter'), delay);
-    });
+    // 卡片入场由 playHomeIntro / replayHomeCardsEnter 统一触发
+    if (document.getElementById('homePage')?.classList.contains('active-page')) {
+        replayHomeCardsEnter(HOME_INTRO_CARD_DELAY_MS);
+    }
 
     // 为每个卡片添加指针进入/离开逻辑：经过立即翻转，离开延迟翻回
     const MIN_VISIBLE_MS = 200; // 最小翻转可见时长
@@ -623,10 +696,10 @@ async function init() {
     initNavigation();
     initThemeToggle();
     initHomeParticles();
+    initMobileGrid();
     const deferHeavyHome = window.requestIdleCallback || ((cb) => setTimeout(cb, 0));
     deferHeavyHome(() => {
         initHomeCards();
-        initMobileGrid();
     });
     initFabButton();
     initMapExpand();

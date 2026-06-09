@@ -22,6 +22,10 @@
     <link rel="stylesheet" href="css/enhance.css">
 
     <script> window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {}; </script>
+    <!-- 首页分层入场：首屏绘制前标记，避免未动画层闪一下 -->
+    <script>
+    (function () { document.documentElement.classList.add('home-intro-pending'); })();
+    </script>
     <script type="text/javascript">
         window._AMapSecurityConfig = { securityJsCode: "367ebc1de103bfdca104452e48447318" };
     </script>
@@ -65,9 +69,9 @@
             <!-- 首页 -->
             <div id="homePage" class="page active-page">
                 <canvas class="home-particles" id="homeParticleCanvas" aria-hidden="true"></canvas>
-                <div class="home-mobile-grid" id="homeMobileGrid"></div>
-                <div class="home-hero" id="homeHero">
-                    <div class="home-brand">
+                <div class="home-mobile-grid home-intro-layer" id="homeMobileGrid"></div>
+                <div class="home-hero home-intro-layer" id="homeHero">
+                    <div class="home-brand home-intro-layer">
                         <div class="home-brand-inner">
                             <p class="home-brand-kicker">NANJING UNIVERSITY</p>
                             <h1 class="home-brand-title"><span class="home-brand-logo" role="img" aria-label="NJUATLAS"></span></h1>
@@ -78,11 +82,11 @@
                             </div>
                         </div>
                     </div>
-                    <div class="home-card-area">
+                    <div class="home-card-area home-intro-layer">
                         <div class="home-card-grid" id="homeCardGrid"></div>
                     </div>
                 </div>
-                <div class="home-features">
+                <div class="home-features home-intro-layer">
                     <div class="home-feat-card" data-page="partner"><span class="home-feat-num">01</span><h3>找搭子</h3><p>按分类浏览饭搭子、运动搭子、学习搭子等，一键加入感兴趣的活动。</p></div>
                     <div class="home-feat-card" data-page="guide"><span class="home-feat-num">02</span><h3>吃喝玩乐</h3><p>收录南大周边餐饮、娱乐、学习场所，支持分类筛选与 AI 推荐。</p></div>
                     <div class="home-feat-card" data-page="profile"><span class="home-feat-num">03</span><h3>个人空间</h3><p>管理个人资料，查看发布的组局、评论、收藏与活动记录。</p></div>

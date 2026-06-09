@@ -243,6 +243,110 @@
     }
 }
 
+/* ========== 首次打开站点：分层左入淡入 ========== */
+#homePage {
+    --home-intro-slide: -52px;
+    --home-intro-slide-first: -120px;
+}
+
+html.home-intro-pending #homePage .home-intro-layer,
+#homePage.home-intro .home-intro-layer {
+    opacity: 0;
+    transform: translate3d(var(--home-intro-slide), 0, 0);
+}
+
+/* 第一层：更大位移 + 分段淡入，让浅入过程更明显 */
+html.home-intro-pending #homePage .home-mobile-grid.home-intro-layer,
+html.home-intro-pending #homePage .home-brand.home-intro-layer,
+#homePage.home-intro .home-mobile-grid.home-intro-layer,
+#homePage.home-intro .home-brand.home-intro-layer {
+    transform: translate3d(var(--home-intro-slide-first), 0, 0);
+}
+
+#homePage.home-intro .home-intro-layer.is-in {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    animation: homeLayerSlideIn 0.65s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+html.home-intro-pending #homePage .home-mobile-grid.is-in,
+#homePage.home-intro .home-mobile-grid.is-in,
+html.home-intro-pending #homePage .home-brand.is-in,
+#homePage.home-intro .home-brand.is-in {
+    animation:
+        homeLayerFirstMove 0.78s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+        homeLayerFirstFade 0.95s cubic-bezier(0.33, 0, 0.2, 1) forwards;
+}
+
+/* 动画结束后锁定最终态，避免移除 intro 类时回弹闪烁 */
+#homePage.home-intro .home-intro-layer.is-in.home-intro-layer--done {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    will-change: auto;
+}
+
+@keyframes homeLayerSlideIn {
+    from { opacity: 0; transform: translate3d(var(--home-intro-slide), 0, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* 位移与透明度分离：曲线插值更顺滑，淡入略慢于滑动 */
+@keyframes homeLayerFirstMove {
+    from { transform: translate3d(var(--home-intro-slide-first), 0, 0); }
+    to   { transform: translate3d(0, 0, 0); }
+}
+@keyframes homeLayerFirstFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* 移动端：图片网格 → Hero → 功能卡片 */
+@media (max-width: 768px) {
+    html.home-intro-pending #homePage .home-brand.home-intro-layer,
+    html.home-intro-pending #homePage .home-card-area.home-intro-layer,
+    #homePage.home-intro .home-brand.home-intro-layer,
+    #homePage.home-intro .home-card-area.home-intro-layer {
+        opacity: 1;
+        transform: none;
+        animation: none !important;
+    }
+    html.home-intro-pending #homePage .home-mobile-grid.is-in,
+    #homePage.home-intro .home-mobile-grid.is-in { animation-delay: 0ms; }
+    html.home-intro-pending #homePage .home-hero.is-in,
+    #homePage.home-intro .home-hero.is-in { animation-delay: 120ms; }
+    html.home-intro-pending #homePage .home-features.is-in,
+    #homePage.home-intro .home-features.is-in { animation-delay: 240ms; }
+}
+
+/* 桌面端：品牌区 → 卡片墙 → 功能卡片 */
+@media (min-width: 769px) {
+    html.home-intro-pending #homePage .home-mobile-grid.home-intro-layer,
+    html.home-intro-pending #homePage .home-hero.home-intro-layer,
+    #homePage.home-intro .home-mobile-grid.home-intro-layer,
+    #homePage.home-intro .home-hero.home-intro-layer {
+        opacity: 1;
+        transform: none;
+        animation: none !important;
+    }
+    html.home-intro-pending #homePage .home-brand.is-in,
+    #homePage.home-intro .home-brand.is-in { animation-delay: 0ms; }
+    html.home-intro-pending #homePage .home-card-area.is-in,
+    #homePage.home-intro .home-card-area.is-in { animation-delay: 120ms; }
+    html.home-intro-pending #homePage .home-features.is-in,
+    #homePage.home-intro .home-features.is-in { animation-delay: 240ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.home-intro-pending #homePage .home-intro-layer,
+    #homePage.home-intro .home-intro-layer,
+    #homePage.home-intro .home-intro-layer.is-in {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
 /* ========== 底部功能卡片（四列） ========== */
 .home-features {
     display: grid;

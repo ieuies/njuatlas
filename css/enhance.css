@@ -76,6 +76,10 @@ html ::-webkit-scrollbar-thumb:hover {
     .page.active-page { animation: none; }
     body, html { scroll-behavior: auto; }
 }
+/* 首页使用分层入场，禁用全页上浮避免结束时与层动画冲突闪烁 */
+html #homePage.active-page {
+    animation: none;
+}
 
 /* ========== 2. 按钮微交互 ========== */
 /* 主按钮：保留杂志感直角，叠加细腻的悬停浮起与按压反馈 */
