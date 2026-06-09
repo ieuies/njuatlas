@@ -61,7 +61,19 @@ def search_users():
     items = []
     for u in rows:
         brief = public_user_brief(u)
-        brief["friendship_status"] = friendship_status_for(g.current_user_id, u.id)
+        relation = get_friendship_between(g.current_user_id, u.id)
+        status = "none"
+        if relation:
+            if relation.status == "accepted":
+                status = "friends"
+            elif relation.status == "pending":
+                status = (
+                    "pending_sent"
+                    if relation.requester_id == g.current_user_id
+                    else "pending_received"
+                )
+                brief["friendship_request_id"] = relation.id
+        brief["friendship_status"] = status
         items.append(brief)
     return jsonify({"items": items})
 
@@ -104,6 +116,23 @@ def list_friend_requests():
             {
                 "id": row.id,
                 "requester": public_user_brief(row.requester),
+                "created_at": _dt(row.created_at),
+            }
+            for row in rows
+        ],
+    })
+
+
+@social_bp.route("/friends/requests/sent", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def list_sent_friend_requests():
+    rows = Friendship.query.filter_by(requester_id=g.current_user_id, status="pending").all()
+    return jsonify({
+        "items": [
+            {
+                "id": row.id,
+                "addressee": public_user_brief(row.addressee),
                 "created_at": _dt(row.created_at),
             }
             for row in rows
@@ -191,6 +220,18 @@ def reject_friend_request(request_id):
     row.status = "rejected"
     db.session.commit()
     return jsonify({"status": "rejected"})
+
+
+@social_bp.route("/friends/requests/<int:request_id>/cancel", methods=["POST"])
+@jwt_required
+@limiter.limit("30 per minute")
+def cancel_friend_request(request_id):
+    row = Friendship.query.get(request_id)
+    if not row or row.requester_id != g.current_user_id or row.status != "pending":
+        return error_response("请求不存在或已处理", 404, code="request_not_found")
+    row.status = "cancelled"
+    db.session.commit()
+    return jsonify({"status": "cancelled"})
 
 
 @social_bp.route("/friends/<int:user_id>", methods=["DELETE"])

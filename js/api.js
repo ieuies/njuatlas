@@ -198,6 +198,9 @@ export async function listFriends() {
 export async function listFriendRequests() {
     return request('/social/friends/requests', 'GET');
 }
+export async function listSentFriendRequests() {
+    return request('/social/friends/requests/sent', 'GET');
+}
 export async function sendFriendRequest(userId) {
     return request('/social/friends/request', 'POST', { user_id: userId });
 }
@@ -206,6 +209,9 @@ export async function acceptFriendRequest(requestId) {
 }
 export async function rejectFriendRequest(requestId) {
     return request(`/social/friends/requests/${requestId}/reject`, 'POST');
+}
+export async function cancelFriendRequest(requestId) {
+    return request(`/social/friends/requests/${requestId}/cancel`, 'POST');
 }
 export async function removeFriend(userId) {
     return request(`/social/friends/${userId}`, 'DELETE');

@@ -8,9 +8,12 @@ import {
     sendDmMessage,
     listFriends,
     listFriendRequests,
+    listSentFriendRequests,
     sendFriendRequest,
     acceptFriendRequest,
     rejectFriendRequest,
+    cancelFriendRequest,
+    removeFriend,
     searchUsers,
     listNotifications,
     markNotificationsRead,
@@ -34,6 +37,16 @@ function notifText(n) {
         case 'friend_accept': return `${name} 接受了你的好友请求`;
         default: return `${name} 与你互动了`;
     }
+}
+
+function notifActionHtml(n) {
+    if (n.type !== 'friend_request' || !n.friendship_id) return '';
+    return `
+        <div class="msg-notif-actions">
+            <button class="msg-mini-btn primary" data-accept="${n.friendship_id}" type="button">接受</button>
+            <button class="msg-mini-btn" data-reject="${n.friendship_id}" type="button">拒绝</button>
+        </div>
+    `;
 }
 
 function renderTabs() {
@@ -120,12 +133,14 @@ async function renderFriends() {
     if (!view) return;
     view.innerHTML = '<div class="profile-loading">加载中...</div>';
     try {
-        const [friendsData, reqData] = await Promise.all([
+        const [friendsData, reqData, sentReqData] = await Promise.all([
             listFriends(),
             listFriendRequests(),
+            listSentFriendRequests(),
         ]);
         const friends = friendsData.items || [];
         const requests = reqData.items || [];
+        const sentRequests = sentReqData.items || [];
 
         const requestRows = requests.map((r) => `
             <div class="msg-friend-item">
@@ -140,6 +155,18 @@ async function renderFriends() {
                 </div>
             </div>`).join('');
 
+        const sentRows = sentRequests.map((r) => `
+            <div class="msg-friend-item">
+                ${avatarHtmlForUser(r.addressee, 44)}
+                <div class="msg-friend-main">
+                    <span class="msg-friend-name">${escapeHtml(r.addressee?.username || '')}</span>
+                    <span class="msg-friend-bio">${escapeHtml(r.addressee?.campus ? r.addressee.campus + '校区' : '等待对方处理')}</span>
+                </div>
+                <div class="msg-friend-actions">
+                    <button class="msg-mini-btn" data-cancel-request="${r.id}" type="button">撤回</button>
+                </div>
+            </div>`).join('');
+
         const friendRows = friends.length ? friends.map((u) => `
             <div class="msg-friend-item">
                 ${avatarHtmlForUser(u, 44)}
@@ -150,6 +177,7 @@ async function renderFriends() {
                 <div class="msg-friend-actions">
                     <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> 发消息</button>
                     <button class="msg-mini-btn" data-view-user="${u.id}" type="button">主页</button>
+                    <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">删除好友</button>
                 </div>
             </div>`).join('') : `<div class="msg-empty-sm">还没有好友，搜索添加吧</div>`;
 
@@ -159,6 +187,7 @@ async function renderFriends() {
                 <button class="msg-mini-btn primary" id="msgAddBtn" type="button"><i class="fas fa-user-plus"></i> 添加</button>
             </div>
             <div id="msgAddResults" class="msg-add-results"></div>
+            ${sentRequests.length ? `<h4 class="msg-section-title">我发出的请求 (${sentRequests.length})</h4>${sentRows}` : ''}
             ${requests.length ? `<h4 class="msg-section-title">新的好友请求 (${requests.length})</h4>${requestRows}` : ''}
             <h4 class="msg-section-title">我的好友 (${friends.length})</h4>
             ${friendRows}`;
@@ -186,13 +215,55 @@ async function searchAndRender(q) {
                     <span class="msg-friend-name">${escapeHtml(u.username)}</span>
                     <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus || '')}</span>
                 </div>
-                ${u.friendship_status === 'friends' ? '<span class="msg-tag-friends">已是好友</span>'
+                ${u.friendship_status === 'friends' ? `
+                        <div class="msg-friend-actions">
+                            <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> 发消息</button>
+                            <button class="msg-mini-btn" data-view-user="${u.id}" type="button">主页</button>
+                            <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">删除好友</button>
+                        </div>`
+                    : u.friendship_status === 'pending_sent' && u.friendship_request_id ? `
+                        <div class="msg-friend-actions">
+                            <span class="msg-tag-pending">已申请</span>
+                            <button class="msg-mini-btn" data-cancel-request="${u.friendship_request_id}" type="button">撤回</button>
+                        </div>`
                     : u.friendship_status === 'pending_sent' ? '<span class="msg-tag-pending">已申请</span>'
+                    : u.friendship_status === 'pending_received' && u.friendship_request_id ? `
+                        <div class="msg-friend-actions">
+                            <button class="msg-mini-btn primary" data-accept="${u.friendship_request_id}" type="button">接受</button>
+                            <button class="msg-mini-btn" data-reject="${u.friendship_request_id}" type="button">拒绝</button>
+                        </div>`
+                    : u.friendship_status === 'pending_received' ? '<span class="msg-tag-pending">待你处理</span>'
                     : `<button class="msg-mini-btn primary" data-add="${u.id}" type="button">加好友</button>`}
             </div>`).join('');
     } catch (e) {
         view.innerHTML = `<div class="msg-empty-sm">搜索失败</div>`;
     }
+}
+
+async function refreshFriendsWithSearch() {
+    const keyword = document.getElementById('msgAddInput')?.value?.trim() || '';
+    await renderFriends();
+    if (!keyword) return;
+    const input = document.getElementById('msgAddInput');
+    if (input) input.value = keyword;
+    await searchAndRender(keyword);
+}
+
+function setNotifFriendRequestHandled(notifItem, text) {
+    if (!notifItem) return;
+    notifItem.classList.remove('unread');
+    notifItem.dataset.friendRequestHandled = '1';
+    const actions = notifItem.querySelector('.msg-notif-actions');
+    if (actions) {
+        actions.innerHTML = `<span class="msg-notif-handled">${text}</span>`;
+    }
+}
+
+function toggleNotifActionButtons(notifItem, disabled) {
+    if (!notifItem) return;
+    notifItem.querySelectorAll('.msg-notif-actions .msg-mini-btn').forEach((btn) => {
+        btn.disabled = disabled;
+    });
 }
 
 async function renderInteract() {
@@ -207,14 +278,15 @@ async function renderInteract() {
             return;
         }
         view.innerHTML = `<div class="msg-notif-list">${items.map((n) => `
-            <button class="msg-notif-item ${n.is_read ? '' : 'unread'}" data-notif="${n.id}" data-type="${n.type}" data-post="${n.post_id || ''}" data-friendship="${n.friendship_id || ''}" type="button">
+            <div class="msg-notif-item ${n.is_read ? '' : 'unread'}" data-notif="${n.id}" data-type="${n.type}" data-post="${n.post_id || ''}" data-friendship="${n.friendship_id || ''}" role="button" tabindex="0">
                 ${avatarHtmlForUser(n.actor, 40)}
                 <div class="msg-notif-main">
                     <div class="msg-notif-text">${escapeHtml(notifText(n))}</div>
                     ${n.post_title ? `<div class="msg-notif-sub">${escapeHtml(n.post_title)}</div>` : ''}
                     <div class="msg-notif-time">${fmtTime(n.created_at)}</div>
+                    ${notifActionHtml(n)}
                 </div>
-            </button>`).join('')}</div>`;
+            </div>`).join('')}</div>`;
         await markNotificationsRead();
         if (typeof window.refreshUnreadBadge === 'function') window.refreshUnreadBadge();
     } catch (e) {
@@ -264,30 +336,91 @@ function bindEvents() {
             window.openUserProfile(Number(viewUser.dataset.viewUser));
             return;
         }
+        const remove = e.target.closest('[data-remove-friend]');
+        if (remove) {
+            const userId = Number(remove.dataset.removeFriend);
+            if (!userId) return;
+            if (!window.confirm('确认删除该好友吗？删除后将无法继续私信。')) return;
+            try {
+                remove.disabled = true;
+                await removeFriend(userId);
+                showToast('已删除好友');
+                if (openChatPeerId === userId) {
+                    openChatPeerId = null;
+                    currentTab = 'friends';
+                    renderTabs();
+                }
+                await refreshFriendsWithSearch();
+            } catch (err) {
+                showToast(err.message);
+                remove.disabled = false;
+            }
+            return;
+        }
         const accept = e.target.closest('[data-accept]');
         if (accept) {
+            const notifItem = accept.closest('[data-notif]');
             try {
+                if (notifItem) toggleNotifActionButtons(notifItem, true);
+                else accept.disabled = true;
                 await acceptFriendRequest(Number(accept.dataset.accept));
                 showToast('已添加好友');
-                await renderFriends();
-            } catch (err) { showToast(err.message); }
+                if (notifItem) {
+                    setNotifFriendRequestHandled(notifItem, '已接受');
+                } else {
+                    await refreshFriendsWithSearch();
+                }
+            } catch (err) {
+                showToast(err.message);
+                if (notifItem) toggleNotifActionButtons(notifItem, false);
+                else accept.disabled = false;
+            }
             return;
         }
         const reject = e.target.closest('[data-reject]');
         if (reject) {
+            const notifItem = reject.closest('[data-notif]');
             try {
+                if (notifItem) toggleNotifActionButtons(notifItem, true);
+                else reject.disabled = true;
                 await rejectFriendRequest(Number(reject.dataset.reject));
-                await renderFriends();
-            } catch (err) { showToast(err.message); }
+                showToast('已拒绝好友请求');
+                if (notifItem) {
+                    setNotifFriendRequestHandled(notifItem, '已拒绝');
+                } else {
+                    await refreshFriendsWithSearch();
+                }
+            } catch (err) {
+                showToast(err.message);
+                if (notifItem) toggleNotifActionButtons(notifItem, false);
+                else reject.disabled = false;
+            }
             return;
         }
         const add = e.target.closest('[data-add]');
         if (add) {
             try {
+                add.disabled = true;
                 await sendFriendRequest(Number(add.dataset.add));
                 showToast('好友请求已发送');
-                await searchAndRender(document.getElementById('msgAddInput')?.value || '');
-            } catch (err) { showToast(err.message); }
+                await refreshFriendsWithSearch();
+            } catch (err) {
+                showToast(err.message);
+                add.disabled = false;
+            }
+            return;
+        }
+        const cancel = e.target.closest('[data-cancel-request]');
+        if (cancel) {
+            try {
+                cancel.disabled = true;
+                await cancelFriendRequest(Number(cancel.dataset.cancelRequest));
+                showToast('已撤回好友申请');
+                await refreshFriendsWithSearch();
+            } catch (err) {
+                showToast(err.message);
+                cancel.disabled = false;
+            }
             return;
         }
         if (e.target.closest('#msgAddBtn')) {
@@ -299,7 +432,7 @@ function bindEvents() {
             const postId = notif.dataset.post;
             if (postId && window.openPostDetail) {
                 window.openPostDetail(Number(postId));
-            } else if (notif.dataset.type === 'friend_request') {
+            } else if (notif.dataset.type === 'friend_request' && notif.dataset.friendRequestHandled !== '1') {
                 currentTab = 'friends';
                 openChatPeerId = null;
                 renderTabs();
@@ -313,6 +446,18 @@ function bindEvents() {
         if (e.target.id === 'msgAddInput') {
             clearTimeout(page._searchTimer);
             page._searchTimer = setTimeout(() => searchAndRender(e.target.value), 300);
+        }
+    });
+    page.addEventListener('keydown', async (e) => {
+        if (e.target.id === 'msgAddInput' && e.key === 'Enter') {
+            e.preventDefault();
+            await searchAndRender(e.target.value || '');
+            return;
+        }
+        const notifItem = e.target.closest?.('[data-notif]');
+        if (notifItem && !e.target.closest?.('.msg-mini-btn') && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            notifItem.click();
         }
     });
 
