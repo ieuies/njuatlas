@@ -19,6 +19,7 @@ import {
     markNotificationsRead,
 } from '../api.js';
 import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
+import { DEFAULT_BUBBLE_STYLE, bubbleThemeCssVars, normalizeBubbleStyle } from '../bubbleThemes.js';
 
 let currentTab = 'chats';
 let openChatPeerId = null;
@@ -26,6 +27,10 @@ let _bound = false;
 
 function fmtTime(iso) {
     return formatTimeBrief(iso);
+}
+
+function resolveSenderBubbleStyle(senderId, myUserId, myStyle, peerStyle) {
+    return Number(senderId) === Number(myUserId) ? myStyle : peerStyle;
 }
 
 function notifText(n) {
@@ -101,11 +106,15 @@ async function renderChatRoom(view, peerId) {
         const msgs = data.items || [];
         const conv = (await listDmConversations()).items?.find((c) => c.peer_id === peerId);
         if (conv?.peer) peer = conv.peer;
+        const me = getUser();
+        const myUserId = me?.id;
+        const myBubbleStyle = normalizeBubbleStyle(me?.bubble_style || DEFAULT_BUBBLE_STYLE);
+        const peerBubbleStyle = normalizeBubbleStyle(peer?.bubble_style || DEFAULT_BUBBLE_STYLE);
 
         const bubbles = msgs.map((m) => `
             <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}">
                 ${m.is_mine ? '' : avatarHtmlForUser(peer, 32)}
-                <div class="msg-bubble">${escapeHtml(m.content)}</div>
+                <div class="msg-bubble" style="${bubbleThemeCssVars(resolveSenderBubbleStyle(m.sender_id, myUserId, myBubbleStyle, peerBubbleStyle))}">${escapeHtml(m.content)}</div>
             </div>`).join('');
 
         view.innerHTML = `

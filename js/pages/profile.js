@@ -5,6 +5,7 @@
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
 import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser } from '../utils.js';
+import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
 
 let currentProfileTab = 'posts';
 let _profileBioCache = null;
@@ -123,6 +124,24 @@ const CROP_PRESETS = {
         successMsg: '头像已更新',
     },
 };
+
+function ensureBubbleStyleEditor() {
+    const campusSelect = document.getElementById('editCampus');
+    if (!campusSelect || document.getElementById('editBubbleStyle')) return;
+
+    const label = document.createElement('label');
+    label.setAttribute('for', 'editBubbleStyle');
+    label.innerText = '聊天气泡主题';
+
+    const select = document.createElement('select');
+    select.id = 'editBubbleStyle';
+    select.innerHTML = BUBBLE_THEME_PRESETS.map((item) => (
+        `<option value="${item.id}">${item.name}</option>`
+    )).join('');
+
+    campusSelect.insertAdjacentElement('afterend', select);
+    select.insertAdjacentElement('beforebegin', label);
+}
 
 // ========== 封面功能（高清裁剪） ==========
 let cropper = null;
@@ -562,10 +581,12 @@ function _applyProfileBio(profile) {
     const editBio = document.getElementById('editBio');
     const editTags = document.getElementById('editTags');
     const editCampus = document.getElementById('editCampus');
+    const editBubbleStyle = document.getElementById('editBubbleStyle');
     if (editUsername) editUsername.value = profile.username || '';
     if (editBio) editBio.value = profile.bio || '';
     if (editTags) editTags.value = (profile.tags || []).join(', ');
     if (editCampus) editCampus.value = profile.campus || '';
+    if (editBubbleStyle) editBubbleStyle.value = normalizeBubbleStyle(profile.bubble_style || DEFAULT_BUBBLE_STYLE);
 
     const tagsContainer = document.getElementById('profileTags');
     if (tagsContainer) {
@@ -865,12 +886,15 @@ function initEditProfile() {
         document.getElementById('editOldPassword').value = '';
         document.getElementById('editNewPassword').value = '';
         document.getElementById('deleteAccountPassword').value = '';
+        const bubbleSelect = document.getElementById('editBubbleStyle');
+        if (bubbleSelect) bubbleSelect.value = DEFAULT_BUBBLE_STYLE;
         try {
             const profile = await getMyProfile();
             document.getElementById('editUsername').value = profile.username || '';
             document.getElementById('editBio').value = profile.bio || '';
             document.getElementById('editTags').value = (profile.tags || []).join(', ');
             document.getElementById('editCampus').value = profile.campus || '';
+            if (bubbleSelect) bubbleSelect.value = normalizeBubbleStyle(profile.bubble_style || DEFAULT_BUBBLE_STYLE);
         } catch (e) { /* 使用默认值 */ }
         modal.style.display = 'flex';
     });
@@ -886,6 +910,7 @@ function initEditProfile() {
         const username = document.getElementById('editUsername').value.trim();
         const bio = document.getElementById('editBio').value.trim();
         const campus = document.getElementById('editCampus')?.value || '';
+        const bubbleStyle = normalizeBubbleStyle(document.getElementById('editBubbleStyle')?.value || DEFAULT_BUBBLE_STYLE);
         const tagsStr = document.getElementById('editTags').value.trim();
         const tags = tagsStr ? tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean) : [];
         const oldPwd = document.getElementById('editOldPassword').value;
@@ -896,7 +921,7 @@ function initEditProfile() {
         saveBtn.disabled = true;
         saveBtn.innerText = '保存中...';
         try {
-            const profile = await updateMyProfile({ username, bio, campus, tags });
+            const profile = await updateMyProfile({ username, bio, campus, tags, bubble_style: bubbleStyle });
             if (newPwd) {
                 if (!oldPwd) { showToast('请输入当前密码以修改密码'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
                 if (newPwd.length < 8) { showToast('新密码至少 8 位'); saveBtn.disabled = false; saveBtn.innerText = originalText; return; }
@@ -989,6 +1014,7 @@ export function resetProfileView() {
 
 // ========== 初始化入口 ==========
 export function initProfilePage() {
+    ensureBubbleStyleEditor();
     initProfileTabs();
     initProfileStatJump();
     initEditProfile();

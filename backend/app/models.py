@@ -25,6 +25,7 @@ class User(db.Model):
     campus = db.Column(db.String(20))           # 校区：鼓楼/仙林/浦口/苏州
     tags = db.Column(db.String(500))           # JSON 数组: '["川菜","羽毛球","王者"]'
     avatar_url = db.Column(db.String(500))     # 头像链接（预留）
+    bubble_style = db.Column(db.String(50), default="atlas-classic", nullable=False)  # 聊天气泡样式
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     reviews = db.relationship("Review", backref="user", lazy=True)

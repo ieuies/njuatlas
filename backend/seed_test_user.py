@@ -17,11 +17,13 @@ TEST_USERS = [
         "email": "nailong@njuatlas.local",
         "username": "奶龙",
         "password": "test1234",
+        "bubble_style": "nailong-style-1",
     },
     {
         "email": "naiwa@njuatlas.local",
         "username": "奶蛙",
         "password": "test1234",
+        "bubble_style": "atlas-ocean",
     },
 ]
 
@@ -61,12 +63,14 @@ with app.app_context():
         user.password_hash = generate_password_hash(cfg["password"])
         user.email_verified = True
         user.email_verified_at = datetime.now(timezone.utc)
+        user.bubble_style = cfg.get("bubble_style", "atlas-classic")
 
         db.session.flush()
         print(f"{action}测试账号:")
         print(f"  用户名: {user.username}")
         print(f"  邮箱: {user.email}")
         print(f"  密码: {cfg['password']}")
+        print(f"  气泡主题: {user.bubble_style}")
         print(f"  email_verified: {user.email_verified}")
         print(f"  id: {user.id}")
         print("-" * 36)

@@ -90,8 +90,8 @@ export async function deleteAccount(password) {
 export async function getMyProfile() {
     return request('/me/profile', 'GET');
 }
-export async function updateMyProfile({ username, bio, campus, tags } = {}) {
-    return request('/me/profile', 'PUT', { username, bio, campus, tags });
+export async function updateMyProfile({ username, bio, campus, tags, bubble_style } = {}) {
+    return request('/me/profile', 'PUT', { username, bio, campus, tags, bubble_style });
 }
 
 // ── 地图搜索 ──

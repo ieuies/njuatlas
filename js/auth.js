@@ -18,7 +18,8 @@ function readStoredUser() {
             email: payload.email || '',
             username: payload.email ? payload.email.split('@')[0] : '',
             email_verified: false,
-            campus: ''
+            campus: '',
+            bubble_style: 'atlas-classic',
         };
     } catch(e) {
         localStorage.removeItem('current_user');
@@ -40,6 +41,7 @@ function userFromAuthPayload(data, fallback = {}) {
         email_verified: Boolean(data.email_verified ?? fallback.email_verified),
         campus: data.campus ?? fallback.campus ?? '',
         avatar_url: data.avatar_url ?? fallback.avatar_url ?? '',
+        bubble_style: data.bubble_style ?? fallback.bubble_style ?? 'atlas-classic',
     };
 }
 

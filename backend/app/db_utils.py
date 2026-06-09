@@ -28,6 +28,21 @@ def ensure_user_auth_schema():
     if "email_verified_at" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN email_verified_at DATETIME"))
 
+    if "campus" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN campus VARCHAR(20)"))
+
+    if "bio" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN bio VARCHAR(300)"))
+
+    if "tags" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN tags VARCHAR(500)"))
+
+    if "avatar_url" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)"))
+
+    if "bubble_style" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN bubble_style VARCHAR(50) DEFAULT 'atlas-classic' NOT NULL"))
+
     db.session.execute(
         text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)")
     )

@@ -1,4 +1,5 @@
 from flask import Blueprint, current_app, g, jsonify, request
+import re
 
 from app import db
 from app.auth_utils import jwt_required
@@ -10,6 +11,14 @@ from app.validators import clean_string, get_json_body
 
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/me")
+BUBBLE_STYLE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,49}$")
+ALLOWED_BUBBLE_STYLES = {
+    "nailong-style-1",
+    "atlas-classic",
+    "atlas-ocean",
+    "atlas-sunset",
+    "atlas-ink",
+}
 
 
 def _dt(value):
@@ -146,6 +155,7 @@ def _profile_payload(user):
         "campus": user.campus or "",
         "tags": tags,
         "avatar_url": user.avatar_url or "",
+        "bubble_style": user.bubble_style or "atlas-classic",
         "created_at": _dt(user.created_at),
         "updated_at": _dt(user.updated_at),
     }
@@ -163,7 +173,7 @@ def get_profile():
 @jwt_required
 @limiter.limit("30 per minute")
 def update_profile():
-    """修改个人资料（username、bio、tags）。"""
+    """修改个人资料（username、bio、campus、tags、bubble_style）。"""
     import json
     data = get_json_body(request)
 
@@ -173,6 +183,13 @@ def update_profile():
     username = clean_string(data.get("username"), "username", max_length=50)
     bio = clean_string(data.get("bio"), "bio", max_length=300)
     tags_raw = data.get("tags")
+    bubble_style = clean_string(data.get("bubble_style"), "bubble_style", max_length=50)
+    if bubble_style is not None:
+        bubble_style = bubble_style or "atlas-classic"
+        if not BUBBLE_STYLE_RE.match(bubble_style):
+            return error_response("bubble_style 格式不合法", 400, code="invalid_bubble_style")
+        if bubble_style not in ALLOWED_BUBBLE_STYLES:
+            return error_response("bubble_style 不在可选范围内", 400, code="unsupported_bubble_style")
 
     user = g.current_user
 
@@ -197,6 +214,9 @@ def update_profile():
             if not isinstance(t, str) or len(t) > 20:
                 return error_response("每个标签最长 20 个字符", 400, code="invalid_tag")
         user.tags = json.dumps(tags_raw, ensure_ascii=False)
+
+    if bubble_style is not None:
+        user.bubble_style = bubble_style
 
     db.session.commit()
     log_event(
