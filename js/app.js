@@ -701,4 +701,14 @@ window.openChatWith = async (userId) => {
     mod.openChatWith(userId);
 };
 
+window.openMessagesTab = async (tabId) => {
+    const mod = await _loadMessages();
+    if (!_messagesPageInited) {
+        _messagesPageInited = true;
+        mod.initMessagesPage();
+    }
+    if (mod.setMessagesTab) mod.setMessagesTab(tabId);
+    await switchPage('messages');
+};
+
 init();

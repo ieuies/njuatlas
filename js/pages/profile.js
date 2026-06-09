@@ -601,6 +601,15 @@ function syncProfileTabUI(tabId) {
 }
 
 function switchProfileTab(tabId) {
+    // 「好友」是跳转消息页的入口，不是个人中心内的 Tab，勿写入 currentProfileTab
+    if (tabId === 'friends') {
+        if (typeof window.openMessagesTab === 'function') {
+            window.openMessagesTab('friends');
+        } else if (typeof window.switchPage === 'function') {
+            window.switchPage('messages');
+        }
+        return;
+    }
     currentProfileTab = tabId;
     syncProfileTabUI(tabId);
     loadProfileTabContent(tabId);
@@ -626,9 +635,6 @@ async function loadProfileTabContent(tabId) {
     try {
         switch (tabId) {
             case 'posts': await renderMyPosts(container); break;
-            case 'friends':
-                if (typeof window.switchPage === 'function') window.switchPage('messages');
-                break;
             case 'comments': await renderMyComments(container); break;
             case 'favorites': await renderMyFavorites(container); break;
             case 'activities': await renderMyActivities(container); break;
@@ -969,6 +975,9 @@ export async function refreshProfile() {
     }
     await renderProfileHeader();
     if (isViewingSelf()) loadProfileCover();
+    if (currentProfileTab === 'friends') {
+        currentProfileTab = 'posts';
+    }
     syncProfileTabUI(currentProfileTab);
     loadProfileTabContent(currentProfileTab);
 }

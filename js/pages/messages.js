@@ -342,6 +342,11 @@ export function initMessagesPage() {
     bindEvents();
 }
 
+export function setMessagesTab(tabId) {
+    currentTab = tabId;
+    openChatPeerId = null;
+}
+
 /** 从外部打开与某好友的私信 */
 export function openChatWith(userId) {
     currentTab = 'chats';
