@@ -43,6 +43,13 @@ def _avatar_dir():
     return path
 
 
+def _cover_dir():
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    path = os.path.join(basedir, "..", "..", "uploads", "covers")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 # ── 公开用户资料 ──────────────────────────────────────────────
 
 @social_bp.route("/users/search", methods=["GET"])
@@ -372,7 +379,7 @@ def mark_notifications_read():
     return jsonify({"ok": True})
 
 
-# ── 头像上传与静态访问 ────────────────────────────────────────
+# ── 头像/封面上传与静态访问 ───────────────────────────────────
 
 _DATA_URL_RE = re.compile(r"^data:image/(jpeg|jpg|png|webp);base64,", re.I)
 
@@ -381,6 +388,12 @@ _DATA_URL_RE = re.compile(r"^data:image/(jpeg|jpg|png|webp);base64,", re.I)
 @limiter.limit("300 per minute")
 def serve_avatar(filename):
     return send_from_directory(_avatar_dir(), filename)
+
+
+@social_bp.route("/covers/<path:filename>", methods=["GET"])
+@limiter.limit("300 per minute")
+def serve_cover(filename):
+    return send_from_directory(_cover_dir(), filename)
 
 
 @social_bp.route("/me/avatar", methods=["POST"])
@@ -412,3 +425,34 @@ def upload_avatar():
     user.avatar_url = f"/api/social/avatars/{filename}"
     db.session.commit()
     return jsonify({"avatar_url": user.avatar_url})
+
+
+@social_bp.route("/me/cover", methods=["POST"])
+@jwt_required
+@limiter.limit("20 per minute")
+def upload_cover():
+    data = get_json_body(request)
+    raw = data.get("cover") or data.get("data_url") or ""
+    if not isinstance(raw, str) or not raw.startswith("data:image"):
+        return error_response("需要 base64 图片 data URL", 400, code="invalid_cover")
+    m = _DATA_URL_RE.match(raw)
+    if not m:
+        return error_response("仅支持 JPEG/PNG/WebP", 400, code="invalid_format")
+    ext = "jpg" if m.group(1).lower() in ("jpeg", "jpg") else m.group(1).lower()
+    b64 = raw.split(",", 1)[1]
+    try:
+        binary = base64.b64decode(b64)
+    except Exception:
+        return error_response("图片解码失败", 400, code="decode_failed")
+    if len(binary) > 5 * 1024 * 1024:
+        return error_response("封面图片不能超过 5MB", 400, code="too_large")
+
+    filename = f"user_{g.current_user_id}_{uuid.uuid4().hex[:12]}.{ext}"
+    filepath = os.path.join(_cover_dir(), filename)
+    with open(filepath, "wb") as f:
+        f.write(binary)
+
+    user = g.current_user
+    user.cover_url = f"/api/social/covers/{filename}"
+    db.session.commit()
+    return jsonify({"cover_url": user.cover_url})

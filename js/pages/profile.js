@@ -2,10 +2,11 @@
 // profile.js - 个人中心模块（含封面裁剪高清版）
 // ================================================================
 
-import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar } from '../api.js';
+import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
 import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser } from '../utils.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
+import { API_BASE } from '../config.js';
 
 let currentProfileTab = 'posts';
 let _profileBioCache = null;
@@ -146,27 +147,74 @@ function ensureBubbleStyleEditor() {
 // ========== 封面功能（高清裁剪） ==========
 let cropper = null;
 
-function loadProfileCover() {
+function _fallbackCoverByUserId(userId) {
+    const n = Number(userId) || 0;
+    return COVER_PRESETS[Math.abs(n) % COVER_PRESETS.length];
+}
+
+function resolveCoverUrl(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = API_BASE.replace(/\/api$/, '');
+    if (raw.startsWith('/')) return `${base}${raw}`;
+    return `${base}/${raw}`;
+}
+
+function setProfileCover(coverUrl, fallback = null) {
     const coverDiv = document.getElementById('profileCover');
     if (!coverDiv) return;
-    const storageKey = getCoverStorageKey();
-    if (!storageKey) return;
+    const finalUrl = resolveCoverUrl(coverUrl) || fallback || COVER_PRESETS[0];
+    coverDiv.style.backgroundImage = `url('${finalUrl}')`;
+    coverDiv.dataset.coverSrc = finalUrl;
+}
+
+function loadProfileCover(targetUser = null) {
+    const user = targetUser || getUser();
+    if (!user) return;
+    const fallback = _fallbackCoverByUserId(user.id);
+
+    // 优先使用服务端封面，保证多端一致
+    if (user.cover_url) {
+        setProfileCover(user.cover_url, fallback);
+        return;
+    }
+
+    // 本地兼容：历史仅存 localStorage 的封面
+    const storageKey = targetUser ? null : getCoverStorageKey();
+    if (!storageKey) {
+        setProfileCover('', fallback);
+        return;
+    }
     let coverUrl = localStorage.getItem(storageKey);
     if (!coverUrl) {
-        const randomIndex = Math.floor(Math.random() * COVER_PRESETS.length);
-        coverUrl = COVER_PRESETS[randomIndex];
+        coverUrl = fallback;
         localStorage.setItem(storageKey, coverUrl);
     }
-    coverDiv.style.backgroundImage = `url('${coverUrl}')`;
+    setProfileCover(coverUrl, fallback);
 }
 
 async function saveCoverFromCropped(canvas, originalDataUrl) {
+    const user = getUser();
+    if (!user) throw new Error('请先登录');
     const storageKey = getCoverStorageKey();
-    if (!storageKey) throw new Error('请先登录');
     const base64 = canvas.toDataURL('image/jpeg', 0.92);
-    localStorage.setItem(storageKey, base64);
-    const coverDiv = document.getElementById('profileCover');
-    if (coverDiv) coverDiv.style.backgroundImage = `url('${base64}')`;
+    const fallback = _fallbackCoverByUserId(user.id);
+    let synced = false;
+    try {
+        const res = await uploadCover(base64);
+        if (res?.cover_url) {
+            updateUserFromLogin({ ...user, cover_url: res.cover_url });
+            setProfileCover(res.cover_url, fallback);
+            synced = true;
+        }
+    } catch (e) {
+        console.warn('封面上传服务端失败，回退本地存储:', e?.message);
+    }
+    if (!synced) {
+        if (storageKey) localStorage.setItem(storageKey, base64);
+        setProfileCover(base64, fallback);
+    }
     // 保存裁剪前原图（缩放后）供“查看大图”
     const origKey = getCoverOriginalKey();
     if (origKey && originalDataUrl) {
@@ -358,6 +406,10 @@ function isViewingSelf() {
     return !_viewingUserId || (me && String(me.id) === String(_viewingUserId));
 }
 
+function isRestrictedTabForVisitor(tabId) {
+    return ['friends', 'comments', 'favorites', 'activities'].includes(tabId);
+}
+
 function applyProfileModeUI(isSelf) {
     const editBtn = document.getElementById('editProfileBtn');
     const coverEdit = document.getElementById('coverEditBtn');
@@ -372,6 +424,12 @@ function applyProfileModeUI(isSelf) {
     document.querySelectorAll('.profile-stat-self').forEach((el) => {
         el.style.display = isSelf ? '' : 'none';
     });
+    const friendStat = document.querySelector('.profile-stat-friends');
+    if (friendStat) {
+        friendStat.disabled = !isSelf;
+        friendStat.classList.toggle('is-disabled', !isSelf);
+        friendStat.title = isSelf ? '查看好友' : '他人主页不支持查看好友';
+    }
     document.querySelectorAll('.profile-tab').forEach((tab) => {
         const id = tab.getAttribute('data-profile-tab');
         if (['comments', 'favorites', 'activities'].includes(id)) {
@@ -425,6 +483,7 @@ async function renderProfileHeader() {
             _viewingProfileCache = profile;
             document.getElementById('profileUsername').innerText = profile.username || '用户';
             renderAvatarInto(document.getElementById('profileAvatarLarge'), profile, '2rem');
+            loadProfileCover(profile);
             _applyProfileBio(profile);
             document.getElementById('postCount').innerText = profile.post_count ?? 0;
             document.getElementById('friendCount').innerText = profile.friend_count ?? 0;
@@ -447,6 +506,7 @@ async function renderProfileHeader() {
     if (emailLine) emailLine.innerHTML = email ? `<i class="fas fa-envelope" aria-hidden="true"></i> ${escapeHtml(email)}` : '';
 
     renderAvatar(user);
+    loadProfileCover(user);
     loadAndRenderBio();
 
     const statusEl = document.getElementById('profileEmailVerified');
@@ -463,7 +523,15 @@ async function renderProfileHeader() {
     try {
         const stats = await getUserProfile(user.id);
         document.getElementById('friendCount').innerText = stats.friend_count ?? 0;
-        if (stats.avatar_url) updateUserFromLogin({ ...user, avatar_url: stats.avatar_url });
+        if (stats.avatar_url || stats.cover_url) {
+            const nextUser = {
+                ...user,
+                avatar_url: stats.avatar_url || user.avatar_url || '',
+                cover_url: stats.cover_url || user.cover_url || '',
+            };
+            updateUserFromLogin(nextUser);
+            loadProfileCover(nextUser);
+        }
     } catch (e) { /* 静默 */ }
 }
 
@@ -549,7 +617,8 @@ function initCoverViewer() {
     cover.addEventListener('click', (e) => {
         if (e.target.closest('#coverEditBtn') || e.target.id === 'coverFileInput') return;
         const origKey = getCoverOriginalKey();
-        const src = (origKey && localStorage.getItem(origKey))
+        const src = cover.dataset.coverSrc
+            || (origKey && localStorage.getItem(origKey))
             || (getCoverStorageKey() && localStorage.getItem(getCoverStorageKey()));
         if (src) openImageViewer(src, { circle: false });
     });
@@ -622,6 +691,10 @@ function syncProfileTabUI(tabId) {
 }
 
 function switchProfileTab(tabId) {
+    if (!tabId) return;
+    if (!isViewingSelf() && isRestrictedTabForVisitor(tabId)) {
+        return;
+    }
     // 「好友」是跳转消息页的入口，不是个人中心内的 Tab，勿写入 currentProfileTab
     if (tabId === 'friends') {
         if (typeof window.openMessagesTab === 'function') {
@@ -639,6 +712,7 @@ function switchProfileTab(tabId) {
 function initProfileStatJump() {
     document.querySelectorAll('.profile-stat-item[data-profile-tab]').forEach(btn => {
         btn.addEventListener('click', () => {
+            if (btn.disabled) return;
             const tabId = btn.getAttribute('data-profile-tab');
             if (tabId) switchProfileTab(tabId);
         });
@@ -648,8 +722,10 @@ function initProfileStatJump() {
 async function loadProfileTabContent(tabId) {
     const container = document.getElementById('profileTabContent');
     if (!container) return;
-    if (!isViewingSelf() && ['comments', 'favorites', 'activities'].includes(tabId)) {
+    if (!isViewingSelf() && isRestrictedTabForVisitor(tabId)) {
         tabId = 'posts';
+        currentProfileTab = 'posts';
+        syncProfileTabUI('posts');
     }
     container.innerHTML = '<div class="profile-loading">加载中...</div>';
 
@@ -798,7 +874,7 @@ async function renderMyFavorites(container) {
             getLikes().catch(() => ({ items: [] })),
         ]);
         const items = [
-            ...(favData.items || []).map(i => ({ ...i, favType: '收藏' })),
+            ...(favData.items || []).map(i => ({ ...i, favType: (i.kind === 'post' || i.post) ? '帖子收藏' : '收藏' })),
             ...(likeData.items || []).map(i => ({ ...i, favType: '点赞' })),
         ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -814,16 +890,38 @@ async function renderMyFavorites(container) {
             if (gotoBtn) gotoBtn.addEventListener('click', () => window.switchPage('guide'));
             return;
         }
-        container.innerHTML = items.map(item => `
-            <article class="profile-content-card">
-                <div class="profile-content-card-title">${escapeHtml(item.place?.name || '未知场所')}</div>
-                <div class="profile-content-card-body">${item.place?.address ? escapeHtml(item.place.address) : ''}</div>
-                <div class="profile-content-card-meta">
-                    <span class="profile-tag">${item.favType}</span>
-                    <span><i class="fas fa-clock"></i> ${formatDate(item.created_at)}</span>
-                </div>
-            </article>
-        `).join('');
+        container.innerHTML = items.map(item => {
+            if (item.post) {
+                return `
+                    <article class="profile-content-card" data-post-id="${item.post.id}">
+                        <div class="profile-content-card-title">${escapeHtml(item.post.title || '无标题帖子')}</div>
+                        <div class="profile-content-card-body">${escapeHtml((item.post.content || '').substring(0, 120))}</div>
+                        <div class="profile-content-card-meta">
+                            <span class="profile-tag">${item.favType}</span>
+                            <span><i class="fas fa-star"></i> ${item.post.favorite_count || 0}</span>
+                            <span><i class="fas fa-clock"></i> ${formatDate(item.created_at)}</span>
+                        </div>
+                    </article>
+                `;
+            }
+            return `
+                <article class="profile-content-card">
+                    <div class="profile-content-card-title">${escapeHtml(item.place?.name || '未知场所')}</div>
+                    <div class="profile-content-card-body">${item.place?.address ? escapeHtml(item.place.address) : ''}</div>
+                    <div class="profile-content-card-meta">
+                        <span class="profile-tag">${item.favType}</span>
+                        <span><i class="fas fa-clock"></i> ${formatDate(item.created_at)}</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+        container.querySelectorAll('.profile-content-card[data-post-id]').forEach(card => {
+            card.addEventListener('click', () => {
+                const postId = parseInt(card.getAttribute('data-post-id'));
+                if (postId && typeof window.openPostDetail === 'function') window.openPostDetail(postId);
+            });
+            card.style.cursor = 'pointer';
+        });
     } catch (e) {
         container.innerHTML = '<div class="profile-empty-state">加载失败，请稍后重试</div>';
     }
@@ -1000,7 +1098,9 @@ export async function refreshProfile() {
     }
     await renderProfileHeader();
     if (isViewingSelf()) loadProfileCover();
-    if (currentProfileTab === 'friends') {
+    if (!isViewingSelf()) {
+        currentProfileTab = 'posts';
+    } else if (currentProfileTab === 'friends') {
         currentProfileTab = 'posts';
     }
     syncProfileTabUI(currentProfileTab);

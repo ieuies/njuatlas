@@ -18,6 +18,7 @@ from app.models import (
     EventPost,
     EventParticipant,
     PostComment,
+    PostFavorite,
     PostLike,
     PostTag,
     Tag,
@@ -75,6 +76,16 @@ class SingleNote:
         if name.startswith("_"):
             raise AttributeError(name)
         return getattr(self._m, name)
+
+    @property
+    def participant_total_count(self):
+        """展示口径的人数（含发起人）。"""
+        return (self._m.participant_count or 0) + 1
+
+    @property
+    def participant_limit_total(self):
+        """展示与校验口径的人数上限（含发起人，且至少 2）。"""
+        return max(self._m.max_participants or 2, 2)
 
     # ── 持久化 ────────────────────────────────────────────────
     def save(self):
@@ -152,6 +163,7 @@ class SingleNote:
         PostTag.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         PostComment.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         PostLike.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        PostFavorite.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         EventParticipant.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         db.session.delete(self._m)
         db.session.commit()
@@ -183,6 +195,21 @@ class SingleNote:
                 ntype="like",
                 post_id=self._m.id,
             )
+        db.session.commit()
+        _clear_search_cache()
+        return True
+
+    def toggle_favorite(self, user_id):
+        """切换收藏状态。返回 True=已收藏, False=已取消。"""
+        existing = PostFavorite.query.filter_by(post_id=self._m.id, user_id=user_id).first()
+        if existing:
+            db.session.delete(existing)
+            self._m.favorite_count = max(0, (self._m.favorite_count or 0) - 1)
+            db.session.commit()
+            _clear_search_cache()
+            return False
+        db.session.add(PostFavorite(post_id=self._m.id, user_id=user_id))
+        self._m.favorite_count = (self._m.favorite_count or 0) + 1
         db.session.commit()
         _clear_search_cache()
         return True
@@ -299,11 +326,12 @@ class SingleNote:
         if existing:
             existing.status = status
         else:
-            # 报名人数不能超过上限
+            # 报名人数不能超过上限（口径：总人数=发起人+报名者）
             current_count = self._m.participant_count or 0
-            max_slots = self._m.max_participants or 1
-            if current_count >= max_slots:
-                raise ValueError(f"报名人数已满（{max_slots}/{max_slots}）")
+            max_slots = self.participant_limit_total
+            occupied_total = current_count + 1
+            if occupied_total >= max_slots:
+                raise ValueError(f"报名人数已满（{occupied_total}/{max_slots}）")
             db.session.add(EventParticipant(
                 post_id=self._m.id, user_id=user_id, status=status
             ))
@@ -316,7 +344,7 @@ class SingleNote:
     def get_participants(self):
         """获取报名用户列表（含发起人标记）。"""
         records = EventParticipant.query.filter_by(post_id=self._m.id).all()
-        return [
+        participants = [
             {
                 "user_id": r.user_id,
                 "username": r.user.username if r.user else "",
@@ -326,6 +354,17 @@ class SingleNote:
             }
             for r in records
         ]
+        organizer = self._m.user
+        has_organizer_record = any(p["user_id"] == self._m.user_id for p in participants)
+        if organizer and not has_organizer_record:
+            participants.insert(0, {
+                "user_id": organizer.id,
+                "username": organizer.username or "",
+                "avatar_url": organizer.avatar_url or "",
+                "status": "going",
+                "is_organizer": True,
+            })
+        return participants
 
     # ── 浏览计数 ──────────────────────────────────────────────
     def record_view(self):
@@ -335,7 +374,7 @@ class SingleNote:
 
     # ── 序列化 ────────────────────────────────────────────────
     def to_dict(self, current_user_id=None, include_place=False,
-                _tags=None, _is_liked=None, _participation=None):
+                _tags=None, _is_liked=None, _is_favorited=None, _participation=None):
         """输出为 API 可用的 dict。
 
         current_user_id 用于填充 is_liked / is_participated 等当前用户状态。
@@ -365,18 +404,20 @@ class SingleNote:
             "avatar_url": (m.user.avatar_url if m.user else "") or "",
             "place_id": m.place_id,
             "event_time": m.event_time.isoformat() if m.event_time else None,
+            "event_end_time": m.event_end_time.isoformat() if m.event_end_time else None,
             "urgency": m.urgency,
             "location": m.location,
             "location_name": m.location_name,
-            "max_participants": m.max_participants,
+            "max_participants": self.participant_limit_total,
             "budget": m.budget,
             "contact": m.contact,
             "tags": tag_names,
             "is_official": m.is_official,
             "view_count": m.view_count or 0,
             "like_count": m.like_count or 0,
+            "favorite_count": m.favorite_count or 0,
             "comment_count": m.comment_count or 0,
-            "participant_count": m.participant_count or 0,
+            "participant_count": self.participant_total_count,
             "hot_score": m.hot_score,
             "created_at": m.created_at.isoformat() if m.created_at else None,
             "updated_at": m.updated_at.isoformat() if m.updated_at else None,
@@ -388,6 +429,12 @@ class SingleNote:
                 result["is_liked"] = _is_liked
             else:
                 result["is_liked"] = PostLike.query.filter_by(
+                    post_id=m.id, user_id=current_user_id
+                ).first() is not None
+            if _is_favorited is not None:
+                result["is_favorited"] = _is_favorited
+            else:
+                result["is_favorited"] = PostFavorite.query.filter_by(
                     post_id=m.id, user_id=current_user_id
                 ).first() is not None
             result["is_owner"] = m.user_id == current_user_id
@@ -447,7 +494,7 @@ class NoteSystem:
 
     # ── 工厂：创建 SingleNote ─────────────────────────────────
     def create_post(self, *, title, content, post_type="forum", tags=None,
-                    place_id=None, event_time=None, urgency=None,
+                    place_id=None, event_time=None, event_end_time=None, urgency=None,
                     location=None, location_name=None,
                     max_participants=None, budget=None, contact=None,
                     cover_image=None, is_official=False):
@@ -464,6 +511,7 @@ class NoteSystem:
             user_id=self.user_id,
             place_id=place_id,
             event_time=event_time,
+            event_end_time=event_end_time,
             urgency=urgency,
             location=location,
             location_name=location_name,
@@ -487,7 +535,7 @@ class NoteSystem:
 
     # ── 更新帖子 ──────────────────────────────────────────────
     def update_post(self, post_id, *, post_type=None, title=None, content=None, tags=None,
-                    event_time=None, urgency=None, location=None, location_name=None,
+                    event_time=None, event_end_time=None, urgency=None, location=None, location_name=None,
                     max_participants=None, budget=None, contact=None, cover_image=None):
         """更新帖子字段（仅帖主可操作，调用方需自己校验权限）。"""
         note = self.get_post(post_id)
@@ -499,13 +547,20 @@ class NoteSystem:
             note._m.content = content
         if event_time is not None:
             note._m.event_time = event_time
+        if event_end_time is not None:
+            note._m.event_end_time = event_end_time
         if post_type is not None:
             note._m.type = post_type
         if urgency is not None:
             note._m.urgency = urgency
+            # 非指定时间模式下清空时间区间，避免旧值残留
+            if urgency != "scheduled":
+                note._m.event_time = None
+                note._m.event_end_time = None
         # 如果从 event 改为 forum，清空活动时间
         if note._m.type == "forum":
             note._m.event_time = None
+            note._m.event_end_time = None
         if location is not None:
             note._m.location = location
         if location_name is not None:
@@ -628,8 +683,9 @@ class NoteSystem:
                     tags_map.setdefault(pt.post_id, []).append(pt.tag.name)
 
         # 点赞 & 报名状态：仅当已登录时查询
-        likes_set = set()      # {post_id, ...}
-        parts_map = {}         # {post_id: status}
+        likes_set = set()       # {post_id, ...}
+        favorites_set = set()   # {post_id, ...}
+        parts_map = {}          # {post_id: status}
         if post_ids and self.user_id:
             likes = (
                 PostLike.query
@@ -637,6 +693,13 @@ class NoteSystem:
                 .all()
             )
             likes_set = {l.post_id for l in likes}
+
+            favorites = (
+                PostFavorite.query
+                .filter(PostFavorite.post_id.in_(post_ids), PostFavorite.user_id == self.user_id)
+                .all()
+            )
+            favorites_set = {f.post_id for f in favorites}
 
             parts = (
                 EventParticipant.query
@@ -653,6 +716,7 @@ class NoteSystem:
                 current_user_id=self.user_id,
                 _tags=tags_map.get(model.id, []),
                 _is_liked=model.id in likes_set if self.user_id else None,
+                _is_favorited=model.id in favorites_set if self.user_id else None,
                 _participation=parts_map.get(model.id) if self.user_id else None,
             ))
 

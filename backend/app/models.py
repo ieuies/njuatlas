@@ -25,6 +25,7 @@ class User(db.Model):
     campus = db.Column(db.String(20))           # 校区：鼓楼/仙林/浦口/苏州
     tags = db.Column(db.String(500))           # JSON 数组: '["川菜","羽毛球","王者"]'
     avatar_url = db.Column(db.String(500))     # 头像链接（预留）
+    cover_url = db.Column(db.String(500))      # 封面图链接（跨端同步）
     bubble_style = db.Column(db.String(50), default="atlas-classic", nullable=False)  # 聊天气泡样式
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -215,17 +216,19 @@ class EventPost(db.Model):
     cover_image = db.Column(db.String(500))                          # 封面图 URL（可选）
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     place_id = db.Column(db.Integer, db.ForeignKey("places.id"), nullable=True, index=True)
-    event_time = db.Column(db.DateTime)                              # 活动时间（urgency=scheduled 时必填）
+    event_time = db.Column(db.DateTime)                              # 活动开始时间（urgency=scheduled 时必填）
+    event_end_time = db.Column(db.DateTime)                          # 活动结束时间（urgency=scheduled 时必填）
     urgency = db.Column(db.String(20))                               # 'now' / 'long_term' / 'scheduled' / None
     location = db.Column(db.String(50))                              # "lng,lat"
     location_name = db.Column(db.String(200))                        # 人类可读的地点名
-    max_participants = db.Column(db.Integer, default=1)              # 招募人数上限
+    max_participants = db.Column(db.Integer, default=2)              # 招募总人数上限（含发起人）
     budget = db.Column(db.String(50))                                # 预算（独立于标签）
     contact = db.Column(db.String(100))                              # 联系方式（微信/QQ/手机）
     is_official = db.Column(db.Boolean, default=False, nullable=False)
     # 计数缓存（避免每次列表查询都 JOIN 三张表）
     view_count = db.Column(db.Integer, default=0, nullable=False)
     like_count = db.Column(db.Integer, default=0, nullable=False)
+    favorite_count = db.Column(db.Integer, default=0, nullable=False)
     comment_count = db.Column(db.Integer, default=0, nullable=False)
     participant_count = db.Column(db.Integer, default=0, nullable=False)
     # 热度分：view*1 + like*3 + comment*5 + participant*10，再乘以时间衰减因子
@@ -292,6 +295,23 @@ class PostLike(db.Model):
     __table_args__ = (
         db.UniqueConstraint("user_id", "post_id", name="_user_post_like_uc"),
     )
+
+
+class PostFavorite(db.Model):
+    """帖子收藏。"""
+    __tablename__ = "post_favorites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("event_posts.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "post_id", name="_user_post_favorite_uc"),
+    )
+
+    user = db.relationship("User", lazy="joined")
+    post = db.relationship("EventPost", lazy="joined")
 
 
 class EventParticipant(db.Model):

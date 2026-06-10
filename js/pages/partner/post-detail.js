@@ -1,7 +1,7 @@
 import { showToast, formatDate, escapeHtml, avatarHtmlForUser } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import {
-    getPost, deletePost, togglePostLike, addPostComment, deletePostComment, participateEvent,
+    getPost, deletePost, togglePostLike, togglePostFavorite, addPostComment, deletePostComment, participateEvent,
 } from '../../api.js';
 import { partnerStore } from './shared.js';
 import { formatPostTime, isCurrentUserOwner, safeHtmlWithBreaks } from './shared.js';
@@ -21,9 +21,58 @@ export function initPostDetailModal() {
 
     const closeBtn = document.getElementById('closePostDetailBtn');
     const likeBtn = document.getElementById('detailLikeBtn');
+    const statsRow = modal.querySelector('.post-detail-stats');
+    const likeMiniBtn = modal.querySelector('.post-detail-stats > span:nth-child(2)');
+    const participantStat = modal.querySelector('.post-detail-stats > span:nth-child(4)');
     const participateBtn = document.getElementById('detailParticipateBtn');
     const commentInput = document.getElementById('detailCommentInput');
     const commentSubmitBtn = document.getElementById('detailCommentSubmitBtn');
+    const ownerActions = document.getElementById('detailOwnerActions');
+    const legacyEditBtn = document.getElementById('detailEditBtn');
+    let editMiniBtn = document.getElementById('detailEditMiniBtn');
+    let favoriteMiniBtn = document.getElementById('detailFavoriteMiniBtn');
+
+    if (likeMiniBtn) {
+        likeMiniBtn.classList.add('detail-like-mini-btn');
+        likeMiniBtn.setAttribute('role', 'button');
+        likeMiniBtn.setAttribute('tabindex', '0');
+        likeMiniBtn.setAttribute('aria-label', '点赞');
+        likeMiniBtn.setAttribute('title', '点赞');
+    }
+    if (participantStat) participantStat.classList.add('detail-participant-stat');
+    if (!favoriteMiniBtn && statsRow && participantStat) {
+        favoriteMiniBtn = document.createElement('button');
+        favoriteMiniBtn.id = 'detailFavoriteMiniBtn';
+        favoriteMiniBtn.type = 'button';
+        favoriteMiniBtn.className = 'detail-favorite-mini-btn';
+        favoriteMiniBtn.innerHTML = `
+            <i class="fa-regular fa-star" aria-hidden="true"></i>
+            <span>收藏</span>
+            <span id="detailFavoriteCount">0</span>
+        `;
+        statsRow.insertBefore(favoriteMiniBtn, participantStat);
+    }
+    if (legacyEditBtn) legacyEditBtn.style.display = 'none';
+    if (!editMiniBtn && participantStat) {
+        editMiniBtn = document.createElement('button');
+        editMiniBtn.id = 'detailEditMiniBtn';
+        editMiniBtn.type = 'button';
+        editMiniBtn.className = 'detail-edit-mini-btn';
+        editMiniBtn.title = '编辑帖子';
+        editMiniBtn.setAttribute('aria-label', '编辑帖子');
+        editMiniBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
+        participantStat.appendChild(editMiniBtn);
+    }
+    if (editMiniBtn) {
+        editMiniBtn.style.display = 'none';
+        editMiniBtn.addEventListener('click', () => {
+            if (!currentDetailPost || !currentDetailPost.is_owner) return;
+            openEditPostModal(currentDetailPost);
+        });
+    }
+    if (ownerActions && legacyEditBtn && legacyEditBtn.parentElement === ownerActions) {
+        legacyEditBtn.remove();
+    }
 
     closeBtn?.addEventListener('click', () => {
         modal.style.display = 'none';
@@ -36,7 +85,7 @@ export function initPostDetailModal() {
         }
     });
 
-    likeBtn?.addEventListener('click', async () => {
+    const handleLikeToggle = async () => {
         if (!currentDetailPost) return;
         if (!isLoggedIn()) { showToast('请先登录'); return; }
         const prevLiked = currentDetailPost.is_liked;
@@ -44,24 +93,59 @@ export function initPostDetailModal() {
         currentDetailPost.is_liked = !prevLiked;
         currentDetailPost.like_count = prevLiked ? prevCount - 1 : prevCount + 1;
         _updateDetailStats();
-        likeBtn.classList.toggle('liked', currentDetailPost.is_liked);
-        likeBtn.textContent = currentDetailPost.is_liked ? '已点赞' : '点赞';
+        _applyDetailLikeUi(currentDetailPost.is_liked);
+        _syncLikeStateToList(currentDetailPost.id, currentDetailPost.is_liked, currentDetailPost.like_count);
         try {
             const result = await togglePostLike(currentDetailPost.id);
             currentDetailPost.is_liked = result.liked;
             currentDetailPost.like_count = result.like_count;
             _updateDetailStats();
-            likeBtn.classList.toggle('liked', result.liked);
-            likeBtn.textContent = result.liked ? '已点赞' : '点赞';
+            _applyDetailLikeUi(result.liked);
+            _syncLikeStateToList(currentDetailPost.id, result.liked, result.like_count);
         } catch (err) {
             currentDetailPost.is_liked = prevLiked;
             currentDetailPost.like_count = prevCount;
             _updateDetailStats();
-            likeBtn.classList.toggle('liked', prevLiked);
-            likeBtn.textContent = prevLiked ? '已点赞' : '点赞';
+            _applyDetailLikeUi(prevLiked);
+            _syncLikeStateToList(currentDetailPost.id, prevLiked, prevCount);
             showToast('操作失败: ' + err.message);
         }
+    };
+    likeBtn?.addEventListener('click', handleLikeToggle);
+    likeMiniBtn?.addEventListener('click', handleLikeToggle);
+    likeMiniBtn?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        handleLikeToggle();
     });
+
+    const handleFavoriteToggle = async () => {
+        if (!currentDetailPost) return;
+        if (!isLoggedIn()) { showToast('请先登录'); return; }
+        const prevFavorited = Boolean(currentDetailPost.is_favorited);
+        const prevCount = currentDetailPost.favorite_count || 0;
+        currentDetailPost.is_favorited = !prevFavorited;
+        currentDetailPost.favorite_count = prevFavorited ? Math.max(0, prevCount - 1) : prevCount + 1;
+        _updateDetailStats();
+        _applyDetailFavoriteUi(currentDetailPost.is_favorited);
+        _syncFavoriteStateToList(currentDetailPost.id, currentDetailPost.is_favorited, currentDetailPost.favorite_count);
+        try {
+            const result = await togglePostFavorite(currentDetailPost.id);
+            currentDetailPost.is_favorited = Boolean(result.favorited);
+            currentDetailPost.favorite_count = Number(result.favorite_count || 0);
+            _updateDetailStats();
+            _applyDetailFavoriteUi(currentDetailPost.is_favorited);
+            _syncFavoriteStateToList(currentDetailPost.id, currentDetailPost.is_favorited, currentDetailPost.favorite_count);
+        } catch (err) {
+            currentDetailPost.is_favorited = prevFavorited;
+            currentDetailPost.favorite_count = prevCount;
+            _updateDetailStats();
+            _applyDetailFavoriteUi(prevFavorited);
+            _syncFavoriteStateToList(currentDetailPost.id, prevFavorited, prevCount);
+            showToast('收藏失败: ' + err.message);
+        }
+    };
+    favoriteMiniBtn?.addEventListener('click', handleFavoriteToggle);
 
     participateBtn?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
@@ -115,11 +199,6 @@ export function initPostDetailModal() {
         }
     });
 
-    document.getElementById('detailEditBtn')?.addEventListener('click', () => {
-        if (!currentDetailPost) return;
-        openEditPostModal(currentDetailPost);
-    });
-
     document.getElementById('detailDeleteBtn')?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
@@ -148,19 +227,23 @@ function _mapCachedToDetailFormat(cached) {
         title: cached.title,
         content: cached.description,
         tags: cached.tags,
+        user_id: cached.publisherId,
         username: cached.publisher,
-        event_time: cached.time === '立即' || cached.time === '长期有效' ? null : null,
+        event_time: cached.eventTime || null,
+        event_end_time: cached.eventEndTime || null,
         urgency: cached.urgency,
         location_name: cached.location,
         budget: cached.budget,
         contact: cached.contact,
         is_owner: cached.isOwner,
         like_count: cached.likeCount,
+        favorite_count: cached.favoriteCount,
         view_count: cached.views,
         comment_count: cached.commentCount,
         participant_count: cached.members,
         max_participants: cached.slots,
         is_liked: cached.isLiked,
+        is_favorited: cached.isFavorited,
         participation_status: cached.participationStatus,
         _fromCache: true,
     };
@@ -215,8 +298,10 @@ function _resetDetailUI() {
     pb.textContent = '我要参加';
     pb.classList.remove('going');
     pb.disabled = false;
-    document.getElementById('detailLikeBtn').classList.remove('liked');
-    document.getElementById('detailLikeBtn').textContent = '点赞';
+    _applyDetailLikeUi(false);
+    _applyDetailFavoriteUi(false);
+    const editMiniBtn = document.getElementById('detailEditMiniBtn');
+    if (editMiniBtn) editMiniBtn.style.display = 'none';
     var oa = document.getElementById('detailOwnerActions');
     if (oa) oa.style.display = 'none';
 }
@@ -240,7 +325,7 @@ function _renderPostDetail(post) {
     } else if (pubEl) {
         pubEl.innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
     }
-    const timeStr = formatPostTime(post.event_time, post.urgency);
+    const timeStr = formatPostTime(post.event_time, post.urgency, post.event_end_time);
     document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
     if (post.location_name) {
         document.getElementById('detailLocation').innerHTML = `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(post.location_name)}`;
@@ -259,29 +344,27 @@ function _renderPostDetail(post) {
     }
 
     _updateDetailStats(post);
-    const slots = post.max_participants || 1;
+    const slots = post.max_participants || 2;
     document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
 
-    const likeBtn = document.getElementById('detailLikeBtn');
-    likeBtn.classList.remove('liked');
-    likeBtn.textContent = '点赞';
-    if (post.is_liked) {
-        likeBtn.classList.add('liked');
-        likeBtn.textContent = '已点赞';
-    }
+    _applyDetailLikeUi(Boolean(post.is_liked));
+    _applyDetailFavoriteUi(Boolean(post.is_favorited));
 
     const participateBtn = document.getElementById('detailParticipateBtn');
     const ownerActions = document.getElementById('detailOwnerActions');
-    const isFull = (post.participant_count || 0) >= (post.max_participants || 1);
+    const editMiniBtn = document.getElementById('detailEditMiniBtn');
+    const isFull = (post.participant_count || 0) >= (post.max_participants || 2);
     if (post.is_owner) {
         participateBtn.style.display = 'none';
         if (ownerActions) ownerActions.style.display = 'flex';
+        if (editMiniBtn) editMiniBtn.style.display = 'inline-flex';
     } else if (isFull && post.participation_status !== 'going') {
         participateBtn.style.display = 'block';
         participateBtn.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i> 已满员';
         participateBtn.disabled = true;
         participateBtn.classList.remove('going');
         if (ownerActions) ownerActions.style.display = 'none';
+        if (editMiniBtn) editMiniBtn.style.display = 'none';
     } else {
         participateBtn.style.display = 'block';
         participateBtn.disabled = false;
@@ -289,6 +372,7 @@ function _renderPostDetail(post) {
         participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
         participateBtn.classList.toggle('going', going);
         if (ownerActions) ownerActions.style.display = 'none';
+        if (editMiniBtn) editMiniBtn.style.display = 'none';
     }
 
     _renderDetailParticipants(post.participants || []);
@@ -300,8 +384,87 @@ function _updateDetailStats(postOverride) {
     if (!post) return;
     document.getElementById('detailViewCount').textContent = post.view_count || 0;
     document.getElementById('detailLikeCount').textContent = post.like_count || 0;
+    const favoriteCount = post.favorite_count || 0;
+    const favoriteCountEl = document.getElementById('detailFavoriteCount');
+    if (favoriteCountEl) favoriteCountEl.textContent = favoriteCount;
     document.getElementById('detailCommentCount').textContent = post.comment_count || 0;
-    document.getElementById('detailParticipantCount').textContent = post.participant_count || 0;
+    const slots = post.max_participants || 2;
+    document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
+}
+
+function _applyDetailLikeUi(liked) {
+    const likeBtn = document.getElementById('detailLikeBtn');
+    if (likeBtn) {
+        likeBtn.classList.toggle('liked', liked);
+        likeBtn.innerHTML = `<i class="${liked ? 'fa-solid' : 'fa-regular'} fa-thumbs-up" aria-hidden="true"></i> ${liked ? '已点赞' : '点赞'}`;
+    }
+    const miniBtn = document.querySelector('#postDetailModal .post-detail-stats > span:nth-child(2)');
+    if (miniBtn) {
+        miniBtn.classList.toggle('liked', liked);
+        miniBtn.setAttribute('aria-label', liked ? '取消点赞' : '点赞');
+        miniBtn.setAttribute('title', liked ? '取消点赞' : '点赞');
+        const icon = miniBtn.querySelector('i');
+        if (icon) {
+            icon.classList.remove('fas', 'far');
+            icon.classList.toggle('fa-solid', liked);
+            icon.classList.toggle('fa-regular', !liked);
+        }
+    }
+}
+
+function _applyDetailFavoriteUi(favorited) {
+    const favoriteBtn = document.getElementById('detailFavoriteMiniBtn');
+    if (!favoriteBtn) return;
+    favoriteBtn.classList.toggle('liked', favorited);
+    favoriteBtn.setAttribute('aria-label', favorited ? '取消收藏' : '收藏');
+    favoriteBtn.setAttribute('title', favorited ? '取消收藏' : '收藏');
+    const icon = favoriteBtn.querySelector('i');
+    if (icon) {
+        icon.classList.remove('fas', 'far');
+        icon.classList.toggle('fa-solid', favorited);
+        icon.classList.toggle('fa-regular', !favorited);
+    }
+}
+
+function _syncLikeStateToList(postId, liked, likeCount) {
+    const post = partnerStore.allPartnersData.find(p => p.id === postId);
+    if (post) {
+        post.isLiked = liked;
+        post.likeCount = likeCount;
+    }
+    const likeBtn = document.querySelector(`.partner-card[data-id="${postId}"] .partner-like-mini-btn`);
+    if (!likeBtn) return;
+    likeBtn.classList.toggle('liked', liked);
+    likeBtn.setAttribute('aria-label', liked ? '取消点赞' : '点赞');
+    const icon = likeBtn.querySelector('i');
+    if (icon) {
+        icon.classList.remove('fas', 'far');
+        icon.classList.toggle('fa-solid', liked);
+        icon.classList.toggle('fa-regular', !liked);
+    }
+    const countEl = likeBtn.querySelector('.partner-like-count');
+    if (countEl) countEl.textContent = String(likeCount ?? 0);
+}
+
+function _syncFavoriteStateToList(postId, favorited, favoriteCount) {
+    const post = partnerStore.allPartnersData.find(p => p.id === postId);
+    if (post) {
+        post.isFavorited = favorited;
+        post.favoriteCount = favoriteCount;
+    }
+    const favoriteBtn = document.querySelector(`.partner-card[data-id="${postId}"] .partner-author-favorite-btn`);
+    if (!favoriteBtn) return;
+    favoriteBtn.classList.toggle('liked', favorited);
+    favoriteBtn.setAttribute('aria-label', favorited ? '取消收藏' : '收藏');
+    favoriteBtn.setAttribute('title', favorited ? '取消收藏' : '收藏');
+    const icon = favoriteBtn.querySelector('i');
+    if (icon) {
+        icon.classList.remove('fas', 'far');
+        icon.classList.toggle('fa-solid', favorited);
+        icon.classList.toggle('fa-regular', !favorited);
+    }
+    const countEl = favoriteBtn.querySelector('.partner-favorite-count');
+    if (countEl) countEl.textContent = String(favoriteCount ?? 0);
 }
 
 function _renderDetailParticipants(participants) {
@@ -364,6 +527,7 @@ function _renderDetailComments(commentsData) {
     const items = commentsData.items || [];
     const container = document.getElementById('detailComments');
     document.getElementById('detailCommentTotal').textContent = commentsData.total || items.length;
+    const postAuthorId = currentDetailPost?.user_id;
 
     if (!items.length) {
         container.innerHTML = '<div class="detail-comments-empty">暂无评论，来抢沙发吧~</div>';
@@ -372,10 +536,11 @@ function _renderDetailComments(commentsData) {
 
     container.innerHTML = items.map(c => {
         const canDeleteComment = isCurrentUserOwner(c);
+        const isPostAuthorComment = postAuthorId != null && String(c.user_id) === String(postAuthorId);
         return `
         <div class="detail-comment" data-comment-id="${c.id}">
             <div class="detail-comment-header">
-                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${canDeleteComment ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${isPostAuthorComment ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                 <span class="detail-comment-time">${formatDate(c.created_at)}</span>
             </div>
             <div class="detail-comment-body">${escapeHtml(c.content)}</div>
@@ -387,10 +552,11 @@ function _renderDetailComments(commentsData) {
                 <div class="detail-comment-replies">
                     ${c.replies.map(r => {
                         const canDeleteReply = isCurrentUserOwner(r);
+                        const isPostAuthorReply = postAuthorId != null && String(r.user_id) === String(postAuthorId);
                         return `
                         <div class="detail-comment" data-comment-id="${r.id}">
                             <div class="detail-comment-header">
-                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${canDeleteReply ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${isPostAuthorReply ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
                                 <span class="detail-comment-time">${formatDate(r.created_at)}</span>
                             </div>
                             <div class="detail-comment-body">${escapeHtml(r.content)}</div>

@@ -67,10 +67,84 @@
     align-items: center;
     gap: 3px;
 }
+.post-detail-stats .detail-like-mini-btn {
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 2px 8px;
+    transition: var(--transition-fast);
+    user-select: none;
+}
+.post-detail-stats .detail-like-mini-btn:hover {
+    color: var(--btn-primary-bg);
+    background: var(--bg-tertiary);
+}
+.post-detail-stats .detail-like-mini-btn:focus-visible {
+    outline: 2px solid var(--btn-primary-bg);
+    outline-offset: 1px;
+}
+.post-detail-stats .detail-like-mini-btn.liked {
+    color: var(--danger);
+}
+.post-detail-stats .detail-favorite-mini-btn {
+    border: 0;
+    border-radius: 999px;
+    padding: 2px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.post-detail-stats .detail-favorite-mini-btn i {
+    color: var(--warning);
+}
+.post-detail-stats .detail-favorite-mini-btn:hover {
+    color: var(--btn-primary-bg);
+}
+.post-detail-stats .detail-favorite-mini-btn:focus-visible {
+    outline: 2px solid var(--btn-primary-bg);
+    outline-offset: 1px;
+}
+.post-detail-stats .detail-favorite-mini-btn.liked {
+    color: var(--warning);
+}
+.post-detail-stats .detail-participant-stat {
+    margin-left: 10px;
+}
+.post-detail-stats .detail-edit-mini-btn {
+    margin-left: 6px;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.post-detail-stats .detail-edit-mini-btn:hover {
+    color: var(--btn-primary-bg);
+}
+.post-detail-stats .detail-edit-mini-btn:focus-visible {
+    outline: 2px solid var(--btn-primary-bg);
+    outline-offset: 1px;
+}
 .post-detail-actions {
     display: flex;
     gap: 10px;
     margin-bottom: 18px;
+}
+.post-detail-actions #detailOwnerActions {
+    flex: 1;
+    gap: 10px !important;
+}
+.post-detail-actions #detailOwnerActions .detail-action-btn {
+    flex: 1;
 }
 .detail-action-btn {
     flex: 1;

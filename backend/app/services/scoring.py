@@ -82,9 +82,9 @@ def is_expired(post):
     """判断帖子是否已过期，应从推荐列表中移除。
 
     - urgency='now'      → 超过 NOW_EXPIRY_HOURS 即过期（默认 3h）
-    - urgency='scheduled' → event_time 已过即过期
+    - urgency='scheduled' → event_end_time（优先）或 event_time 已过即过期
     - urgency='long_term' → 永不过期
-    - urgency=None       → 按 scheduled 逻辑（有 event_time 则过期，无则不过期）
+    - urgency=None       → 按 scheduled 逻辑（有结束/开始时间则按其判断）
     """
     urgency = getattr(post, "urgency", None)
 
@@ -98,7 +98,11 @@ def is_expired(post):
     if urgency == "long_term":
         return False
 
-    # scheduled 或 None：有 event_time 且已过 → 过期
+    # scheduled 或 None：优先用结束时间判断，其次用开始时间
+    event_end_time = _ensure_aware(getattr(post, "event_end_time", None))
+    if event_end_time is not None:
+        return event_end_time <= _utcnow()
+
     event_time = _ensure_aware(getattr(post, "event_time", None))
     if event_time is not None:
         return event_time <= _utcnow()
@@ -132,17 +136,21 @@ def filter_active(query, model):
                 model.urgency == "now",
                 model.created_at >= now_cutoff,
             ),
-            # scheduled 且 event_time 在未来
+            # scheduled 且活动未结束（优先 event_end_time，无则回退 event_time）
             and_(
                 model.urgency == "scheduled",
-                model.event_time > now,
+                or_(
+                    and_(model.event_end_time.isnot(None), model.event_end_time > now),
+                    and_(model.event_end_time.is_(None), model.event_time > now),
+                ),
             ),
-            # 无 urgency 的旧帖子：有 event_time 则必须在未来，无 event_time 则保留
+            # 无 urgency 的旧帖子：有时间则必须未结束，无时间则保留
             and_(
                 model.urgency.is_(None),
                 or_(
-                    model.event_time.is_(None),
-                    model.event_time > now,
+                    and_(model.event_end_time.is_(None), model.event_time.is_(None)),
+                    and_(model.event_end_time.isnot(None), model.event_end_time > now),
+                    and_(model.event_end_time.is_(None), model.event_time > now),
                 ),
             ),
         )

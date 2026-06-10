@@ -1,6 +1,6 @@
 import { showToast, escapeHtml, avatarHtmlForUser } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
-import { listPosts, deletePost, participateEvent } from '../../api.js';
+import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
 import { partnerStore, PAGE_SIZE } from './shared.js';
 import { mapPost, typeLabel, isCurrentUserOwner } from './shared.js';
 import { openPostDetail } from './post-detail.js';
@@ -76,10 +76,25 @@ function createPostCardElement(p) {
     article.setAttribute('data-id', p.id);
     article.innerHTML = `
         <div class="partner-card-content">
-            <button class="partner-card-author" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
-                ${avatarHtmlForUser({ id: p.publisherId, username: p.publisher, avatar_url: p.publisherAvatar }, 36)}
-                <span class="partner-card-author-name">${escapeHtml(p.publisher)}${p.isOwner ? ' <i class="fas fa-star owner-mark" aria-hidden="true" title="我"></i>' : ''}</span>
-            </button>
+            <div class="partner-card-author-row">
+                <div class="partner-card-author">
+                    <button class="partner-card-author-avatar-btn" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
+                        ${avatarHtmlForUser({ id: p.publisherId, username: p.publisher, avatar_url: p.publisherAvatar }, 36)}
+                    </button>
+                    <button class="partner-card-author-name-btn" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
+                        <span class="partner-card-author-name">${escapeHtml(p.publisher)}</span>
+                    </button>
+                </div>
+                <button
+                    class="partner-author-favorite-btn${p.isFavorited ? ' liked' : ''}"
+                    data-id="${p.id}"
+                    type="button"
+                    aria-label="${p.isFavorited ? '取消收藏' : '收藏'}"
+                    title="${p.isFavorited ? '取消收藏' : '收藏'}"
+                >
+                    <i class="${p.isFavorited ? 'fa-solid' : 'fa-regular'} fa-star" aria-hidden="true"></i>
+                </button>
+            </div>
             ${p.coverImage ? `<div class="partner-card-cover" style="background-image:url('${escapeHtml(p.coverImage)}')"></div>` : ''}
             <div class="partner-card-head">
                 <div class="partner-card-tags">
@@ -97,7 +112,15 @@ function createPostCardElement(p) {
             <div class="partner-card-footer">
                 <div class="partner-card-stats">
                     <span><i class="fas fa-eye" aria-hidden="true"></i> ${p.views}</span>
-                    <span><i class="fas fa-thumbs-up" aria-hidden="true"></i> ${p.likeCount}</span>
+                    <button
+                        class="partner-like-mini-btn${p.isLiked ? ' liked' : ''}"
+                        data-id="${p.id}"
+                        type="button"
+                        aria-label="${p.isLiked ? '取消点赞' : '点赞'}"
+                    >
+                        <i class="${p.isLiked ? 'fa-solid' : 'fa-regular'} fa-thumbs-up" aria-hidden="true"></i>
+                        <span class="partner-like-count">${p.likeCount}</span>
+                    </button>
                     <span><i class="fas fa-comment" aria-hidden="true"></i> ${p.commentCount}</span>
                     <span><i class="fas fa-user" aria-hidden="true"></i> ${p.members}/${p.slots}</span>
                 </div>
@@ -124,16 +147,21 @@ function bindCardEvents(container) {
         btn.removeEventListener('click', _joinHandler);
         btn.addEventListener('click', _joinHandler);
     });
+    container.querySelectorAll('.partner-like-mini-btn').forEach(btn => {
+        btn.removeEventListener('click', _likeHandler);
+        btn.addEventListener('click', _likeHandler);
+    });
+    container.querySelectorAll('.partner-author-favorite-btn').forEach(btn => {
+        btn.removeEventListener('click', _favoriteHandler);
+        btn.addEventListener('click', _favoriteHandler);
+    });
     container.querySelectorAll('.partner-card').forEach(card => {
         card.removeEventListener('click', _cardClickHandler);
         card.addEventListener('click', _cardClickHandler);
     });
-    container.querySelectorAll('.partner-card-author').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const uid = parseInt(btn.getAttribute('data-user-id'));
-            if (uid && window.openUserProfile) window.openUserProfile(uid);
-        });
+    container.querySelectorAll('.partner-card-author-avatar-btn, .partner-card-author-name-btn').forEach(btn => {
+        btn.removeEventListener('click', _authorProfileHandler);
+        btn.addEventListener('click', _authorProfileHandler);
     });
 }
 
@@ -147,7 +175,23 @@ function _joinHandler(e) {
     const id = parseInt(e.currentTarget.getAttribute('data-id'));
     handleParticipate(id);
 }
+function _likeHandler(e) {
+    e.stopPropagation();
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    handleToggleLike(id, e.currentTarget);
+}
+function _favoriteHandler(e) {
+    e.stopPropagation();
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    handleToggleFavorite(id, e.currentTarget);
+}
+function _authorProfileHandler(e) {
+    e.stopPropagation();
+    const uid = parseInt(e.currentTarget.getAttribute('data-user-id'));
+    if (uid && window.openUserProfile) window.openUserProfile(uid);
+}
 function _cardClickHandler(e) {
+    if (e.target.closest('.partner-card-author-row')) return;
     if (e.target.closest('button')) return;
     const id = parseInt(e.currentTarget.getAttribute('data-id'));
     if (id) openPostDetail(id);
@@ -253,7 +297,7 @@ export async function handleParticipate(postId) {
             showToast('已取消报名');
         }
         const post = partnerStore.allPartnersData.find(p => p.id === postId);
-        _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 1);
+        _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 2);
         // 后台静默刷新当前页面数据（不重置分页，仅更新缓存）
         silentRefreshCurrentPage();
     } catch (err) {
@@ -271,6 +315,101 @@ export function applyParticipationResult(postId, result) {
         post.members += 1;
     } else if (result.status === null && post.members > 0) {
         post.members -= 1;
+    }
+}
+
+function _syncLikeButton(btn, liked, likeCount) {
+    if (!btn) return;
+    btn.classList.toggle('liked', liked);
+    btn.setAttribute('aria-label', liked ? '取消点赞' : '点赞');
+    const icon = btn.querySelector('i');
+    if (icon) {
+        icon.classList.remove('fas', 'far');
+        icon.classList.toggle('fa-solid', liked);
+        icon.classList.toggle('fa-regular', !liked);
+    }
+    const countEl = btn.querySelector('.partner-like-count');
+    if (countEl) countEl.textContent = String(likeCount ?? 0);
+}
+
+function _syncFavoriteButton(btn, favorited, favoriteCount) {
+    if (!btn) return;
+    btn.classList.toggle('liked', favorited);
+    btn.setAttribute('aria-label', favorited ? '取消收藏' : '收藏');
+    btn.setAttribute('title', favorited ? '取消收藏' : '收藏');
+    const icon = btn.querySelector('i');
+    if (icon) {
+        icon.classList.remove('fas', 'far');
+        icon.classList.toggle('fa-solid', favorited);
+        icon.classList.toggle('fa-regular', !favorited);
+    }
+    const countEl = btn.querySelector('.partner-favorite-count');
+    if (countEl) countEl.textContent = String(favoriteCount ?? 0);
+}
+
+async function handleToggleLike(postId, clickedBtn = null) {
+    if (!isLoggedIn()) {
+        showToast('请先登录');
+        const authModal = document.getElementById('authModal');
+        if (authModal) authModal.style.display = 'flex';
+        return;
+    }
+    const post = partnerStore.allPartnersData.find(p => p.id === postId);
+    if (!post) return;
+
+    const prevLiked = Boolean(post.isLiked);
+    const prevCount = Number(post.likeCount || 0);
+    const nextLiked = !prevLiked;
+    const nextCount = nextLiked ? prevCount + 1 : Math.max(0, prevCount - 1);
+
+    post.isLiked = nextLiked;
+    post.likeCount = nextCount;
+    const btn = clickedBtn || document.querySelector(`.partner-card[data-id="${postId}"] .partner-like-mini-btn`);
+    _syncLikeButton(btn, nextLiked, nextCount);
+
+    try {
+        const result = await togglePostLike(postId);
+        post.isLiked = Boolean(result?.liked);
+        post.likeCount = Number(result?.like_count ?? post.likeCount ?? 0);
+        _syncLikeButton(btn, post.isLiked, post.likeCount);
+    } catch (err) {
+        post.isLiked = prevLiked;
+        post.likeCount = prevCount;
+        _syncLikeButton(btn, prevLiked, prevCount);
+        showToast('点赞失败: ' + err.message);
+    }
+}
+
+async function handleToggleFavorite(postId, clickedBtn = null) {
+    if (!isLoggedIn()) {
+        showToast('请先登录');
+        const authModal = document.getElementById('authModal');
+        if (authModal) authModal.style.display = 'flex';
+        return;
+    }
+    const post = partnerStore.allPartnersData.find(p => p.id === postId);
+    if (!post) return;
+
+    const prevFavorited = Boolean(post.isFavorited);
+    const prevCount = Number(post.favoriteCount || 0);
+    const nextFavorited = !prevFavorited;
+    const nextCount = nextFavorited ? prevCount + 1 : Math.max(0, prevCount - 1);
+
+    post.isFavorited = nextFavorited;
+    post.favoriteCount = nextCount;
+    const btn = clickedBtn || document.querySelector(`.partner-card[data-id="${postId}"] .partner-author-favorite-btn`);
+    _syncFavoriteButton(btn, nextFavorited, nextCount);
+
+    try {
+        const result = await togglePostFavorite(postId);
+        post.isFavorited = Boolean(result?.favorited);
+        post.favoriteCount = Number(result?.favorite_count ?? post.favoriteCount ?? 0);
+        _syncFavoriteButton(btn, post.isFavorited, post.favoriteCount);
+    } catch (err) {
+        post.isFavorited = prevFavorited;
+        post.favoriteCount = prevCount;
+        _syncFavoriteButton(btn, prevFavorited, prevCount);
+        showToast('收藏失败: ' + err.message);
     }
 }
 

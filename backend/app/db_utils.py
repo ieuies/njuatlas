@@ -40,6 +40,9 @@ def ensure_user_auth_schema():
     if "avatar_url" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)"))
 
+    if "cover_url" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN cover_url VARCHAR(500)"))
+
     if "bubble_style" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN bubble_style VARCHAR(50) DEFAULT 'atlas-classic' NOT NULL"))
 
@@ -49,7 +52,43 @@ def ensure_user_auth_schema():
     db.session.commit()
 
 
+def ensure_post_social_schema():
+    """为旧版 SQLite 帖子表补齐收藏相关字段。"""
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
+
+    if "event_posts" in table_names:
+        post_columns = {column["name"] for column in inspector.get_columns("event_posts")}
+        if "event_end_time" not in post_columns:
+            db.session.execute(
+                text("ALTER TABLE event_posts ADD COLUMN event_end_time DATETIME")
+            )
+        if "favorite_count" not in post_columns:
+            db.session.execute(
+                text("ALTER TABLE event_posts ADD COLUMN favorite_count INTEGER DEFAULT 0 NOT NULL")
+            )
+
+    if "post_favorites" not in table_names:
+        db.session.execute(text(
+            "CREATE TABLE post_favorites ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "post_id INTEGER NOT NULL, "
+            "user_id INTEGER NOT NULL, "
+            "created_at DATETIME, "
+            "CONSTRAINT _user_post_favorite_uc UNIQUE (user_id, post_id), "
+            "FOREIGN KEY(post_id) REFERENCES event_posts(id), "
+            "FOREIGN KEY(user_id) REFERENCES users(id)"
+            ")"
+        ))
+
+    db.session.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_post_favorites_post_id ON post_favorites (post_id)")
+    )
+    db.session.commit()
+
+
 def initialize_database():
     """创建缺失的数据表，并执行当前 MVP 阶段的轻量兼容迁移。"""
     db.create_all()
     ensure_user_auth_schema()
+    ensure_post_social_schema()

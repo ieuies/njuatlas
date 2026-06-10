@@ -32,6 +32,7 @@ def public_user_brief(user):
         "campus": user.campus or "",
         "tags": tags,
         "avatar_url": user.avatar_url or "",
+        "cover_url": user.cover_url or "",
         "bubble_style": user.bubble_style or "atlas-classic",
         "created_at": _dt(user.created_at),
     }

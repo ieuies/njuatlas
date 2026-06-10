@@ -16,7 +16,7 @@ export function openEditPostModal(post) {
     document.getElementById('partnerDesc').value = post.content || '';
     document.getElementById('partnerLocation').value = post.location_name || '';
     document.getElementById('partnerBudget').value = post.budget || '';
-    document.getElementById('partnerSlots').value = post.max_participants || 1;
+    document.getElementById('partnerSlots').value = Math.max(post.max_participants || 2, 2);
     document.getElementById('partnerContact').value = post.contact || '';
 
     partnerStore.modalDuration = (post.type === 'forum') ? 'long' : 'short';
@@ -36,11 +36,19 @@ export function openEditPostModal(post) {
     if (scheduledRow) {
         scheduledRow.style.display = partnerStore.modalUrgency === 'scheduled' ? 'flex' : 'none';
     }
+    document.getElementById('partnerDate').value = '';
+    document.getElementById('partnerTimePicker').value = '';
+    document.getElementById('partnerEndDate').value = '';
+    document.getElementById('partnerEndTimePicker').value = '';
     if (post.event_time) {
-        const d = new Date(post.event_time);
-        document.getElementById('partnerDate').value = d.toISOString().split('T')[0];
-        const time = d.toTimeString().split(' ')[0].substring(0, 5);
-        document.getElementById('partnerTimePicker').value = time;
+        const start = new Date(post.event_time);
+        document.getElementById('partnerDate').value = start.toISOString().split('T')[0];
+        document.getElementById('partnerTimePicker').value = start.toTimeString().split(' ')[0].substring(0, 5);
+    }
+    if (post.event_end_time) {
+        const end = new Date(post.event_end_time);
+        document.getElementById('partnerEndDate').value = end.toISOString().split('T')[0];
+        document.getElementById('partnerEndTimePicker').value = end.toTimeString().split(' ')[0].substring(0, 5);
     }
 
     partnerStore.modalLocationCoords = post.location || null;
@@ -60,6 +68,12 @@ export function initPartnerModal() {
 
     const scheduledRow = document.getElementById('scheduledTimeRow');
     const timeModeRow = document.getElementById('timeModeRow');
+    const slotsInput = document.getElementById('partnerSlots');
+    if (slotsInput) {
+        slotsInput.min = '2';
+        slotsInput.placeholder = '总人数(含自己)';
+        if (!slotsInput.value || Number(slotsInput.value) < 2) slotsInput.value = '2';
+    }
 
     const durationBtns = document.querySelectorAll('#durationRow .time-mode-btn');
     durationBtns.forEach(btn => {
@@ -193,6 +207,7 @@ export function initPartnerModal() {
         partnerStore.modalUrgency = 'now';
         if (scheduledRow) scheduledRow.style.display = 'none';
         partnerStore.modalLocationCoords = null;
+        if (slotsInput) slotsInput.value = '2';
         suggestionIndex = -1;
         if (suggestionsBox) suggestionsBox.style.display = 'none';
         modal.style.display = 'flex';
@@ -218,12 +233,16 @@ export function initPartnerModal() {
         const description = document.getElementById('partnerDesc')?.value.trim();
         const location = document.getElementById('partnerLocation')?.value.trim();
         const budget = document.getElementById('partnerBudget')?.value.trim();
-        const slots = parseInt(document.getElementById('partnerSlots')?.value) || 1;
+        const slots = parseInt(document.getElementById('partnerSlots')?.value) || 2;
         const contact = document.getElementById('partnerContact')?.value.trim();
         const editId = modal.getAttribute('data-edit-id');
 
         if (!category || !title) {
             showToast('请至少填写分类和标题');
+            return;
+        }
+        if (slots < 2) {
+            showToast('总人数至少为 2（包含你自己）');
             return;
         }
 
@@ -232,14 +251,28 @@ export function initPartnerModal() {
         }
 
         let event_time = null;
+        let event_end_time = null;
         if (partnerStore.modalUrgency === 'scheduled') {
-            const dateVal = document.getElementById('partnerDate')?.value;
-            const timeVal = document.getElementById('partnerTimePicker')?.value;
-            if (!dateVal || !timeVal) {
-                showToast('请选择具体的日期和时间');
+            const startDateVal = document.getElementById('partnerDate')?.value;
+            const startTimeVal = document.getElementById('partnerTimePicker')?.value;
+            const endDateVal = document.getElementById('partnerEndDate')?.value;
+            const endTimeVal = document.getElementById('partnerEndTimePicker')?.value;
+            if (!startDateVal || !startTimeVal || !endDateVal || !endTimeVal) {
+                showToast('请填写完整的开始和结束时间');
                 return;
             }
-            event_time = new Date(`${dateVal}T${timeVal}:00`).toISOString();
+            const startAt = new Date(`${startDateVal}T${startTimeVal}:00`);
+            const endAt = new Date(`${endDateVal}T${endTimeVal}:00`);
+            if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+                showToast('时间格式无效，请重新选择');
+                return;
+            }
+            if (endAt <= startAt) {
+                showToast('结束时间必须晚于开始时间');
+                return;
+            }
+            event_time = startAt.toISOString();
+            event_end_time = endAt.toISOString();
         }
 
         const tags = [category];
@@ -256,6 +289,7 @@ export function initPartnerModal() {
                     location_name: location || null,
                     urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
                     event_time: partnerStore.modalDuration === 'long' ? null : event_time,
+                    event_end_time: partnerStore.modalDuration === 'long' ? null : event_end_time,
                     slots, budget, contact,
                 });
                 modal.removeAttribute('data-edit-id');
@@ -268,6 +302,7 @@ export function initPartnerModal() {
                     location_name: location || null,
                     urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
                     event_time: partnerStore.modalDuration === 'long' ? null : event_time,
+                    event_end_time: partnerStore.modalDuration === 'long' ? null : event_end_time,
                     slots, budget, contact,
                 });
                 showToast('发布成功');

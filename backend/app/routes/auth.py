@@ -58,6 +58,8 @@ def _user_payload(user):
         "username": user.username,
         "email_verified": bool(user.email_verified),
         "campus": user.campus or "",
+        "avatar_url": user.avatar_url or "",
+        "cover_url": user.cover_url or "",
         "bubble_style": user.bubble_style or "atlas-classic",
         "access_token": access_token,
         "token_type": "Bearer",
@@ -71,6 +73,8 @@ def _public_user_payload(user):
         "email": user.email,
         "username": user.username,
         "email_verified": bool(user.email_verified),
+        "avatar_url": user.avatar_url or "",
+        "cover_url": user.cover_url or "",
         "bubble_style": user.bubble_style or "atlas-classic",
     }
 

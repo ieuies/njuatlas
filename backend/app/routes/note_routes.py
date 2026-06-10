@@ -10,7 +10,7 @@ from flask import Blueprint, g, jsonify, request
 from app import db
 from app.auth_utils import jwt_optional, jwt_required
 from app.errors import error_response
-from app.models import EventParticipant, PostLike, PostTag
+from app.models import EventParticipant, PostFavorite, PostLike, PostTag
 from app.rate_limit import limiter
 from app.services.note import NoteSystem, SingleNote
 from app.validators import clean_string, get_json_body, int_range
@@ -41,7 +41,8 @@ def create_post():
           "content": "仙林校区，每周三下午...",
           "tags": ["羽毛球", "仙林"],
           "place_id": 1,             // 可选，关联场所
-          "event_time": "2026-06-15T15:00:00Z",  // event 类型建议传
+          "event_time": "2026-06-15T15:00:00Z",
+          "event_end_time": "2026-06-15T17:00:00Z",  // 指定时间需传开始+结束
           "location": "118.93,32.10",
           "location_name": "仙林校区体育馆"
         }
@@ -63,20 +64,32 @@ def create_post():
         place_id = int_range(place_id, "place_id", min_value=1)
 
     event_time = data.get("event_time")
+    event_end_time = data.get("event_end_time")
     from datetime import datetime
     if event_time:
         try:
             event_time = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             return error_response("event_time 格式无效，请使用 ISO 8601 格式", 400)
+    if event_end_time:
+        try:
+            event_end_time = datetime.fromisoformat(event_end_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return error_response("event_end_time 格式无效，请使用 ISO 8601 格式", 400)
 
-    # scheduled 模式必须有 event_time
-    if urgency == "scheduled" and not event_time:
-        return error_response("指定时间模式下必须提供 event_time", 400)
+    # scheduled 模式必须有开始+结束时间，且结束晚于开始
+    if urgency == "scheduled":
+        if not event_time or not event_end_time:
+            return error_response("指定时间模式下必须提供开始和结束时间", 400)
+        if event_end_time <= event_time:
+            return error_response("结束时间必须晚于开始时间", 400)
+    else:
+        event_time = None
+        event_end_time = None
 
     location = clean_string(data.get("location"), "location", max_length=50)
     location_name = clean_string(data.get("location_name"), "location_name", max_length=200)
-    max_participants = int_range(data.get("slots", 1), "slots", min_value=1, max_value=100)
+    max_participants = int_range(data.get("slots", 2), "slots", min_value=2, max_value=100)
     budget = clean_string(data.get("budget"), "budget", max_length=50)
     contact = clean_string(data.get("contact"), "contact", max_length=100)
 
@@ -87,6 +100,7 @@ def create_post():
         tags=tags,
         place_id=place_id,
         event_time=event_time,
+        event_end_time=event_end_time,
         urgency=urgency,
         location=location,
         location_name=location_name,
@@ -158,7 +172,7 @@ def get_post(post_id):
 
     浏览计数 +1（未登录用户也计入）。
     返回帖子内容、评论列表、参与用户列表。
-    优化：预加载标签/点赞/报名状态，避免 to_dict() 内部的 3 次额外查询。
+    优化：预加载标签/点赞/收藏/报名状态，避免 to_dict() 内部的额外查询。
     """
     notes = NoteSystem(user_id=g.current_user_id if hasattr(g, "current_user_id") else None)
     note = notes.get_post(post_id)
@@ -173,12 +187,16 @@ def get_post(post_id):
         _is_liked = PostLike.query.filter_by(
             post_id=post_id, user_id=user_id
         ).first() is not None
+        _is_favorited = PostFavorite.query.filter_by(
+            post_id=post_id, user_id=user_id
+        ).first() is not None
         part = EventParticipant.query.filter_by(
             post_id=post_id, user_id=user_id
         ).first()
         _participation = part.status if part else None
     else:
         _is_liked = False
+        _is_favorited = False
         _participation = None
     _tags = [pt.tag.name for pt in PostTag.query.filter_by(post_id=post_id).all() if pt.tag]
 
@@ -187,6 +205,7 @@ def get_post(post_id):
         include_place=True,
         _tags=_tags,
         _is_liked=_is_liked,
+        _is_favorited=_is_favorited,
         _participation=_participation,
     )
     data["comments"] = note.get_comments(current_user_id=user_id)
@@ -223,18 +242,30 @@ def update_post(post_id):
         tags = [t.strip() for t in tags if isinstance(t, str) and t.strip()][:10]
 
     event_time = data.get("event_time")
+    event_end_time = data.get("event_end_time")
     from datetime import datetime
     if event_time:
         try:
             event_time = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             return error_response("event_time 格式无效", 400)
+    if event_end_time:
+        try:
+            event_end_time = datetime.fromisoformat(event_end_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return error_response("event_end_time 格式无效", 400)
 
-    # scheduled 模式必须有 event_time（编辑时也校验）
-    if urgency == "scheduled" and not event_time and not note.event_time:
-        return error_response("指定时间模式下必须提供 event_time", 400)
+    # scheduled 模式必须有开始+结束时间（编辑时也校验）
+    effective_urgency = urgency if urgency is not None else note.urgency
+    effective_start = event_time if event_time is not None else note.event_time
+    effective_end = event_end_time if event_end_time is not None else note.event_end_time
+    if effective_urgency == "scheduled":
+        if not effective_start or not effective_end:
+            return error_response("指定时间模式下必须提供开始和结束时间", 400)
+        if effective_end <= effective_start:
+            return error_response("结束时间必须晚于开始时间", 400)
 
-    max_participants = int_range(data.get("slots"), "slots", min_value=1, max_value=100) if data.get("slots") else None
+    max_participants = int_range(data.get("slots"), "slots", min_value=2, max_value=100) if data.get("slots") is not None else None
     budget = clean_string(data.get("budget"), "budget", max_length=50)
     contact = clean_string(data.get("contact"), "contact", max_length=100)
 
@@ -245,6 +276,7 @@ def update_post(post_id):
         content=content,
         tags=tags,
         event_time=event_time,
+        event_end_time=event_end_time,
         urgency=urgency,
         location=clean_string(data.get("location"), "location", max_length=50),
         location_name=clean_string(data.get("location_name"), "location_name", max_length=200),
@@ -287,6 +319,20 @@ def toggle_like(post_id):
 
     liked = note.toggle_like(g.current_user_id)
     return jsonify({"liked": liked, "like_count": note.like_count})
+
+
+@note_bp.route("/posts/<int:post_id>/favorite", methods=["POST"])
+@jwt_required
+@limiter.limit("60 per minute")
+def toggle_favorite(post_id):
+    """切换帖子收藏状态。"""
+    notes = _ns()
+    note = notes.get_post(post_id)
+    if not note:
+        return error_response("帖子不存在", 404, code="post_not_found")
+
+    favorited = note.toggle_favorite(g.current_user_id)
+    return jsonify({"favorited": favorited, "favorite_count": note.favorite_count})
 
 
 @note_bp.route("/posts/<int:post_id>/comments", methods=["POST"])
@@ -376,7 +422,7 @@ def participate(post_id):
         return error_response(str(e), 400)
     return jsonify({
         "status": result,
-        "participant_count": note.participant_count,
+        "participant_count": note.participant_total_count,
     })
 
 

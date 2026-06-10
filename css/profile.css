@@ -353,6 +353,15 @@
 .profile-stat-item:hover {
     background: var(--bg-tertiary);
 }
+.profile-stat-item:disabled,
+.profile-stat-item.is-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.profile-stat-item:disabled:hover,
+.profile-stat-item.is-disabled:hover {
+    background: transparent;
+}
 .profile-stat-item.active .profile-stat-num,
 .profile-stat-item.active .profile-stat-label {
     color: var(--btn-primary-bg);

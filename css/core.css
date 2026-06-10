@@ -383,8 +383,11 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
     border-color: var(--btn-primary-bg);
 }
 .time-mode-btn:hover:not(.active) { border-color: var(--btn-primary-bg); color: var(--btn-primary-bg); }
-.scheduled-time-row { display: flex; gap: 8px; margin-bottom: 8px; }
-.scheduled-time-row input { flex: 1; min-width: 0; }
+.scheduled-time-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.scheduled-time-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.scheduled-time-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.scheduled-time-hint { font-size: 0.72rem; color: var(--text-tertiary); font-weight: 700; padding-left: 2px; }
+.scheduled-time-col input { width: 100%; min-width: 0; }
 .partner-form-row { display: flex; gap: 8px; }
 .partner-form-row input { flex: 1; min-width: 0; }
 

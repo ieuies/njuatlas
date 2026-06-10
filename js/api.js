@@ -114,8 +114,8 @@ export async function chatRecommend(message, sessionId = null, city = '南京', 
 }
 
 // ── 帖子系统（搭子论坛） ──
-export async function createPost({ type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact } = {}) {
-    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, urgency, location, location_name, slots, budget, contact });
+export async function createPost({ type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact } = {}) {
+    return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact });
 }
 export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q } = {}) {
     const params = new URLSearchParams();
@@ -144,6 +144,9 @@ export async function deletePost(postId) {
 }
 export async function togglePostLike(postId) {
     return request(`/posts/${postId}/like`, 'POST');
+}
+export async function togglePostFavorite(postId) {
+    return request(`/posts/${postId}/favorite`, 'POST');
 }
 export async function addPostComment(postId, content, parentId = null) {
     return request(`/posts/${postId}/comments`, 'POST', { content, parent_id: parentId });
@@ -236,4 +239,7 @@ export async function markNotificationsRead(ids = null) {
 }
 export async function uploadAvatar(dataUrl) {
     return request('/social/me/avatar', 'POST', { avatar: dataUrl });
+}
+export async function uploadCover(dataUrl) {
+    return request('/social/me/cover', 'POST', { cover: dataUrl });
 }

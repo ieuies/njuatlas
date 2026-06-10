@@ -19,6 +19,8 @@ function readStoredUser() {
             username: payload.email ? payload.email.split('@')[0] : '',
             email_verified: false,
             campus: '',
+            avatar_url: '',
+            cover_url: '',
             bubble_style: 'atlas-classic',
         };
     } catch(e) {
@@ -41,6 +43,7 @@ function userFromAuthPayload(data, fallback = {}) {
         email_verified: Boolean(data.email_verified ?? fallback.email_verified),
         campus: data.campus ?? fallback.campus ?? '',
         avatar_url: data.avatar_url ?? fallback.avatar_url ?? '',
+        cover_url: data.cover_url ?? fallback.cover_url ?? '',
         bubble_style: data.bubble_style ?? fallback.bubble_style ?? 'atlas-classic',
     };
 }
