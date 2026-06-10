@@ -12,6 +12,7 @@ let currentProfileTab = 'posts';
 let _profileBioCache = null;
 let _viewingUserId = null;
 let _viewingProfileCache = null;
+const VISITOR_HIDDEN_TABS = ['comments', 'favorites', 'activities'];
 
 const CROPPER_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css';
 const CROPPER_JS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
@@ -432,8 +433,10 @@ function applyProfileModeUI(isSelf) {
     }
     document.querySelectorAll('.profile-tab').forEach((tab) => {
         const id = tab.getAttribute('data-profile-tab');
-        if (['comments', 'favorites', 'activities'].includes(id)) {
+        if (VISITOR_HIDDEN_TABS.includes(id)) {
+            tab.hidden = !isSelf;
             tab.style.display = isSelf ? '' : 'none';
+            tab.setAttribute('aria-hidden', isSelf ? 'false' : 'true');
         }
         if (id === 'posts') {
             tab.innerHTML = isSelf

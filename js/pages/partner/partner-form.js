@@ -14,6 +14,45 @@ function _toLocalTimeInputValue(d) {
     return `${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`;
 }
 
+async function resolveLocationCoords(address, city = '南京') {
+    const keyword = (address || '').trim();
+    if (!keyword) return null;
+
+    // 优先地理编码：适合用户直接输入完整地名。
+    try {
+        const geocodeResp = await fetch(
+            `${API_BASE}/places/geocode?address=${encodeURIComponent(keyword)}&city=${encodeURIComponent(city)}`
+        );
+        if (geocodeResp.ok) {
+            const geocodeData = await geocodeResp.json();
+            const location = geocodeData?.geocodes?.[0]?.location;
+            if (typeof location === 'string' && location.includes(',')) {
+                return location.trim();
+            }
+        }
+    } catch (err) {
+        console.warn('地理编码失败，尝试地点联想兜底:', err);
+    }
+
+    // 兜底：走地点联想接口，取第一条可用坐标。
+    try {
+        const suggestionResp = await fetch(
+            `${API_BASE}/places/suggestions?keyword=${encodeURIComponent(keyword)}&city=${encodeURIComponent(city)}`
+        );
+        if (suggestionResp.ok) {
+            const suggestionData = await suggestionResp.json();
+            const location = suggestionData?.tips?.find((tip) => (
+                typeof tip?.location === 'string' && tip.location.includes(',')
+            ))?.location;
+            if (location) return location.trim();
+        }
+    } catch (err) {
+        console.warn('地点联想兜底失败:', err);
+    }
+
+    return null;
+}
+
 export function openEditPostModal(post) {
     const modal = document.getElementById('partnerModal');
     if (!modal) return;
@@ -261,10 +300,6 @@ export function initPartnerModal() {
             return;
         }
 
-        if (location && !partnerStore.modalLocationCoords) {
-            showToast('请从下拉建议中选择地点，否则帖子不会显示在地图上');
-        }
-
         let event_time = null;
         let event_end_time = null;
         if (partnerStore.modalUrgency === 'scheduled') {
@@ -296,11 +331,23 @@ export function initPartnerModal() {
         submitBtn.innerText = btnText;
 
         try {
+            let finalLocationCoords = partnerStore.modalLocationCoords || null;
+            if (location && !finalLocationCoords) {
+                showToast('正在自动匹配地点坐标...');
+                finalLocationCoords = await resolveLocationCoords(location);
+                if (finalLocationCoords) {
+                    partnerStore.modalLocationCoords = finalLocationCoords;
+                    showToast('已自动匹配地点，可在地图中显示');
+                } else {
+                    showToast('未匹配到地点坐标，发布后可能不会显示在地图上');
+                }
+            }
+
             if (editId) {
                 await updatePost(parseInt(editId), {
                     type: partnerStore.modalDuration === 'long' ? 'forum' : 'event',
                     title, content: description || title, tags,
-                    location: partnerStore.modalLocationCoords || null,
+                    location: finalLocationCoords,
                     location_name: location || null,
                     urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
                     event_time: partnerStore.modalDuration === 'long' ? null : event_time,
@@ -313,7 +360,7 @@ export function initPartnerModal() {
                 await createPost({
                     type: partnerStore.modalDuration === 'long' ? 'forum' : 'event',
                     title, content: description || title, tags,
-                    location: partnerStore.modalLocationCoords || null,
+                    location: finalLocationCoords,
                     location_name: location || null,
                     urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
                     event_time: partnerStore.modalDuration === 'long' ? null : event_time,

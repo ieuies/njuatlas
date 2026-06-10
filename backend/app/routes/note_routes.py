@@ -535,29 +535,76 @@ def place_suggestions():
         ?keyword=大米      搜索关键词
         ?city=南京         限定城市（可选）
     """
-    from app.services.amap import inputtips
+    from app.services.amap import inputtips, search_places
 
     keyword = clean_string(request.args.get("keyword"), "keyword", required=True, max_length=50)
     city = clean_string(request.args.get("city", "南京"), "city", max_length=30)
     location = request.args.get("location", "").strip() or None
 
-    try:
-        data = inputtips(keyword, city=city, location=location)
-    except Exception:
-        return error_response("地点搜索服务暂时不可用", 502)
+    def _normalize_location(raw_location):
+        if not raw_location:
+            return None
+        if isinstance(raw_location, dict):
+            lng = str(raw_location.get("lng", "")).strip()
+            lat = str(raw_location.get("lat", "")).strip()
+            if not lng or not lat:
+                return None
+            return f"{lng},{lat}"
+        value = str(raw_location).strip()
+        if not value or "," not in value:
+            return None
+        return value
 
     tips = []
-    for t in data.get("tips", []):
-        loc = t.get("location")
-        if not loc:
-            continue
-        if isinstance(loc, dict):
-            loc = f"{loc.get('lng', '')},{loc.get('lat', '')}"
+    seen = set()
+
+    def _append_tip(name, address, district, loc):
+        if not name or not loc:
+            return
+        dedupe_key = (name.strip().lower(), loc.strip())
+        if dedupe_key in seen:
+            return
+        seen.add(dedupe_key)
         tips.append({
-            "name": t.get("name", ""),
-            "address": t.get("address", ""),
-            "district": t.get("district", ""),
+            "name": name,
+            "address": address or "",
+            "district": district or "",
             "location": loc,
         })
+
+    try:
+        data = inputtips(keyword, city=city, location=location)
+        for t in data.get("tips", []):
+            _append_tip(
+                t.get("name", ""),
+                t.get("address", ""),
+                t.get("district", ""),
+                _normalize_location(t.get("location")),
+            )
+    except Exception:
+        data = {"tips": []}
+
+    # 输入提示有时会返回无坐标项（例如“新街口”），这里用 POI 文本检索做兜底，
+    # 保证前端始终拿到可用于发帖地图定位的坐标。
+    if not tips:
+        try:
+            fallback = search_places(
+                keyword,
+                city=city,
+                location=None,  # 不用前端固定坐标，避免把结果限制在某个小范围内
+                page=1,
+                page_size=12,
+            )
+            if str(fallback.get("status")) == "1":
+                for poi in fallback.get("pois", []):
+                    _append_tip(
+                        poi.get("name", ""),
+                        poi.get("address", ""),
+                        poi.get("adname", ""),
+                        _normalize_location(poi.get("location")),
+                    )
+        except Exception:
+            if not data.get("tips"):
+                return error_response("地点搜索服务暂时不可用", 502)
 
     return jsonify({"tips": tips})
