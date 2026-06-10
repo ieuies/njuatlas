@@ -113,6 +113,71 @@ export async function chatRecommend(message, sessionId = null, city = '南京', 
     return request('/llm/chat_recommend', 'POST', body, true, 30000);
 }
 
+/**
+ * 流式 AI 推荐。handlers: onMeta({session_id,candidates}), onToken(text), onDone({reply}), onError(message)
+ */
+export async function chatRecommendStream(message, sessionId = null, city = '南京', location = null, handlers = {}) {
+    const url = `${API_BASE}/llm/chat_recommend`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const body = { message, city, stream: true };
+    if (sessionId) body.session_id = sessionId;
+    if (location) body.location = location;
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+        if (res.status === 401) {
+            authToken = null;
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('current_user');
+            throw new Error('UNAUTHORIZED');
+        }
+        let messageText = `请求失败: ${res.status}`;
+        try {
+            const data = await res.json();
+            messageText = data.message || messageText;
+        } catch {
+            // ignore
+        }
+        throw new Error(messageText);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('浏览器不支持流式响应');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let splitAt;
+        while ((splitAt = buffer.indexOf('\n\n')) >= 0) {
+            const block = buffer.slice(0, splitAt);
+            buffer = buffer.slice(splitAt + 2);
+            let eventName = 'message';
+            let dataLine = '';
+            for (const line of block.split('\n')) {
+                if (line.startsWith('event:')) eventName = line.slice(6).trim();
+                else if (line.startsWith('data:')) dataLine = line.slice(5).trim();
+            }
+            if (!dataLine) continue;
+            const payload = JSON.parse(dataLine);
+            if (eventName === 'meta') handlers.onMeta?.(payload);
+            else if (eventName === 'token') handlers.onToken?.(payload.text || '');
+            else if (eventName === 'done') handlers.onDone?.(payload);
+            else if (eventName === 'error') handlers.onError?.(payload.message || 'AI 回复失败');
+        }
+    }
+}
+
 // ── 帖子系统（搭子论坛） ──
 export async function createPost({ type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact } = {}) {
     return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact });
@@ -186,6 +251,9 @@ export async function getConversationMessages(sessionId) {
 
 export async function deleteConversation(sessionId) {
     return request(`/llm/conversation/${sessionId}`, 'DELETE');
+}
+export async function batchDeleteConversations(sessionIds) {
+    return request('/llm/conversations/batch_delete', 'POST', { session_ids: sessionIds });
 }
 
 // ── 社交（好友 / 私信 / 通知 / 公开资料）──

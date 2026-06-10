@@ -99,8 +99,9 @@ cp .env.example .env
 
 ```env
 GAODE_API_KEY=your-gaode-api-key
-ZHIPU_API_KEY=your-zhipu-api-key
-BAILIAN_API_KEY=
+BAILIAN_API_KEY=your-bailian-api-key
+ZHIPU_API_KEY=
+LLM_PROVIDER=bailian
 SECRET_KEY=replace-with-a-random-secret-at-least-32-chars
 FLASK_APP=app:create_app
 ```
@@ -170,6 +171,7 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | `GAODE_API_KEY` | 是 | 无 | 高德地图 Web API Key |
 | `ZHIPU_API_KEY` | 二选一 | 空 | 智谱 AI Key |
 | `BAILIAN_API_KEY` | 二选一 | 空 | 阿里云百炼 Key |
+| `LLM_PROVIDER` | 否 | `auto` | LLM 提供方：`auto`/`bailian`/`zhipu`（`auto` 默认优先百炼） |
 | `AMAP_CACHE_TTL_SECONDS` | 否 | `300` | 高德搜索缓存 TTL；设为 `0` 可关闭 |
 | `AMAP_CACHE_MAX_ITEMS` | 否 | `256` | 高德搜索缓存最大条目数 |
 | `AMAP_REQUEST_TIMEOUT_SECONDS` | 否 | `8` | 高德请求超时 |
@@ -731,6 +733,65 @@ scripts/run-backend-utf8.cmd
 ```
 
 Windows 本地开发时如果终端中文乱码，可以使用这些脚本或手动切换终端到 UTF-8。代码文件按 UTF-8 保存。
+
+## OSM 补充数据导入（可选）
+
+为了减少“高德检索命中不足”的场景，可以把 OpenStreetMap（OSM）的周边餐饮 POI 导入本地 `places` 表，作为补充数据源（不替代高德）。
+
+脚本位置：
+
+```text
+scripts/import_osm_places.py
+```
+
+示例：
+
+```bash
+# 仅预览（不写库）
+python scripts/import_osm_places.py --dry-run
+
+# 导入南大鼓楼周边 4km 的餐饮 POI
+python scripts/import_osm_places.py --radius 4000
+
+# 只导入名称含“饺子/水饺/锅贴/面”的店
+python scripts/import_osm_places.py --name-keywords 饺子,水饺,锅贴,面
+```
+
+常用参数：
+
+- `--lat` / `--lng`：中心坐标（默认南大鼓楼校区）
+- `--radius`：半径（米）
+- `--amenities`：OSM `amenity` 过滤（默认 `restaurant,fast_food,cafe,food_court`）
+- `--name-keywords`：按名称关键词二次过滤
+- `--dry-run`：只看结果，不写数据库
+
+## 南大周边餐饮采集（高德 API）
+
+如果你希望把“南京大学附近餐厅”批量沉淀到本地数据库，可使用：
+
+```text
+scripts/crawl_nju_restaurants.py
+```
+
+示例：
+
+```bash
+# 仅预览（不写库）
+python scripts/crawl_nju_restaurants.py --dry-run
+
+# 采集三校区周边 6km 餐饮数据并写入 places
+python scripts/crawl_nju_restaurants.py --radius 6000
+
+# 只采集鼓楼+仙林，偏饺子/面食方向
+python scripts/crawl_nju_restaurants.py --campuses gulou,xianlin --keywords 餐厅,饺子,水饺,锅贴,面馆
+```
+
+说明：
+
+- 使用高德官方 POI API（不是 HTML 硬爬）
+- 自动按 `poi_id` 和 `name+location` 去重
+- 对已存在记录执行增量更新（地址、分类、评分、图片、更新时间）
+- 默认覆盖：鼓楼 / 仙林 / 浦口校区
 
 ## 当前已知限制
 

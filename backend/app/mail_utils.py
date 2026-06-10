@@ -1,7 +1,11 @@
-import resend
 from flask import current_app
 
 from app.logging_utils import log_event
+
+try:
+    import resend
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in local dev
+    resend = None
 
 
 def _send_mail(to_email, subject, body):
@@ -18,6 +22,17 @@ def _send_mail(to_email, subject, body):
             to=to_email,
             subject=subject,
             body=body,
+        )
+        return False
+    if resend is None:
+        log_event(
+            current_app.logger,
+            "mail_provider_unavailable",
+            level="warning",
+            provider="resend",
+            to=to_email,
+            subject=subject,
+            reason="python_package_not_installed",
         )
         return False
 

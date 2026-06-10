@@ -98,7 +98,14 @@
             <div id="aiPage" class="page">
                 <div class="ai-container">
                     <aside class="ai-sidebar" id="aiSidebar">
-                        <div class="ai-sidebar-header"><button class="ai-new-chat-btn" id="aiNewChatBtn"><i class="fas fa-plus"></i> 新对话</button></div>
+                        <div class="ai-sidebar-header">
+                            <button class="ai-new-chat-btn" id="aiNewChatBtn"><i class="fas fa-plus"></i> 新对话</button>
+                            <div class="ai-manage-row">
+                                <button class="ai-side-mini-btn" id="aiBatchToggleBtn" type="button"><i class="fas fa-list-check"></i> 批量管理</button>
+                                <button class="ai-side-mini-btn danger" id="aiBatchDeleteBtn" type="button" style="display:none;" disabled><i class="fas fa-trash-can"></i> 删除(0)</button>
+                                <button class="ai-side-mini-btn" id="aiBatchCancelBtn" type="button" style="display:none;">取消</button>
+                            </div>
+                        </div>
                         <button class="ai-sidebar-toggle" id="aiSidebarToggle" aria-label="折叠侧栏"><i class="fas fa-chevron-left"></i></button>
                         <div class="ai-conversation-list" id="aiConversationList"><div class="ai-conv-loading">加载历史对话...</div></div>
                     </aside>

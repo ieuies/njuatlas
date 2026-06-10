@@ -163,7 +163,9 @@ cp .env.example .env
 
 ```env
 GAODE_API_KEY=your-gaode-api-key
-ZHIPU_API_KEY=your-zhipu-api-key
+BAILIAN_API_KEY=your-bailian-api-key
+ZHIPU_API_KEY=
+LLM_PROVIDER=bailian
 SECRET_KEY=your-random-secret-key-at-least-32-chars
 ```
 

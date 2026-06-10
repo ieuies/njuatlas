@@ -44,6 +44,43 @@
     padding: 16px;
     border-bottom: 1px solid var(--atlas-line);
 }
+.ai-manage-row {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+}
+.ai-side-mini-btn {
+    flex: 1;
+    padding: 7px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--atlas-line);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.ai-side-mini-btn:hover {
+    border-color: var(--atlas-purple);
+    color: var(--atlas-purple);
+    background: rgba(107,33,165,0.06);
+}
+.ai-side-mini-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.ai-side-mini-btn.danger {
+    border-color: rgba(220, 38, 38, 0.35);
+    color: var(--danger);
+}
+.ai-side-mini-btn.danger:hover {
+    background: rgba(220, 38, 38, 0.12);
+    border-color: rgba(220, 38, 38, 0.55);
+}
 .ai-new-chat-btn {
     width: 100%;
     padding: 10px 16px;
@@ -81,6 +118,24 @@
     transition: all 0.2s;
     background: transparent;
     border: 1px solid transparent;
+}
+.ai-conv-item.selected {
+    background: rgba(107,33,165,0.08);
+    border-color: var(--atlas-purple);
+}
+.ai-conv-check {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    accent-color: var(--atlas-purple);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.ai-conversation-list:not(.batch-mode) .ai-conv-check {
+    display: none;
+}
+.ai-conversation-list.batch-mode .ai-conv-delete {
+    display: none;
 }
 .ai-conv-item:hover {
     background: var(--bg-tertiary);
@@ -400,6 +455,8 @@
     border-radius: 14px;
     background: var(--bg-tertiary);
     border: 1px solid var(--atlas-line);
+    overflow-x: auto;
+    min-width: 0;
 }
 .ai-candidates-label {
     font-size: 0.75rem;
@@ -410,11 +467,26 @@
     align-items: center;
     gap: 4px;
 }
+.ai-candidate-head,
 .ai-candidate-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) 3.4rem 2.6rem 3.2rem 3.6rem;
+    gap: 6px 10px;
     align-items: center;
-    gap: 10px;
-    padding: 8px 0;
+    padding: 6px 0;
+}
+.ai-candidate-head {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--gray-200);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+}
+.ai-candidate-head span:not(:first-child) {
+    text-align: right;
+}
+.ai-candidate-item {
     border-bottom: 1px solid var(--gray-200);
     font-size: 0.82rem;
     color: var(--text-primary);
@@ -423,18 +495,23 @@
 .ai-candidate-name {
     font-weight: 700;
     color: var(--atlas-ink);
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.ai-candidate-meta {
+.ai-candidate-dist,
+.ai-candidate-rating,
+.ai-candidate-cost,
+.ai-candidate-type {
     font-size: 0.72rem;
     color: var(--text-tertiary);
-    flex-shrink: 0;
-    display: flex;
-    gap: 8px;
+    text-align: right;
+    white-space: nowrap;
+}
+.ai-candidate-type {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ========== 快速提问按钮行 ========== */
@@ -484,6 +561,23 @@
     background: var(--bg-tertiary);
     border-color: var(--atlas-line);
     color: var(--atlas-ink);
+}
+:root[data-theme="dark"] .ai-side-mini-btn {
+    background: var(--atlas-card);
+    border-color: var(--atlas-line);
+    color: var(--text-secondary);
+}
+:root[data-theme="dark"] .ai-side-mini-btn:hover {
+    border-color: var(--atlas-purple-soft);
+    color: var(--atlas-purple);
+    background: var(--bg-tertiary);
+}
+:root[data-theme="dark"] .ai-side-mini-btn.danger {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.35);
+}
+:root[data-theme="dark"] .ai-side-mini-btn.danger:hover {
+    background: rgba(248, 113, 113, 0.14);
 }
 :root[data-theme="dark"] .ai-new-chat-btn:hover {
     background: var(--gradient-primary);
@@ -565,7 +659,14 @@
 :root[data-theme="dark"] .ai-candidate-name {
     color: var(--atlas-ink);
 }
-:root[data-theme="dark"] .ai-candidate-meta {
+:root[data-theme="dark"] .ai-candidate-head {
+    color: var(--text-tertiary);
+    border-bottom-color: var(--gray-200);
+}
+:root[data-theme="dark"] .ai-candidate-dist,
+:root[data-theme="dark"] .ai-candidate-rating,
+:root[data-theme="dark"] .ai-candidate-cost,
+:root[data-theme="dark"] .ai-candidate-type {
     color: var(--text-tertiary);
 }
 :root[data-theme="dark"] .ai-quick-row .quick-q-btn {

@@ -1,12 +1,42 @@
-import { chatRecommend, getConversationList, getConversationMessages, deleteConversation } from '../api.js';
+import { chatRecommendStream, getConversationList, getConversationMessages, deleteConversation, batchDeleteConversations } from '../api.js';
 import { showToast, formatDateShort, formatRelativeTime } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
 let currentSessionId = null;
 let _conversationListLoaded = false;
+let _batchModeEnabled = false;
+const _selectedSessions = new Set();
 
 // 发送锁：上一次请求未完成时忽略新的发送
 let isSending = false;
+
+const POI_TYPE_LABELS = {
+    '050000': '餐饮',
+    '050100': '中餐厅',
+    '050200': '外国餐厅',
+    '050300': '快餐厅',
+    '050500': '冷饮店',
+    '050600': '糕饼店',
+    '050700': '甜品店',
+    '050800': '茶餐厅',
+    '050900': '甜品烘焙',
+    '051000': '咖啡厅',
+    '051100': '茶艺馆',
+};
+
+function formatPoiTypeLabel(typeStr) {
+    if (!typeStr) return '';
+    const text = String(typeStr).trim();
+    if (!text || text === '本地补充' || text.startsWith('osm:')) return '';
+    if (/^\d{6}$/.test(text)) return POI_TYPE_LABELS[text] || '';
+    if (text.includes(';')) {
+        const parts = text.split(';').map(s => s.trim()).filter(Boolean);
+        const meaningful = parts.filter(p => p !== '餐饮服务');
+        return meaningful.length ? meaningful[meaningful.length - 1] : (parts[parts.length - 1] || '');
+    }
+    if (/^\d{3,6}$/.test(text)) return POI_TYPE_LABELS[text.padStart(6, '0')] || '';
+    return text;
+}
 
 function stripMarkdown(text) {
     return text
@@ -69,6 +99,41 @@ function renderQuickQuestions() {
         });
         container.appendChild(btn);
     });
+}
+
+function renderCandidateCards(candidates, messagesDiv) {
+    if (!candidates || !candidates.length || !messagesDiv) return;
+    const candDiv = document.createElement('div');
+    candDiv.className = 'chat-message chat-bot';
+    let html = `<div class="ai-candidates">
+        <div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>
+        <div class="ai-candidate-head" aria-hidden="true">
+            <span>店名</span><span>距离</span><span>评分</span><span>人均</span><span>类型</span>
+        </div>`;
+    candidates.forEach(c => {
+        const distStr = c.distance_text || '';
+        const typeStr = formatPoiTypeLabel(c.type || '');
+        const ratingStr = c.rating && c.rating !== '暂无评分' ? c.rating : '';
+        const costStr = c.cost && c.cost !== '暂无价格' ? c.cost : '';
+        html += `<div class="ai-candidate-item">
+                    <span class="ai-candidate-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+                    <span class="ai-candidate-dist">${distStr ? escapeHtml(distStr) : '—'}</span>
+                    <span class="ai-candidate-rating">${ratingStr ? escapeHtml(ratingStr) : '—'}</span>
+                    <span class="ai-candidate-cost">${costStr ? escapeHtml(costStr) : '—'}</span>
+                    <span class="ai-candidate-type">${typeStr ? escapeHtml(typeStr) : '—'}</span>
+                 </div>`;
+    });
+    html += '</div>';
+    candDiv.innerHTML = html;
+    messagesDiv.appendChild(candDiv);
+}
+
+function setSendLock(locked) {
+    const sendBtn = document.getElementById('sendChatBtn');
+    const input = document.getElementById('chatInput');
+    if (sendBtn) sendBtn.disabled = locked;
+    if (input) input.classList.toggle('ai-input-busy', locked);
+    document.querySelectorAll('.quick-q-btn').forEach(b => { b.disabled = locked; });
 }
 
 function hideWelcome() {
@@ -142,6 +207,36 @@ function escapeHtml(str) {
 
 // ==================== 侧栏相关 ====================
 
+function updateBatchUiState() {
+    const toggleBtn = document.getElementById('aiBatchToggleBtn');
+    const deleteBtn = document.getElementById('aiBatchDeleteBtn');
+    const cancelBtn = document.getElementById('aiBatchCancelBtn');
+    const listContainer = document.getElementById('aiConversationList');
+    const selectedCount = _selectedSessions.size;
+
+    if (toggleBtn) toggleBtn.style.display = _batchModeEnabled ? 'none' : '';
+    if (deleteBtn) {
+        deleteBtn.style.display = _batchModeEnabled ? '' : 'none';
+        deleteBtn.disabled = selectedCount === 0;
+        deleteBtn.innerHTML = `<i class="fas fa-trash-can"></i> 删除(${selectedCount})`;
+    }
+    if (cancelBtn) cancelBtn.style.display = _batchModeEnabled ? '' : 'none';
+    listContainer?.classList.toggle('batch-mode', _batchModeEnabled);
+}
+
+function setBatchMode(enabled) {
+    _batchModeEnabled = enabled;
+    if (!enabled) _selectedSessions.clear();
+    updateBatchUiState();
+}
+
+function toggleSessionSelection(sessionId) {
+    if (!sessionId) return;
+    if (_selectedSessions.has(sessionId)) _selectedSessions.delete(sessionId);
+    else _selectedSessions.add(sessionId);
+    updateBatchUiState();
+}
+
 async function loadConversationList(force = false) {
     if (!isLoggedIn()) return;
     if (!force && _conversationListLoaded) return;
@@ -151,11 +246,13 @@ async function loadConversationList(force = false) {
         const data = await getConversationList();
         const sessions = data.items || [];
         if (sessions.length === 0) {
+            if (_batchModeEnabled) setBatchMode(false);
             listContainer.innerHTML = '<div class="ai-conv-empty"><i class="fas fa-comment"></i> 暂无历史对话</div>';
             return;
         }
         listContainer.innerHTML = sessions.map(session => `
-            <div class="ai-conv-item" data-session-id="${escapeHtml(session.session_id)}">
+            <div class="ai-conv-item ${_selectedSessions.has(session.session_id) ? 'selected' : ''}" data-session-id="${escapeHtml(session.session_id)}">
+                <input class="ai-conv-check" type="checkbox" data-session-id="${escapeHtml(session.session_id)}" ${_selectedSessions.has(session.session_id) ? 'checked' : ''} aria-label="选择会话">
                 <div class="ai-conv-content">
                     <div class="ai-conv-title">${escapeHtml(session.last_message?.substring(0, 30) || '新对话')}</div>
                     <div class="ai-conv-preview">${escapeHtml(formatDateShort(session.last_at))}</div>
@@ -167,19 +264,40 @@ async function loadConversationList(force = false) {
 
         listContainer.querySelectorAll('.ai-conv-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                if (e.target.closest('.ai-conv-delete')) return;
+                if (e.target.closest('.ai-conv-delete') || e.target.closest('.ai-conv-check')) return;
                 const sid = item.getAttribute('data-session-id');
-                if (sid) loadConversation(sid);
+                if (!sid) return;
+                if (_batchModeEnabled) {
+                    toggleSessionSelection(sid);
+                    item.classList.toggle('selected', _selectedSessions.has(sid));
+                    const checkbox = item.querySelector('.ai-conv-check');
+                    if (checkbox) checkbox.checked = _selectedSessions.has(sid);
+                    return;
+                }
+                loadConversation(sid);
+            });
+        });
+        listContainer.querySelectorAll('.ai-conv-check').forEach(box => {
+            box.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const sid = box.getAttribute('data-session-id');
+                if (!sid) return;
+                toggleSessionSelection(sid);
+                box.checked = _selectedSessions.has(sid);
+                const row = box.closest('.ai-conv-item');
+                if (row) row.classList.toggle('selected', _selectedSessions.has(sid));
             });
         });
         listContainer.querySelectorAll('.ai-conv-delete').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                if (_batchModeEnabled) return;
                 const sid = btn.getAttribute('data-session-id');
                 if (sid && confirm('确定要删除这个对话吗？')) await deleteConversationHandler(sid);
             });
         });
         if (currentSessionId) highlightCurrentSession(currentSessionId);
+        updateBatchUiState();
         _conversationListLoaded = true;
     } catch (err) {
         // token 过期时 api.js 已清理 localStorage，isLoggedIn() 会返回 false
@@ -237,6 +355,31 @@ async function deleteConversationHandler(sessionId) {
     }
 }
 
+async function batchDeleteConversationHandler() {
+    const sessionIds = Array.from(_selectedSessions);
+    if (sessionIds.length === 0) {
+        showToast('请先勾选要删除的会话');
+        return;
+    }
+    if (!confirm(`确定删除选中的 ${sessionIds.length} 个会话吗？此操作不可恢复。`)) return;
+
+    try {
+        const res = await batchDeleteConversations(sessionIds);
+        const deletedSessions = res.deleted_sessions ?? sessionIds.length;
+        if (currentSessionId && _selectedSessions.has(currentSessionId)) startNewChat();
+        showToast(`已删除 ${deletedSessions} 个会话`);
+        setBatchMode(false);
+        await loadConversationList(true);
+    } catch (err) {
+        if (err.message === 'UNAUTHORIZED') {
+            showToast('登录已过期，请重新登录');
+            document.getElementById('authModal').style.display = 'flex';
+            return;
+        }
+        showToast('批量删除失败: ' + err.message);
+    }
+}
+
 function startNewChat() {
     currentSessionId = null;
     clearChatMessages();
@@ -257,6 +400,9 @@ function initSidebarControls() {
     const toggleBtn = document.getElementById('aiSidebarToggle');
     const expandBtn = document.getElementById('aiSidebarExpand');
     const newChatBtn = document.getElementById('aiNewChatBtn');
+    const batchToggleBtn = document.getElementById('aiBatchToggleBtn');
+    const batchDeleteBtn = document.getElementById('aiBatchDeleteBtn');
+    const batchCancelBtn = document.getElementById('aiBatchCancelBtn');
 
     if (toggleBtn) {
         toggleBtn.addEventListener('click', () => sidebar?.classList.toggle('collapsed'));
@@ -274,10 +420,27 @@ function initSidebarControls() {
 
     if (newChatBtn) {
         newChatBtn.addEventListener('click', () => {
+            if (_batchModeEnabled) setBatchMode(false);
             startNewChat();
             if (window.innerWidth <= 768) closeMobileSidebar();
         });
     }
+    if (batchToggleBtn) {
+        batchToggleBtn.addEventListener('click', async () => {
+            setBatchMode(true);
+            await loadConversationList(true);
+        });
+    }
+    if (batchCancelBtn) {
+        batchCancelBtn.addEventListener('click', async () => {
+            setBatchMode(false);
+            await loadConversationList(true);
+        });
+    }
+    if (batchDeleteBtn) {
+        batchDeleteBtn.addEventListener('click', batchDeleteConversationHandler);
+    }
+    updateBatchUiState();
 
     // 点击侧边栏外部区域关闭（移动端）
     document.addEventListener('click', (e) => {
@@ -297,9 +460,9 @@ function closeMobileSidebar() {
 
 async function sendMessage() {
     const input = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('sendChatBtn');
     const messagesDiv = document.getElementById('chatMessages');
-    if (!input || !messagesDiv || !sendBtn) return;
+    if (!input || !messagesDiv) return;
+    if (isSending) return;
 
     const msg = input.value.trim();
     if (!msg) return;
@@ -309,11 +472,9 @@ async function sendMessage() {
         return;
     }
 
-    // 加锁：禁用所有发送入口（按钮 + 快捷键 + 快捷问题）
+    // 加锁：禁止发送，但输入框仍可打字
     isSending = true;
-    sendBtn.disabled = true;
-    input.disabled = true;
-    document.querySelectorAll('.quick-q-btn').forEach(b => b.disabled = true);
+    setSendLock(true);
 
     input.value = '';
     hideWelcome();
@@ -325,7 +486,7 @@ async function sendMessage() {
     scrollToBottom();
     showThinking();
 
-    // 获取用户定位，失败不阻塞
+    // 获取用户定位：用于展示“你离店有多远”；检索排序由后端按消息里的校区锚点处理。
     let userLocation = null;
     try {
         const pos = await new Promise((resolve, reject) => {
@@ -336,58 +497,66 @@ async function sendMessage() {
         });
         userLocation = `${pos.coords.longitude},${pos.coords.latitude}`;
     } catch {
-        // 定位失败退化为全市搜索
+        // 定位失败时，距离退化为按检索锚点计算
     }
 
+    const botMsg = document.createElement('div');
+    botMsg.className = 'chat-message chat-bot';
+    let streamStarted = false;
+    let streamCandidates = [];
+
+    const ensureBotBubble = () => {
+        if (!streamStarted) {
+            removeThinking();
+            botMsg.textContent = '';
+            messagesDiv.appendChild(botMsg);
+            streamStarted = true;
+        }
+    };
+
     try {
-        const res = await chatRecommend(msg, currentSessionId, '南京', userLocation);
-        if (res.session_id) {
-            const newSession = currentSessionId !== res.session_id;
-            currentSessionId = res.session_id;
-            if (newSession) {
-                _conversationListLoaded = false;
-                await loadConversationList(true);
-            } else await refreshSidebar();
-            highlightCurrentSession(currentSessionId);
+        await chatRecommendStream(msg, currentSessionId, '南京', userLocation, {
+            onMeta: async (payload) => {
+                if (payload.session_id) {
+                    const newSession = currentSessionId !== payload.session_id;
+                    currentSessionId = payload.session_id;
+                    if (newSession) {
+                        _conversationListLoaded = false;
+                        await loadConversationList(true);
+                    } else {
+                        await refreshSidebar();
+                    }
+                    highlightCurrentSession(currentSessionId);
+                }
+                streamCandidates = payload.candidates || [];
+            },
+            onToken: (text) => {
+                ensureBotBubble();
+                botMsg.textContent += text;
+                scrollToBottom();
+            },
+            onDone: (payload) => {
+                ensureBotBubble();
+                const finalReply = stripMarkdown(payload.reply || botMsg.textContent || '');
+                botMsg.textContent = finalReply;
+                renderCandidateCards(streamCandidates, messagesDiv);
+                scrollToBottom();
+            },
+            onError: (message) => {
+                throw new Error(message || 'AI 回复失败');
+            },
+        });
+
+        if (!streamStarted) {
+            removeThinking();
         }
-        removeThinking();
-
-        const rawReply = res.reply || '抱歉，AI 暂时无法回答';
-        const cleanReply = stripMarkdown(rawReply);
-
-        const botMsg = document.createElement('div');
-        botMsg.className = 'chat-message chat-bot';
-        botMsg.textContent = cleanReply;
-        messagesDiv.appendChild(botMsg);
-
-        if (res.candidates && res.candidates.length) {
-            const candDiv = document.createElement('div');
-            candDiv.className = 'chat-message chat-bot';
-            let html = '<div class="ai-candidates"><div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>';
-            res.candidates.forEach(c => {
-                const distStr = c.distance_text || '';
-                const typeStr = c.type || '';
-                html += `<div class="ai-candidate-item">
-                            <span class="ai-candidate-name">${escapeHtml(c.name)}</span>
-                            <span class="ai-candidate-meta">
-                                <span>${distStr ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(distStr)}` : ''}</span>
-                                <span><i class="fas fa-star" aria-hidden="true"></i> ${escapeHtml(c.rating)}</span>
-                                <span><i class="fas fa-coins" aria-hidden="true"></i> ${escapeHtml(c.cost)}</span>
-                                ${typeStr ? `<span><i class="fas fa-tag" aria-hidden="true"></i> ${escapeHtml(typeStr)}</span>` : ''}
-                            </span>
-                         </div>`;
-            });
-            html += '</div>';
-            candDiv.innerHTML = html;
-            messagesDiv.appendChild(candDiv);
-        }
-
-        scrollToBottom();
         renderQuickQuestions();
         await refreshSidebar();
     } catch (e) {
         removeThinking();
-        // token 过期：弹出登录框，引导用户重新登录
+        if (streamStarted && botMsg.parentNode) {
+            botMsg.remove();
+        }
         if (e.message === 'UNAUTHORIZED') {
             showToast('登录已过期，请重新登录');
             document.getElementById('authModal').style.display = 'flex';
@@ -399,11 +568,8 @@ async function sendMessage() {
         messagesDiv.appendChild(errDiv);
         scrollToBottom();
     } finally {
-        // 释放锁
         isSending = false;
-        sendBtn.disabled = false;
-        input.disabled = false;
-        document.querySelectorAll('.quick-q-btn').forEach(b => b.disabled = false);
+        setSendLock(false);
         input.focus();
     }
 }
@@ -444,10 +610,10 @@ export function initAIPage() {
 
     sendBtn.onclick = sendMessage;
     if (input.dataset.aiReady !== 'true') {
-        input.addEventListener('keypress', (e) => {
+        input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage();
+                if (!isSending) sendMessage();
             }
         });
         // 输入框聚焦时滚动到底部
