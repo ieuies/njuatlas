@@ -15,6 +15,7 @@ const FIXED_CATEGORIES = [
     { label: '旅游搭子', icon: 'fa-plane', category: '旅游搭子' },
     { label: '音乐搭子', icon: 'fa-music', category: '音乐搭子' },
     { label: '摄影搭子', icon: 'fa-camera', category: '摄影搭子' },
+    { label: '其他', icon: 'fa-ellipsis', category: '其他' },
 ];
 
 export function initFilters() {

@@ -60,6 +60,7 @@ const TYPE_ICONS = {
     '旅游搭子': 'fa-plane',
     '音乐搭子': 'fa-music',
     '摄影搭子': 'fa-camera',
+    '其他': 'fa-ellipsis',
 };
 export function typeIcon(category) {
     return TYPE_ICONS[category] || 'fa-user-group';
@@ -94,20 +95,24 @@ export function mapPost(p) {
         location: p.location_name || '',
         lnglat: p.location ? p.location.split(',').map(Number) : null,
         urgency: p.urgency || null,
-        time: formatPostTime(p.event_time, p.urgency),
+        time: formatPostTime(p.event_time, p.urgency, p.event_end_time),
+        eventTime: p.event_time || null,
+        eventEndTime: p.event_end_time || null,
         publisher: p.username || '匿名同学',
         publisherId: p.user_id,
         publisherAvatar: p.avatar_url || '',
         coverImage: p.cover_image || '',
         members: p.participant_count || 0,
-        slots: p.max_participants || 1,
+        slots: p.max_participants || 2,
         budget: p.budget || '',
         contact: p.contact || '',
         views: p.view_count || 0,
         likeCount: p.like_count || 0,
+        favoriteCount: p.favorite_count || 0,
         commentCount: p.comment_count || 0,
         hotScore: p.hot_score || 0,
         isLiked: p.is_liked || false,
+        isFavorited: p.is_favorited || false,
         isOwner: isCurrentUserOwner(p),
         participationStatus: p.participation_status,
         createdAt: formatDate(p.created_at),
@@ -115,12 +120,13 @@ export function mapPost(p) {
     };
 }
 
-export function formatPostTime(iso, urgency) {
+export function formatPostTime(iso, urgency, endIso = null) {
     if (urgency === 'now') return '立即';
     if (urgency === 'long_term') return '长期有效';
     if (!iso) return urgency === 'scheduled' ? '已设定' : '';
     const d = parseApiDate(iso);
     if (!d || Number.isNaN(d.getTime())) return '';
+    const end = endIso ? parseApiDate(endIso) : null;
     const todayKey = beijingDateKey(new Date());
     const eventKey = beijingDateKey(d);
     const timePart = d.toLocaleString('zh-CN', {
@@ -129,6 +135,22 @@ export function formatPostTime(iso, urgency) {
         minute: '2-digit',
         hour12: false,
     });
+    const endTimePart = end && !Number.isNaN(end.getTime()) ? end.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }) : null;
+    const endFull = end && !Number.isNaN(end.getTime()) ? end.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'short',
+        hour12: false,
+    }) : null;
+    const endKey = end && !Number.isNaN(end.getTime()) ? beijingDateKey(end) : null;
     const full = d.toLocaleString('zh-CN', {
         timeZone: BEIJING_TZ,
         month: 'numeric',
@@ -138,11 +160,18 @@ export function formatPostTime(iso, urgency) {
         weekday: 'short',
         hour12: false,
     });
-    if (eventKey === todayKey) return `今天 ${timePart}`;
+    if (eventKey === todayKey) {
+        if (!endTimePart) return `今天 ${timePart}`;
+        return endKey && endKey !== eventKey ? `今天 ${timePart} - ${endFull}` : `今天 ${timePart}-${endTimePart}`;
+    }
     const [y, m, day] = todayKey.split('-').map(Number);
     const tomorrowKey = new Date(Date.UTC(y, m - 1, day + 1)).toISOString().slice(0, 10);
-    if (eventKey === tomorrowKey) return `明天 ${timePart}`;
-    return full;
+    if (eventKey === tomorrowKey) {
+        if (!endTimePart) return `明天 ${timePart}`;
+        return endKey && endKey !== eventKey ? `明天 ${timePart} - ${endFull}` : `明天 ${timePart}-${endTimePart}`;
+    }
+    if (!endTimePart) return full;
+    return endKey && endKey !== eventKey ? `${full} - ${endFull}` : `${full}-${endTimePart}`;
 }
 
 // ============================================================

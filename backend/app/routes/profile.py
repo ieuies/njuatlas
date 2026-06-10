@@ -5,7 +5,7 @@ from app import db
 from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.logging_utils import log_event
-from app.models import ConversationMessage, Favorite, Like, Review
+from app.models import ConversationMessage, Favorite, Like, PostFavorite, Review
 from app.rate_limit import limiter
 from app.validators import clean_string, get_json_body
 
@@ -37,25 +37,55 @@ def _place_payload(place):
     }
 
 
+def _post_payload(post):
+    if not post:
+        return None
+    return {
+        "id": post.id,
+        "title": post.title,
+        "content": post.content,
+        "type": post.type,
+        "favorite_count": post.favorite_count or 0,
+        "created_at": _dt(post.created_at),
+    }
+
+
 @profile_bp.route("/favorites", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")
 def my_favorites():
-    rows = (
+    place_rows = (
         Favorite.query
         .filter_by(user_id=g.current_user_id)
         .order_by(Favorite.created_at.desc())
         .all()
     )
+    post_rows = (
+        PostFavorite.query
+        .filter_by(user_id=g.current_user_id)
+        .order_by(PostFavorite.created_at.desc())
+        .all()
+    )
+    items = [
+        {
+            "id": row.id,
+            "kind": "place",
+            "created_at": _dt(row.created_at),
+            "place": _place_payload(row.place),
+        }
+        for row in place_rows
+    ] + [
+        {
+            "id": row.id,
+            "kind": "post",
+            "created_at": _dt(row.created_at),
+            "post": _post_payload(row.post),
+        }
+        for row in post_rows
+    ]
+    items.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return jsonify({
-        "items": [
-            {
-                "id": row.id,
-                "created_at": _dt(row.created_at),
-                "place": _place_payload(row.place),
-            }
-            for row in rows
-        ]
+        "items": items
     })
 
 
@@ -155,6 +185,7 @@ def _profile_payload(user):
         "campus": user.campus or "",
         "tags": tags,
         "avatar_url": user.avatar_url or "",
+        "cover_url": user.cover_url or "",
         "bubble_style": user.bubble_style or "atlas-classic",
         "created_at": _dt(user.created_at),
         "updated_at": _dt(user.updated_at),

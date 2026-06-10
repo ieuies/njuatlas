@@ -377,22 +377,65 @@
     margin-bottom: 0; /* 由 grid gap 控制间距 */
 }
 .partner-brief-card .partner-card-content { padding: 18px !important; }
+.partner-card-author-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
 .partner-card-author {
     display: flex;
     align-items: center;
     gap: 10px;
-    width: 100%;
-    margin-bottom: 12px;
+    width: auto;
+    margin-bottom: 0;
     padding: 0;
     border: 0;
     background: transparent;
-    cursor: pointer;
+    cursor: default;
     text-align: left;
+}
+.partner-card-author-avatar-btn,
+.partner-card-author-name-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+.partner-card-author-name-btn {
+    color: inherit;
 }
 .partner-card-author-name {
     font-size: 0.88rem;
     font-weight: 800;
     color: var(--atlas-ink);
+}
+.partner-author-favorite-btn {
+    border: 0;
+    border-radius: 999px;
+    width: 30px;
+    height: 30px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: var(--transition-fast);
+}
+.partner-author-favorite-btn i {
+    color: var(--warning);
+}
+.partner-author-favorite-btn:hover {
+    color: var(--btn-primary-bg);
+}
+.partner-author-favorite-btn.liked {
+    color: var(--warning);
 }
 .partner-card-cover {
     width: 100%;
@@ -498,7 +541,8 @@
     margin: 0 !important;
     align-items: center;
 }
-.partner-brief-card .partner-card-stats span {
+.partner-brief-card .partner-card-stats > span,
+.partner-brief-card .partner-card-stats .partner-like-mini-btn {
     padding: 5px 9px !important;
     border-radius: 999px !important;
     background: var(--bg-tertiary) !important;
@@ -510,7 +554,19 @@
     gap: 0.35em;
     line-height: 1;
 }
-.partner-brief-card .partner-card-stats span i {
+.partner-brief-card .partner-card-stats .partner-like-mini-btn {
+    border: 0;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.partner-brief-card .partner-card-stats .partner-like-mini-btn:hover {
+    color: var(--btn-primary-bg) !important;
+}
+.partner-brief-card .partner-card-stats .partner-like-mini-btn.liked {
+    color: var(--danger) !important;
+}
+.partner-brief-card .partner-card-stats > span i,
+.partner-brief-card .partner-card-stats .partner-like-mini-btn i {
     margin-right: 0;
     opacity: 0.85;
 }
@@ -626,7 +682,8 @@
 :root[data-theme="dark"] .partner-brief-card .partner-card-meta em {
     color: var(--text-primary);
 }
-:root[data-theme="dark"] .partner-brief-card .partner-card-stats span {
+:root[data-theme="dark"] .partner-brief-card .partner-card-stats > span,
+:root[data-theme="dark"] .partner-brief-card .partner-card-stats .partner-like-mini-btn {
     background: var(--bg-tertiary) !important;
     color: var(--text-secondary) !important;
 }
