@@ -34,15 +34,33 @@
 }
 .post-detail-meta {
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
     font-size: 0.8rem;
     color: var(--text-tertiary);
 }
-.post-detail-meta span {
+.post-detail-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.post-detail-meta-row span {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    min-width: 0;
+}
+.post-detail-meta-row-secondary {
+    display: none;
+    gap: 10px;
+}
+.post-detail-meta-row-secondary #detailBudget {
+    flex: 0 0 auto;
+}
+.post-detail-meta-row-secondary #detailContact {
+    flex: 1 1 220px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 .post-detail-body {
     font-size: 0.92rem;

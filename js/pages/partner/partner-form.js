@@ -6,6 +6,14 @@ import { partnerStore, debounce } from './shared.js';
 import { loadPostsByPage } from './list.js';
 import { refreshPreviewMarkers } from './map.js';
 
+function _pad2(n) { return String(n).padStart(2, '0'); }
+function _toLocalDateInputValue(d) {
+    return `${d.getFullYear()}-${_pad2(d.getMonth() + 1)}-${_pad2(d.getDate())}`;
+}
+function _toLocalTimeInputValue(d) {
+    return `${_pad2(d.getHours())}:${_pad2(d.getMinutes())}`;
+}
+
 export function openEditPostModal(post) {
     const modal = document.getElementById('partnerModal');
     if (!modal) return;
@@ -27,7 +35,8 @@ export function openEditPostModal(post) {
     const timeModeRow = document.getElementById('timeModeRow');
     if (timeModeRow) timeModeRow.style.display = partnerStore.modalDuration === 'long' ? 'none' : 'flex';
 
-    partnerStore.modalUrgency = (post.urgency === 'scheduled') ? 'scheduled' : 'now';
+    const hasScheduledRange = Boolean(post.event_time || post.event_end_time);
+    partnerStore.modalUrgency = (post.urgency === 'scheduled' || (post.type !== 'forum' && hasScheduledRange)) ? 'scheduled' : 'now';
     const timeModeBtns = document.querySelectorAll('#timeModeRow .time-mode-btn');
     timeModeBtns.forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-mode') === partnerStore.modalUrgency);
@@ -42,13 +51,19 @@ export function openEditPostModal(post) {
     document.getElementById('partnerEndTimePicker').value = '';
     if (post.event_time) {
         const start = new Date(post.event_time);
-        document.getElementById('partnerDate').value = start.toISOString().split('T')[0];
-        document.getElementById('partnerTimePicker').value = start.toTimeString().split(' ')[0].substring(0, 5);
+        document.getElementById('partnerDate').value = _toLocalDateInputValue(start);
+        document.getElementById('partnerTimePicker').value = _toLocalTimeInputValue(start);
     }
     if (post.event_end_time) {
         const end = new Date(post.event_end_time);
-        document.getElementById('partnerEndDate').value = end.toISOString().split('T')[0];
-        document.getElementById('partnerEndTimePicker').value = end.toTimeString().split(' ')[0].substring(0, 5);
+        document.getElementById('partnerEndDate').value = _toLocalDateInputValue(end);
+        document.getElementById('partnerEndTimePicker').value = _toLocalTimeInputValue(end);
+    } else if (post.event_time) {
+        // 兼容旧帖仅有开始时间：默认给 2 小时结束时间，避免误提交为空。
+        const start = new Date(post.event_time);
+        const fallbackEnd = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+        document.getElementById('partnerEndDate').value = _toLocalDateInputValue(fallbackEnd);
+        document.getElementById('partnerEndTimePicker').value = _toLocalTimeInputValue(fallbackEnd);
     }
 
     partnerStore.modalLocationCoords = post.location || null;

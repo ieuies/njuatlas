@@ -285,11 +285,17 @@ function _resetDetailUI() {
     document.getElementById('detailTags').innerHTML = '';
     document.getElementById('detailPublisher').textContent = '';
     document.getElementById('detailTime').textContent = '';
+    document.getElementById('detailTime').style.display = 'none';
     document.getElementById('detailLocation').textContent = '';
+    document.getElementById('detailLocation').style.display = 'none';
     document.getElementById('detailBudget').textContent = '';
     document.getElementById('detailBudget').style.display = 'none';
     document.getElementById('detailContact').textContent = '';
     document.getElementById('detailContact').style.display = 'none';
+    const metaTimeRow = document.getElementById('detailMetaTimeRow');
+    if (metaTimeRow) metaTimeRow.style.display = 'none';
+    const metaExtraRow = document.getElementById('detailMetaExtraRow');
+    if (metaExtraRow) metaExtraRow.style.display = 'none';
     document.getElementById('detailComments').innerHTML = '';
     document.getElementById('detailParticipants').innerHTML = '';
     document.getElementById('detailParticipantsSection').style.display = 'none';
@@ -326,12 +332,24 @@ function _renderPostDetail(post) {
         pubEl.innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
     }
     const timeStr = formatPostTime(post.event_time, post.urgency, post.event_end_time);
-    document.getElementById('detailTime').innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
+    const timeEl = document.getElementById('detailTime');
+    if (timeStr) {
+        timeEl.innerHTML = `<i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
+        timeEl.style.display = '';
+    } else {
+        timeEl.textContent = '';
+        timeEl.style.display = 'none';
+    }
+    const locationEl = document.getElementById('detailLocation');
     if (post.location_name) {
-        document.getElementById('detailLocation').innerHTML = `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(post.location_name)}`;
+        locationEl.innerHTML = `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(post.location_name)}`;
+        locationEl.style.display = '';
+    } else {
+        locationEl.textContent = '';
+        locationEl.style.display = 'none';
     }
     if (post.budget) {
-        document.getElementById('detailBudget').innerHTML = `${escapeHtml(post.budget)}`;
+        document.getElementById('detailBudget').innerHTML = `<i class="fas fa-money-bill-wave" aria-hidden="true"></i> ${escapeHtml(post.budget)}`;
         document.getElementById('detailBudget').style.display = '';
     } else {
         document.getElementById('detailBudget').style.display = 'none';
@@ -341,6 +359,16 @@ function _renderPostDetail(post) {
         document.getElementById('detailContact').style.display = '';
     } else {
         document.getElementById('detailContact').style.display = 'none';
+    }
+    const metaExtraRow = document.getElementById('detailMetaExtraRow');
+    if (metaExtraRow) {
+        const showExtra = Boolean(post.budget || post.contact);
+        metaExtraRow.style.display = showExtra ? 'flex' : 'none';
+    }
+    const metaTimeRow = document.getElementById('detailMetaTimeRow');
+    if (metaTimeRow) {
+        const showTimeRow = Boolean(timeStr || post.location_name);
+        metaTimeRow.style.display = showTimeRow ? 'flex' : 'none';
     }
 
     _updateDetailStats(post);
