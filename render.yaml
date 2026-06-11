@@ -5,6 +5,10 @@ services:
     buildCommand: echo "No build step for static frontend"
     staticPublishPath: .
     routes:
+      # 同域反代：浏览器请求 njuatlas.cn/api/* → 后端，消除 CORS 预检
+      - type: rewrite
+        source: /api/*
+        destination: https://api.njuatlas.cn/api/*
       - type: rewrite
         source: /*
         destination: /index.html

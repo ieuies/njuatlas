@@ -71,6 +71,7 @@ def create_app():
             "status": "ok",
             "service": "njuatlas-backend",
             "dm_api": "tail-v2",
+            "api_proxy": "same-origin-v1",
         })
 
     return app

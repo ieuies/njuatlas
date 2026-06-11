@@ -156,6 +156,10 @@ export function resolveApiAssetUrl(raw, { cacheBust = false } = {}) {
     if (/^https?:\/\//i.test(raw)) {
         try {
             const u = new URL(raw);
+            if (u.hostname === 'api.njuatlas.cn' && typeof window !== 'undefined' && window.location?.origin) {
+                u.protocol = window.location.protocol;
+                u.host = window.location.host;
+            }
             if (u.pathname.startsWith('/social/') && !u.pathname.startsWith('/api/')) {
                 u.pathname = `/api${u.pathname}`;
             }
