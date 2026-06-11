@@ -287,6 +287,38 @@ def get_messages(peer_id):
             (DirectMessage.sender_id == peer_id) & (DirectMessage.receiver_id == g.current_user_id),
         )
     )
+    after_raw = request.args.get("after_id")
+    if after_raw is not None and after_raw != "":
+        after_id = max(0, int(after_raw))
+        rows = (
+            base_q.filter(DirectMessage.id > after_id)
+            .order_by(DirectMessage.created_at.asc())
+            .limit(100)
+            .all()
+        )
+        if rows:
+            DirectMessage.query.filter_by(
+                sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
+            ).update({"is_read": True})
+        db.session.commit()
+        peer_user = User.query.get(peer_id)
+        return jsonify({
+            "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
+            "items": [
+                {
+                    "id": m.id,
+                    "sender_id": m.sender_id,
+                    "receiver_id": m.receiver_id,
+                    "content": m.content,
+                    "is_read": m.is_read,
+                    "created_at": _dt(m.created_at),
+                    "is_mine": m.sender_id == g.current_user_id,
+                }
+                for m in rows
+            ],
+            "sync": True,
+        })
+
     DirectMessage.query.filter_by(
         sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
     ).update({"is_read": True})

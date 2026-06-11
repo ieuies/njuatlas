@@ -235,7 +235,7 @@ async function renderChats({ force = false } = {}) {
 
     if (fresh) {
         fetchConversations()
-            .then((items) => { paintConvoList(items); updateTabBadges(); })
+            .then((items) => { paintConvoList(items); updateTabBadges(); startRealtimeSync(); })
             .catch(() => {});
         return;
     }
@@ -244,6 +244,7 @@ async function renderChats({ force = false } = {}) {
         const items = await fetchConversations();
         paintConvoList(items);
         updateTabBadges();
+        startRealtimeSync();
     } catch {
         const list = document.getElementById('msgConvoList');
         if (list) list.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
@@ -355,6 +356,107 @@ function bindChatScrollLoad() {
     });
 }
 
+const CHAT_POLL_MS = 2500;
+const CONVO_POLL_MS = 6000;
+
+let _syncTimer = null;
+let _syncMode = null;
+let _syncInFlight = false;
+let _visibilityBound = false;
+
+function getLastConfirmedMessageId() {
+    let max = 0;
+    for (const m of chatState.messages) {
+        if (m.id && m.id > max) max = m.id;
+    }
+    return max;
+}
+
+function isChatNearBottom(body, threshold = 96) {
+    if (!body) return true;
+    return body.scrollHeight - body.scrollTop - body.clientHeight < threshold;
+}
+
+function stopRealtimeSync() {
+    if (_syncTimer) clearInterval(_syncTimer);
+    _syncTimer = null;
+    _syncMode = null;
+}
+
+function startRealtimeSync() {
+    stopRealtimeSync();
+    if (!getUser()) return;
+    const onMessagesPage = document.getElementById('messagesPage')?.classList.contains('active-page');
+    if (!onMessagesPage || document.hidden) return;
+
+    if (openChatPeerId && chatState.peerId) {
+        _syncMode = 'chat';
+        void pollChatOnce();
+        _syncTimer = setInterval(pollChatOnce, CHAT_POLL_MS);
+    } else if (currentTab === 'chats') {
+        _syncMode = 'convo';
+        void pollConvoOnce();
+        _syncTimer = setInterval(pollConvoOnce, CONVO_POLL_MS);
+    }
+}
+
+async function pollChatOnce() {
+    if (_syncInFlight || document.hidden || _syncMode !== 'chat') return;
+    const peerId = openChatPeerId || chatState.peerId;
+    if (!peerId || !chatState.messages.length) return;
+
+    const afterId = getLastConfirmedMessageId();
+    if (afterId <= 0) return;
+
+    _syncInFlight = true;
+    try {
+        const data = await getDmMessages(peerId, { after_id: afterId }, true);
+        const body = document.getElementById('msgChatBody');
+        const stickBottom = isChatNearBottom(body);
+
+        const incoming = (data.items || []).filter(
+            (m) => m.id && !chatState.messages.some((x) => x.id === m.id),
+        );
+        if (!incoming.length) return;
+
+        for (const m of incoming) {
+            chatState.messages.push(m);
+            appendChatBubble(m, { scroll: false });
+            if (!m.is_mine) {
+                bumpLocalConvoPreview(peerId, m.content);
+            }
+        }
+        if (stickBottom && body) body.scrollTop = body.scrollHeight;
+        refreshAllBadges();
+    } catch { /* 静默 */ } finally {
+        _syncInFlight = false;
+    }
+}
+
+async function pollConvoOnce() {
+    if (_syncInFlight || document.hidden || _syncMode !== 'convo' || openChatPeerId) return;
+    _syncInFlight = true;
+    try {
+        const items = await fetchConversations();
+        paintConvoList(items);
+        refreshAllBadges();
+    } catch { /* 静默 */ } finally {
+        _syncInFlight = false;
+    }
+}
+
+function bindVisibilitySync() {
+    if (_visibilityBound) return;
+    _visibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopRealtimeSync();
+        } else if (document.getElementById('messagesPage')?.classList.contains('active-page')) {
+            startRealtimeSync();
+        }
+    });
+}
+
 async function fetchChatThread(peerId) {
     const data = await getDmMessages(peerId, { tail: true, page_size: CHAT_PAGE_SIZE });
     const total = data.total || 0;
@@ -376,6 +478,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     if (samePeer) {
         updateChatHeader();
         paintChatMessages({ scrollToBottom: false });
+        startRealtimeSync();
         return;
     }
 
@@ -404,6 +507,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         invalidateCache('chats');
         fetchConversations().catch(() => {});
         refreshAllBadges();
+        startRealtimeSync();
     } catch (e) {
         if (body) body.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;
     }
@@ -828,6 +932,7 @@ function bindEvents() {
             if (currentTab === 'chats') await renderChats();
             else if (currentTab === 'friends') await renderFriends();
             else await renderInteract();
+            startRealtimeSync();
         });
     });
 
@@ -1065,6 +1170,11 @@ function bindEvents() {
 
 export function initMessagesPage() {
     bindEvents();
+    bindVisibilitySync();
+}
+
+export function stopMessagesRealtimeSync() {
+    stopRealtimeSync();
 }
 
 export function setMessagesTab(tabId) {
@@ -1083,11 +1193,13 @@ export function openChatWith(userId, peerHint = null) {
 
 export async function refreshMessages({ force = false } = {}) {
     bindEvents();
+    bindVisibilitySync();
     renderTabs();
     updateTabBadges();
     if (currentTab === 'chats') await renderChats({ force });
     else if (currentTab === 'friends') await renderFriends({ force });
     else await renderInteract({ force });
+    startRealtimeSync();
 }
 
 export function getMessagesState() {

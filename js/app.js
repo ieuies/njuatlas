@@ -169,6 +169,10 @@ async function switchPage(pageId) {
 
     currentPage = pageId;
 
+    if (pageId !== 'messages' && _messagesPageInited) {
+        _loadMessages().then((mod) => mod.stopMessagesRealtimeSync?.()).catch(() => {});
+    }
+
     // 更新底部 Tab 高亮
     document.querySelectorAll('.bottom-tab-bar .tab-item').forEach(item => {
         const tabPage = item.getAttribute('data-page');
@@ -753,7 +757,7 @@ async function init() {
     await switchPage('home');
     prefetchCommonAssets();
     refreshUnreadBadge();
-    setInterval(refreshUnreadBadge, 30000);
+    setInterval(refreshUnreadBadge, 12000);
 }
 
 // 全局事件
