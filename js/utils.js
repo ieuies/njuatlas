@@ -215,16 +215,17 @@ export function renderAvatarInto(el, user, fontSize = '2rem') {
 }
 
 /** 生成可复用的头像 HTML 字符串（用于列表卡片等） */
-export function avatarHtmlForUser(user, size = 40) {
+export function avatarHtmlForUser(user, size = 40, { lazy = false } = {}) {
     const avatar = getUserAvatar(user);
     const init = getAvatarInitial(user);
     const fs = size * 0.42;
     const initialStyle = `display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;font-size:${fs}px;font-weight:800;color:#fff;background:${init.bg};`;
+    const lazyAttr = lazy ? ' loading="lazy" decoding="async"' : '';
     if (avatar.type === 'image') {
         const uidAttr = user?.id != null ? ` data-user-id="${user.id}"` : '';
         return `<span class="user-avatar-slot" style="position:relative;display:inline-flex;width:${size}px;height:${size}px;flex-shrink:0;">` +
             `<span class="user-avatar-initial" style="${initialStyle}">${escapeHtml(init.initial)}</span>` +
-            `<img class="user-avatar-img"${uidAttr} src="${escapeHtml(avatar.src)}" alt="" width="${size}" height="${size}" ` +
+            `<img class="user-avatar-img"${uidAttr} src="${escapeHtml(avatar.src)}" alt="" width="${size}" height="${size}"${lazyAttr} ` +
             `style="position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="window.__njuAtlasAvatarErr?.(this)">` +
             `</span>`;
     }

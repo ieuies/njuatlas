@@ -1,4 +1,4 @@
-import { escapeHtml } from '../../utils.js';
+import { escapeHtml, isMobileViewport } from '../../utils.js';
 import { loadAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
 import { getMapCenter, categoryStyle } from './shared.js';
@@ -193,6 +193,7 @@ export async function initPreviewMap() {
 }
 
 export async function refreshPreviewMarkers() {
+    if (isMobileViewport()) return;
     if (partnerStore.currentMapParent !== 'preview') return;
     const map = _sharedMap;
     if (!map) {

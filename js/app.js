@@ -112,7 +112,7 @@ function prefetchCommonAssets() {
     run(() => {
         ['css/partner.css', 'css/guide.css', 'css/profile.css', 'css/components.css', 'css/ai.css']
             .forEach((href) => loadStyle(href));
-        _loadPartner();
+        _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
         _loadGuide();
         _loadProfile();
         _loadAI();

@@ -1,7 +1,10 @@
-import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller } from '../../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller, isMobileViewport } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
-import { partnerStore, PAGE_SIZE } from './shared.js';
+import {
+    partnerStore, PAGE_SIZE, LIST_CACHE_TTL_MS, LIST_RENDER_BATCH,
+    partnerListCache, partnerListCacheKey,
+} from './shared.js';
 import { mapPost, typeLabel, isCurrentUserOwner } from './shared.js';
 import { openPostDetail } from './post-detail.js';
 import { refreshPreviewMarkers } from './map.js';
@@ -9,10 +12,72 @@ import { refreshPreviewMarkers } from './map.js';
 // ============================================================
 // 数据加载：分页从后端 API 获取帖子列表
 // ============================================================
+
+function _writeListCache(page, posts, hasMore) {
+    if (page !== 1) return;
+    const key = partnerListCacheKey(partnerStore.currentCategory, partnerStore.searchQuery, 1);
+    partnerListCache.set(key, { at: Date.now(), posts, hasMore });
+}
+
+function _readListCache(page) {
+    if (page !== 1) return null;
+    const key = partnerListCacheKey(partnerStore.currentCategory, partnerStore.searchQuery, 1);
+    const cached = partnerListCache.get(key);
+    if (!cached || Date.now() - cached.at > LIST_CACHE_TTL_MS) return null;
+    return cached;
+}
+
+export function showPartnerSkeleton(count = 6) {
+    const container = document.getElementById('partnerWaterfall');
+    if (!container) return;
+    container.innerHTML = Array.from({ length: count }, () => (
+        '<article class="partner-card partner-brief-card partner-card-skeleton" aria-hidden="true">'
+        + '<div class="partner-skeleton-line partner-skeleton-line--sm"></div>'
+        + '<div class="partner-skeleton-line partner-skeleton-line--lg"></div>'
+        + '<div class="partner-skeleton-line partner-skeleton-line--md"></div>'
+        + '<div class="partner-skeleton-line partner-skeleton-line--full"></div>'
+        + '</article>'
+    )).join('');
+}
+
+/** 空闲时预拉首屏列表，进入找搭子时可秒开 */
+export function prefetchPartnerList() {
+    if (partnerStore._prefetchPromise) return partnerStore._prefetchPromise;
+    partnerStore._prefetchPromise = (async () => {
+        try {
+            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'hot' });
+            const posts = (result.items || []).map(mapPost);
+            partnerListCache.set(partnerListCacheKey('all', '', 1), {
+                at: Date.now(),
+                posts,
+                hasMore: posts.length === PAGE_SIZE,
+            });
+        } catch (e) {
+            partnerStore._prefetchPromise = null;
+        }
+    })();
+    return partnerStore._prefetchPromise;
+}
+
 /** 根据当前分类加载指定页码的数据，append=true 时追加到缓存并追加渲染，否则重置 */
-export async function loadPostsByPage(page, append = false) {
-    if (partnerStore.isLoading) return [];
-    partnerStore.isLoading = true;
+export async function loadPostsByPage(page, append = false, { background = false } = {}) {
+    if (partnerStore.isLoading && !background) return [];
+
+    if (!append && page === 1 && !background) {
+        const cached = _readListCache(page);
+        if (cached?.posts?.length) {
+            partnerStore.allPartnersData = cached.posts;
+            partnerStore.partnersData = cached.posts;
+            partnerStore.hasMore = cached.hasMore;
+            partnerStore.currentPage = 1;
+            renderWaterfall();
+            loadPostsByPage(1, false, { background: true });
+            return cached.posts;
+        }
+        showPartnerSkeleton();
+    }
+
+    if (!background) partnerStore.isLoading = true;
 
     try {
         const params = {
@@ -30,11 +95,9 @@ export async function loadPostsByPage(page, append = false) {
         const result = await listPosts(params);
         let newPosts = (result.items || []).map(mapPost);
 
-        // ----- 前端兜底过滤：确保只显示当前分类的帖子 -----
         if (partnerStore.currentCategory !== 'all') {
             newPosts = newPosts.filter(post => post.tags.includes(partnerStore.currentCategory));
         }
-        // ------------------------------------------------
 
         partnerStore.hasMore = newPosts.length === PAGE_SIZE;
 
@@ -43,17 +106,25 @@ export async function loadPostsByPage(page, append = false) {
             partnerStore.partnersData = partnerStore.allPartnersData;
             appendWaterfallCards(newPosts);
         } else {
+            const prevIds = background
+                ? partnerStore.allPartnersData.map(p => p.id).join(',')
+                : '';
             partnerStore.allPartnersData = newPosts;
             partnerStore.partnersData = partnerStore.allPartnersData;
-            renderWaterfall();
+            if (!background || prevIds !== newPosts.map(p => p.id).join(',')) {
+                renderWaterfall();
+            }
+            _writeListCache(1, newPosts, partnerStore.hasMore);
         }
         return newPosts;
     } catch (err) {
-        console.warn('加载帖子失败:', err.message);
-        showToast('加载失败，请稍后重试');
+        if (!background) {
+            console.warn('加载帖子失败:', err.message);
+            showToast('加载失败，请稍后重试');
+        }
         return [];
     } finally {
-        partnerStore.isLoading = false;
+        if (!background) partnerStore.isLoading = false;
     }
 }
 /** 追加渲染新卡片到瀑布流末尾（不重建全部） */
@@ -79,7 +150,7 @@ function createPostCardElement(p) {
             <div class="partner-card-author-row">
                 <div class="partner-card-author">
                     <button class="partner-card-author-avatar-btn" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
-                        ${avatarHtmlForUser({ id: p.publisherId, username: p.publisher, avatar_url: p.publisherAvatar }, 36)}
+                        ${avatarHtmlForUser({ id: p.publisherId, username: p.publisher, avatar_url: p.publisherAvatar }, 36, { lazy: true })}
                     </button>
                     <button class="partner-card-author-name-btn" data-user-id="${p.publisherId}" type="button" aria-label="查看 ${escapeHtml(p.publisher)} 的主页">
                         <span class="partner-card-author-name">${escapeHtml(p.publisher)}</span>
@@ -95,7 +166,7 @@ function createPostCardElement(p) {
                     <i class="${p.isFavorited ? 'fa-solid' : 'fa-regular'} fa-star" aria-hidden="true"></i>
                 </button>
             </div>
-            ${p.coverImage ? `<div class="partner-card-cover" style="background-image:url('${escapeHtml(p.coverImage)}')"></div>` : ''}
+            ${p.coverImage ? `<div class="partner-card-cover"><img src="${escapeHtml(p.coverImage)}" alt="" loading="lazy" decoding="async"></div>` : ''}
             <div class="partner-card-head">
                 <div class="partner-card-tags">
                     ${p.tags.filter(t => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t)).slice(0, 3).map(t => `<span class="partner-card-tag">${escapeHtml(t)}</span>`).join('')}
@@ -197,7 +268,7 @@ function _cardClickHandler(e) {
     if (id) openPostDetail(id);
 }
 
-/** 全量渲染瀑布流（用于重置分类或首次加载） */
+/** 全量渲染瀑布流（用于重置分类或首次加载）；分批插入避免首屏长任务 */
 function renderWaterfall() {
     const container = document.getElementById('partnerWaterfall');
     if (!container) return;
@@ -210,13 +281,25 @@ function renderWaterfall() {
         return;
     }
 
-    const fragment = document.createDocumentFragment();
-    partnerStore.allPartnersData.forEach(p => {
-        fragment.appendChild(createPostCardElement(p));
-    });
     container.innerHTML = '';
-    container.appendChild(fragment);
-    bindCardEvents(container);
+    const posts = partnerStore.allPartnersData;
+    let index = 0;
+
+    const paintBatch = () => {
+        const end = Math.min(index + LIST_RENDER_BATCH, posts.length);
+        const fragment = document.createDocumentFragment();
+        for (; index < end; index++) {
+            fragment.appendChild(createPostCardElement(posts[index]));
+        }
+        container.appendChild(fragment);
+        if (index < posts.length) {
+            requestAnimationFrame(paintBatch);
+        } else {
+            bindCardEvents(container);
+        }
+    };
+
+    requestAnimationFrame(paintBatch);
 }
 
 /** 客户端筛选：从全量缓存中按 partnerStore.currentCategory 过滤到 partnerStore.partnersData（已不做筛选，因为请求时已带 tags） */
@@ -235,7 +318,7 @@ export async function switchCategory(category) {
     partnerStore.partnersData = [];
 
     const container = document.getElementById('partnerWaterfall');
-    if (container) container.innerHTML = '<div class="partner-empty-state">加载中...</div>';
+    if (container) showPartnerSkeleton();
 
     await loadPostsByPage(1, false);
     refreshPreviewMarkers();
@@ -252,11 +335,7 @@ export async function switchSearch(query) {
     partnerStore.partnersData = [];
 
     const container = document.getElementById('partnerWaterfall');
-    if (container) {
-        container.innerHTML = next
-            ? '<div class="partner-empty-state">搜索中...</div>'
-            : '<div class="partner-empty-state">加载中...</div>';
-    }
+    if (container) showPartnerSkeleton();
 
     await loadPostsByPage(1, false);
     refreshPreviewMarkers();

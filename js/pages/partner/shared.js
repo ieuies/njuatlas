@@ -3,6 +3,15 @@ import { getUser } from '../../auth.js';
 import { t, tPartnerCategory } from '../../i18n.js';
 
 export const PAGE_SIZE = 20;
+export const LIST_CACHE_TTL_MS = 45000;
+export const LIST_RENDER_BATCH = 6;
+
+/** 列表内存缓存：key -> { at, posts, hasMore } */
+export const partnerListCache = new Map();
+
+export function partnerListCacheKey(category, searchQuery, page) {
+    return `${category}|${searchQuery}|${page}`;
+}
 
 /** 跨模块共享可变状态（import 的 let 绑定在其它模块里只读，须用对象属性） */
 export const partnerStore = {
@@ -18,7 +27,9 @@ export const partnerStore = {
     modalLocationCoords: null,
     partnerDataLoaded: false,
     partnerPageInitialized: false,
+    filtersInited: false,
     currentMapParent: null,
+    _prefetchPromise: null,
 };
 
 // 校区坐标映射（WGS-84 → 高德 GCJ-02 转换前）

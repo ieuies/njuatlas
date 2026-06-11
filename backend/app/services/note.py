@@ -11,7 +11,7 @@ import json
 import time as _time
 
 from sqlalchemy import or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app import db
 from app.models import (
@@ -374,7 +374,7 @@ class SingleNote:
         compute_hot(self._m)
 
     # ── 序列化 ────────────────────────────────────────────────
-    def to_dict(self, current_user_id=None, include_place=False,
+    def to_dict(self, current_user_id=None, include_place=False, brief=False,
                 _tags=None, _is_liked=None, _is_favorited=None, _participation=None):
         """输出为 API 可用的 dict。
 
@@ -394,11 +394,15 @@ class SingleNote:
         else:
             tag_names = [pt.tag.name for pt in PostTag.query.filter_by(post_id=m.id).all() if pt.tag]
 
+        content = m.content or ""
+        if brief and len(content) > 180:
+            content = content[:180]
+
         result = {
             "id": m.id,
             "type": m.type,
             "title": m.title,
-            "content": m.content,
+            "content": content,
             "cover_image": m.cover_image,
             "user_id": m.user_id,
             "username": m.user.username if m.user else "",
@@ -411,7 +415,6 @@ class SingleNote:
             "location_name": m.location_name,
             "max_participants": self.participant_limit_total,
             "budget": m.budget,
-            "contact": m.contact,
             "tags": tag_names,
             "is_official": m.is_official,
             "view_count": m.view_count or 0,
@@ -421,8 +424,10 @@ class SingleNote:
             "participant_count": self.participant_total_count,
             "hot_score": m.hot_score,
             "created_at": m.created_at.isoformat() if m.created_at else None,
-            "updated_at": m.updated_at.isoformat() if m.updated_at else None,
         }
+        if not brief:
+            result["contact"] = m.contact
+            result["updated_at"] = m.updated_at.isoformat() if m.updated_at else None
 
         # 当前用户的状态（优先用预加载值，避免子查询）
         if current_user_id:
@@ -466,7 +471,7 @@ class SingleNote:
 
 # ── 帖子列表缓存（减少云数据库查询延迟）──
 _SEARCH_CACHE = {}       # {cache_key: (timestamp, result)}
-_SEARCH_CACHE_TTL = 15   # 缓存 15 秒（足够覆盖首次加载 + 分类切换）
+_SEARCH_CACHE_TTL = 45   # 缓存 45 秒（覆盖首次加载 + 分类切换）
 
 def _clear_search_cache():
     """写操作后清除搜索缓存，确保数据一致性。"""
@@ -596,8 +601,12 @@ class NoteSystem:
         - keyword:   关键词，匹配标题/正文/地点/预算/标签/发布者
         - page, page_size: 分页
         """
-        # ── 缓存：相同查询参数 15 秒内直接返回，避免云数据库延迟 ──
-        cache_key = json.dumps([type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, keyword], sort_keys=True, default=str)
+        # ── 缓存：相同查询参数 45 秒内直接返回（按浏览者区分点赞/收藏状态）──
+        cache_key = json.dumps(
+            [type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, keyword, self.user_id],
+            sort_keys=True,
+            default=str,
+        )
         now = _time.time()
         if cache_key in _SEARCH_CACHE:
             cached_at, cached_result = _SEARCH_CACHE[cache_key]
@@ -676,6 +685,7 @@ class NoteSystem:
         if post_ids:
             pt_rows = (
                 PostTag.query
+                .options(joinedload(PostTag.tag))
                 .filter(PostTag.post_id.in_(post_ids))
                 .all()
             )
@@ -715,6 +725,7 @@ class NoteSystem:
             note = SingleNote(model=model)
             items.append(note.to_dict(
                 current_user_id=self.user_id,
+                brief=True,
                 _tags=tags_map.get(model.id, []),
                 _is_liked=model.id in likes_set if self.user_id else None,
                 _is_favorited=model.id in favorites_set if self.user_id else None,

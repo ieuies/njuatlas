@@ -441,10 +441,44 @@
     width: 100%;
     height: 140px;
     border-radius: 12px;
-    background-size: cover;
-    background-position: center;
     margin-bottom: 12px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
 }
+.partner-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* 列表加载骨架屏 */
+.partner-card-skeleton {
+    pointer-events: none;
+    min-height: 220px;
+}
+.partner-skeleton-line {
+    height: 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    background: linear-gradient(
+        90deg,
+        var(--bg-tertiary) 0%,
+        var(--gray-200) 50%,
+        var(--bg-tertiary) 100%
+    );
+    background-size: 200% 100%;
+    animation: partner-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+.partner-skeleton-line--sm { width: 36%; height: 10px; }
+.partner-skeleton-line--md { width: 72%; }
+.partner-skeleton-line--lg { width: 88%; height: 16px; }
+.partner-skeleton-line--full { width: 100%; margin-bottom: 0; }
+@keyframes partner-skeleton-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
 .detail-publisher-btn {
     display: inline-flex;
     align-items: center;

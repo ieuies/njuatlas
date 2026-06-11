@@ -1,5 +1,5 @@
 import { partnerStore } from './shared.js';
-import { loadPostsByPage, handleScroll, handleParticipate } from './list.js';
+import { loadPostsByPage, handleScroll, handleParticipate, prefetchPartnerList } from './list.js';
 import {
     initPreviewMap, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap,
@@ -7,12 +7,24 @@ import {
 import { initPostDetailModal, openPostDetail } from './post-detail.js';
 import { initPartnerModal } from './partner-form.js';
 import { initFilters, setupCategoryScrollArrows, initPartnerSearch } from './filters.js';
+import { isMobileViewport } from '../../utils.js';
 
 // ============================================================
 // 页面入口 & 初始化
 // ============================================================
 
+function schedulePreviewMap() {
+    if (isMobileViewport()) return;
+    initPreviewMap();
+}
+
 export async function loadPartnerData() {
+    if (!partnerStore.filtersInited) {
+        initFilters();
+        initPartnerSearch();
+        partnerStore.filtersInited = true;
+    }
+
     if (partnerStore.partnerDataLoaded) {
         if (partnerStore.currentMapParent === 'full') {
             const map = getOrCreateSharedMap('preview');
@@ -22,11 +34,10 @@ export async function loadPartnerData() {
         }
         return;
     }
+
     partnerStore.partnerDataLoaded = true;
-    initFilters();
-    initPartnerSearch();
     await loadPostsByPage(1, false);
-    initPreviewMap();
+    schedulePreviewMap();
 }
 
 function ensureRightPanel() {
@@ -117,4 +128,4 @@ window.checkOverflow = function () {
     });
 };
 
-export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch };
+export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch, prefetchPartnerList };
