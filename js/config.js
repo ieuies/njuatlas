@@ -1,19 +1,15 @@
 const LOCAL_API_BASE = 'http://localhost:5000/api';
-const LEGACY_API_BASE = 'https://api.njuatlas.cn/api';
+/** 生产 API；同域 /api 需在 Render 前端配置 Rewrite 后再改为 origin + '/api' */
+const PRODUCTION_API_BASE = 'https://api.njuatlas.cn/api';
 
 const runtimeConfig = window.NJUATLAS_CONFIG || {};
 const hostname = window.location.hostname;
 const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
 
-function productionApiBase() {
-    if (typeof window !== 'undefined' && window.location?.origin) {
-        return `${window.location.origin}/api`;
-    }
-    return LEGACY_API_BASE;
-}
-
-// 生产环境走同域 /api（Render 反代到 api.njuatlas.cn）；本地仍直连 :5000
-export const API_BASE = runtimeConfig.API_BASE || (isLocal ? LOCAL_API_BASE : productionApiBase());
+// 启用同域 API：在 index.html 的 NJUATLAS_CONFIG 里设置 API_BASE: '/api'，
+// 且 Render → njuatlas-frontend → Redirects/Rewrites 已配置 /api/* → api.njuatlas.cn/api/*
+export const API_BASE = runtimeConfig.API_BASE
+    || (isLocal ? LOCAL_API_BASE : PRODUCTION_API_BASE);
 export const AMAP_KEY = runtimeConfig.AMAP_KEY || '97ac6e711cde17463af06c10b8b05f42';
 export const AMAP_SECURITY_CODE = runtimeConfig.AMAP_SECURITY_CODE || '';
 
