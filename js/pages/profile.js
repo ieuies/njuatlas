@@ -309,15 +309,6 @@ function _readLocalAvatarDataUrl(storageKey) {
     return raw.startsWith('data:') ? raw : null;
 }
 
-function _legacyAvatarCandidates(userId) {
-    if (userId == null) return [];
-    const id = Number(userId);
-    if (!Number.isFinite(id) || id <= 0) return [];
-    return ['jpg', 'jpeg', 'png', 'webp'].map(
-        (ext) => resolveApiAssetUrl(`/api/social/avatars/user_${id}.${ext}`),
-    );
-}
-
 function resolveAvatarDisplayUrl(raw, { cacheBust = false } = {}) {
     if (!raw || typeof raw !== 'string') return '';
     if (raw.startsWith('data:')) return raw;
@@ -338,8 +329,6 @@ function _buildAvatarCandidates(avatarUrl, userId, { cacheBust = false } = {}) {
         cacheBust: cacheBust || Boolean(avatarUrl && String(avatarUrl).includes('/users/')),
     });
     add(primary);
-
-    for (const legacy of _legacyAvatarCandidates(userId)) add(legacy);
 
     if (local && !local.startsWith('data:')) add(local);
 

@@ -226,7 +226,7 @@ export function getAvatarInitial(user) {
     return { initial, bg: `hsl(${hue}, 55%, 55%)` };
 }
 
-/** 服务端图片 404 时：仅本人回退 localStorage，再显示首字母 */
+/** 服务端图片 404 时：本人可试 localStorage；否则隐藏 img，保留首字母层 */
 function handleAvatarImgError(img) {
     const uid = img.dataset.userId;
     const currentId = getCurrentUserId();
@@ -238,7 +238,13 @@ function handleAvatarImgError(img) {
             return;
         }
     }
-    img.remove();
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    const slot = img.closest('.user-avatar-slot');
+    const initial = slot?.querySelector('.user-avatar-initial');
+    if (initial) {
+        initial.style.display = 'inline-flex';
+    }
 }
 
 if (typeof window !== 'undefined' && !window.__njuAtlasAvatarErr) {

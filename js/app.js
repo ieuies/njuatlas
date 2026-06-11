@@ -92,32 +92,29 @@ function prefetchPageModule(pageId) {
     return Promise.resolve();
 }
 
+function prefetchPartnerOnIntent() {
+    _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
+}
+
+let _partnerPrefetchBound = false;
+
+function bindPartnerPrefetchIntent() {
+    if (_partnerPrefetchBound) return;
+    _partnerPrefetchBound = true;
+    document.querySelectorAll('[data-page="partner"]').forEach((el) => {
+        el.addEventListener('mouseenter', prefetchPartnerOnIntent, { once: true });
+        el.addEventListener('focus', prefetchPartnerOnIntent, { once: true });
+    });
+}
+
 function prefetchCommonAssets() {
     const mobile = isMobileViewport();
-    const run = (cb, delay = 0) => {
-        const fn = () => {
-            if (window.requestIdleCallback && !mobile) window.requestIdleCallback(cb, { timeout: 4000 });
-            else setTimeout(cb, mobile ? 2500 : 1200);
-        };
-        if (delay) setTimeout(fn, delay);
-        else fn();
-    };
-
     if (!mobile) {
         setTimeout(() => prefetchAmapScript(), 500);
     } else {
         setTimeout(() => prefetchAmapScript(), 6000);
     }
-
-    run(() => {
-        ['css/partner.css', 'css/guide.css', 'css/profile.css', 'css/components.css', 'css/ai.css']
-            .forEach((href) => loadStyle(href));
-        _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
-        _loadGuide();
-        _loadProfile();
-        _loadAI();
-        if (!mobile) prefetchAmapScript();
-    }, mobile ? 1500 : 0);
+    bindPartnerPrefetchIntent();
 }
 
 async function switchPage(pageId) {

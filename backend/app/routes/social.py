@@ -681,6 +681,7 @@ def upload_avatar():
     user.avatar_mime = mime
     user.avatar_url = f"/api/social/users/{g.current_user_id}/avatar"
 
+    # Render 免费版以 Postgres avatar_data 为准；磁盘写入仅作可选兼容
     filepath = os.path.join(_avatar_dir(), filename)
     try:
         with open(filepath, "wb") as f:
