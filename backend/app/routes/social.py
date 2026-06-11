@@ -30,6 +30,8 @@ from app.services.social import (
     unread_counts as fetch_unread_counts,
     unread_dm_count,
     unread_notification_count,
+    user_avatar_url,
+    user_cover_url,
 )
 from app.validators import clean_string, get_json_body
 
@@ -494,12 +496,48 @@ def _mime_from_cover_filename(filename):
     return _mime_from_image_filename(filename, _COVER_FNAME_RE)
 
 
+def _as_image_bytes(blob):
+    if blob is None:
+        return None
+    if isinstance(blob, memoryview):
+        return blob.tobytes()
+    if isinstance(blob, (bytes, bytearray)):
+        return bytes(blob)
+    return bytes(blob)
+
+
+def _image_response(blob, mime):
+    data = _as_image_bytes(blob)
+    if not data:
+        return None
+    return Response(
+        data,
+        mimetype=mime or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+def _serve_user_image_by_id(user, data_attr, url_attr, image_dir, not_found_code="image_not_found", mime_default="image/jpeg"):
+    if not user:
+        return error_response("图片不存在", 404, code=not_found_code)
+    blob = getattr(user, data_attr, None)
+    if blob:
+        mime_attr = data_attr.replace("_data", "_mime")
+        mime = getattr(user, mime_attr, None) or mime_default
+        resp = _image_response(blob, mime)
+        if resp:
+            return resp
+    legacy_url = getattr(user, url_attr, None) or ""
+    if legacy_url:
+        safe_name = os.path.basename(legacy_url)
+        filepath = os.path.join(image_dir, safe_name)
+        if os.path.isfile(filepath):
+            return send_from_directory(image_dir, safe_name)
+    return error_response("图片不存在", 404, code=not_found_code)
+
+
 def _serve_user_image(filename, image_dir, user_id_fn, mime_fn, data_attr, not_found_code):
     safe_name = os.path.basename(filename)
-    filepath = os.path.join(image_dir, safe_name)
-    if os.path.isfile(filepath):
-        return send_from_directory(image_dir, safe_name)
-
     uid = user_id_fn(safe_name)
     if uid:
         user = User.query.get(uid)
@@ -507,12 +545,44 @@ def _serve_user_image(filename, image_dir, user_id_fn, mime_fn, data_attr, not_f
         if blob:
             mime_attr = data_attr.replace("_data", "_mime")
             mime = getattr(user, mime_attr, None) or mime_fn(safe_name)
-            return Response(
-                blob,
-                mimetype=mime,
-                headers={"Cache-Control": "public, max-age=300"},
-            )
+            resp = _image_response(blob, mime)
+            if resp:
+                return resp
+
+    filepath = os.path.join(image_dir, safe_name)
+    if os.path.isfile(filepath):
+        return send_from_directory(image_dir, safe_name)
+
+    user = User.query.filter(
+        or_(
+            User.avatar_url.like(f"%/{safe_name}"),
+            User.cover_url.like(f"%/{safe_name}"),
+        )
+    ).first()
+    if user:
+        blob = getattr(user, data_attr, None)
+        if blob:
+            mime_attr = data_attr.replace("_data", "_mime")
+            mime = getattr(user, mime_attr, None) or mime_fn(safe_name)
+            resp = _image_response(blob, mime)
+            if resp:
+                return resp
+
     return error_response("图片不存在", 404, code=not_found_code)
+
+
+@social_bp.route("/users/<int:user_id>/avatar", methods=["GET"])
+@limiter.limit("300 per minute")
+def serve_user_avatar_by_id(user_id):
+    user = User.query.get(user_id)
+    return _serve_user_image_by_id(user, "avatar_data", "avatar_url", _avatar_dir(), "avatar_not_found")
+
+
+@social_bp.route("/users/<int:user_id>/cover", methods=["GET"])
+@limiter.limit("300 per minute")
+def serve_user_cover_by_id(user_id):
+    user = User.query.get(user_id)
+    return _serve_user_image_by_id(user, "cover_data", "cover_url", _cover_dir(), "cover_not_found")
 
 
 @social_bp.route("/avatars/<path:filename>", methods=["GET"])
@@ -559,7 +629,7 @@ def upload_avatar():
 
     user.avatar_data = binary
     user.avatar_mime = mime
-    user.avatar_url = f"/api/social/avatars/{filename}"
+    user.avatar_url = user_avatar_url(user) or f"/api/social/users/{g.current_user_id}/avatar"
 
     filepath = os.path.join(_avatar_dir(), filename)
     try:
@@ -598,7 +668,7 @@ def upload_cover():
 
     user.cover_data = binary
     user.cover_mime = mime
-    user.cover_url = f"/api/social/covers/{filename}"
+    user.cover_url = user_cover_url(user) or f"/api/social/users/{g.current_user_id}/cover"
 
     filepath = os.path.join(_cover_dir(), filename)
     try:

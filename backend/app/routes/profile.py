@@ -10,7 +10,7 @@ from app.errors import error_response
 from app.logging_utils import log_event
 from app.models import ConversationMessage, Favorite, Like, PostFavorite, Review
 from app.rate_limit import limiter
-from app.services.social import count_friends, count_likes_received, count_user_posts
+from app.services.social import count_friends, count_likes_received, count_user_posts, user_avatar_url, user_cover_url
 from app.validators import clean_string, get_json_body
 
 
@@ -206,8 +206,8 @@ def _profile_payload(user):
         "bio": user.bio or "",
         "campus": user.campus or "",
         "tags": tags,
-        "avatar_url": user.avatar_url or "",
-        "cover_url": user.cover_url or "",
+        "avatar_url": user_avatar_url(user),
+        "cover_url": user_cover_url(user),
         "bubble_style": user.bubble_style or "atlas-classic",
         "created_at": _dt(user.created_at),
         "updated_at": _dt(user.updated_at),

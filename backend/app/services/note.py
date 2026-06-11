@@ -26,6 +26,7 @@ from app.models import (
     UserTag,
 )
 from app.services.scoring import compute_hot, filter_active
+from app.services.social import user_avatar_url
 
 
 # ── 辅助 ───────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ class SingleNote:
                     "id": c.id,
                     "user_id": c.user_id,
                     "username": c.user.username if c.user else "",
-                    "avatar_url": (c.user.avatar_url if c.user else "") or "",
+                    "avatar_url": user_avatar_url(c.user) if c.user else "",
                     "content": c.content,
                     "created_at": c.created_at.isoformat() if c.created_at else None,
                     "is_owner": (current_user_id is not None and c.user_id == current_user_id),
@@ -271,7 +272,7 @@ class SingleNote:
                             "id": r.id,
                             "user_id": r.user_id,
                             "username": r.user.username if r.user else "",
-                            "avatar_url": (r.user.avatar_url if r.user else "") or "",
+                            "avatar_url": user_avatar_url(r.user) if r.user else "",
                             "content": r.content,
                             "created_at": r.created_at.isoformat() if r.created_at else None,
                             "is_owner": (current_user_id is not None and r.user_id == current_user_id),
@@ -348,7 +349,7 @@ class SingleNote:
             {
                 "user_id": r.user_id,
                 "username": r.user.username if r.user else "",
-                "avatar_url": (r.user.avatar_url if r.user else "") or "",
+                "avatar_url": user_avatar_url(r.user) if r.user else "",
                 "status": r.status,
                 "is_organizer": r.user_id == self._m.user_id,
             }
@@ -360,7 +361,7 @@ class SingleNote:
             participants.insert(0, {
                 "user_id": organizer.id,
                 "username": organizer.username or "",
-                "avatar_url": organizer.avatar_url or "",
+                "avatar_url": user_avatar_url(organizer),
                 "status": "going",
                 "is_organizer": True,
             })
@@ -401,7 +402,7 @@ class SingleNote:
             "cover_image": m.cover_image,
             "user_id": m.user_id,
             "username": m.user.username if m.user else "",
-            "avatar_url": (m.user.avatar_url if m.user else "") or "",
+            "avatar_url": user_avatar_url(m.user) if m.user else "",
             "place_id": m.place_id,
             "event_time": m.event_time.isoformat() if m.event_time else None,
             "event_end_time": m.event_end_time.isoformat() if m.event_end_time else None,

@@ -17,6 +17,24 @@ def _dt(value):
     return value.isoformat() if value else None
 
 
+def user_avatar_url(user):
+    """公开头像 URL（按用户 ID，img 标签无需 JWT）。"""
+    if not user:
+        return ""
+    if user.avatar_data or user.avatar_url:
+        return f"/api/social/users/{user.id}/avatar"
+    return ""
+
+
+def user_cover_url(user):
+    """公开封面 URL（按用户 ID）。"""
+    if not user:
+        return ""
+    if user.cover_data or user.cover_url:
+        return f"/api/social/users/{user.id}/cover"
+    return ""
+
+
 def public_user_brief(user):
     """公开可见的用户摘要（不含 email）。"""
     tags = []
@@ -31,8 +49,8 @@ def public_user_brief(user):
         "bio": user.bio or "",
         "campus": user.campus or "",
         "tags": tags,
-        "avatar_url": user.avatar_url or "",
-        "cover_url": user.cover_url or "",
+        "avatar_url": user_avatar_url(user),
+        "cover_url": user_cover_url(user),
         "bubble_style": user.bubble_style or "atlas-classic",
         "created_at": _dt(user.created_at),
     }

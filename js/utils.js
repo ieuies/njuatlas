@@ -125,6 +125,24 @@ export function resolveAvatarUrl(url) {
     return `${base}${url.startsWith('/') ? url : `/${url}`}`;
 }
 
+function getCurrentUserId() {
+    try {
+        const raw = localStorage.getItem('current_user');
+        if (raw) {
+            const id = JSON.parse(raw)?.id;
+            if (id != null) return String(id);
+        }
+    } catch (e) { /* ignore */ }
+    return null;
+}
+
+function isSelfUser(user) {
+    const uid = user?.id;
+    if (uid == null) return false;
+    const currentId = getCurrentUserId();
+    return currentId != null && String(uid) === currentId;
+}
+
 export function avatarStorageKey(user) {
     if (!user || user.id == null) return null;
     return `user_avatar_${user.id}`;
@@ -137,10 +155,11 @@ export function getAvatarInitial(user) {
     return { initial, bg: `hsl(${hue}, 55%, 55%)` };
 }
 
-/** 服务端图片 404 时：本人先回退 localStorage，再显示首字母 */
+/** 服务端图片 404 时：仅本人回退 localStorage，再显示首字母 */
 function handleAvatarImgError(img) {
     const uid = img.dataset.userId;
-    if (uid && img.dataset.avatarRetry !== '1') {
+    const currentId = getCurrentUserId();
+    if (uid && currentId && uid === currentId && img.dataset.avatarRetry !== '1') {
         const saved = localStorage.getItem(`user_avatar_${uid}`);
         if (saved && img.src !== saved) {
             img.dataset.avatarRetry = '1';
@@ -159,9 +178,11 @@ if (typeof window !== 'undefined' && !window.__njuAtlasAvatarErr) {
 export function getUserAvatar(user) {
     const serverUrl = resolveAvatarUrl(user?.avatar_url);
     if (serverUrl) return { type: 'image', src: serverUrl };
-    const key = avatarStorageKey(user);
-    const saved = key ? localStorage.getItem(key) : null;
-    if (saved) return { type: 'image', src: saved };
+    if (isSelfUser(user)) {
+        const key = avatarStorageKey(user);
+        const saved = key ? localStorage.getItem(key) : null;
+        if (saved) return { type: 'image', src: saved };
+    }
     return { type: 'initial', ...getAvatarInitial(user) };
 }
 
