@@ -17,7 +17,8 @@ export function getAuthToken() {
 
 async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS, silent = false) {
     const url = `${API_BASE}${endpoint}`;
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = {};
+    if (body != null) headers['Content-Type'] = 'application/json';
     if (needAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -309,8 +310,36 @@ export async function sendDmMessage(peerId, content) {
 export async function listNotifications({ page = 1, page_size = 30 } = {}) {
     return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');
 }
-export async function getUnreadCounts() {
-    return request('/social/notifications/unread', 'GET');
+const UNREAD_CACHE_MS = 2000;
+let _unreadInflight = null;
+let _unreadCache = null;
+let _unreadCacheAt = 0;
+
+/** 清除未读数缓存（标记已读后调用） */
+export function invalidateUnreadCache() {
+    _unreadCache = null;
+    _unreadCacheAt = 0;
+}
+
+/** 单飞 + 短缓存：避免消息页并行触发多条 unread 打满后端 worker */
+export async function getUnreadCounts({ force = false } = {}) {
+    const now = Date.now();
+    if (!force && _unreadCache && (now - _unreadCacheAt) < UNREAD_CACHE_MS) {
+        return _unreadCache;
+    }
+    if (_unreadInflight) {
+        return _unreadInflight;
+    }
+    _unreadInflight = request('/social/notifications/unread', 'GET')
+        .then((data) => {
+            _unreadCache = data;
+            _unreadCacheAt = Date.now();
+            return data;
+        })
+        .finally(() => {
+            _unreadInflight = null;
+        });
+    return _unreadInflight;
 }
 export async function markNotificationsRead(ids = null, { excludeTypes = null } = {}) {
     const body = ids

@@ -758,7 +758,22 @@ async function init() {
     await switchPage('home');
     prefetchCommonAssets();
     refreshUnreadBadge();
-    setInterval(refreshUnreadBadge, 12000);
+    startUnreadPolling();
+}
+
+let _unreadPollTimer = null;
+
+function shouldSkipGlobalUnreadPoll() {
+    if (window._unreadPollingPaused) return true;
+    if (currentPage === 'messages') return true;
+    return false;
+}
+
+function startUnreadPolling() {
+    if (_unreadPollTimer) return;
+    _unreadPollTimer = setInterval(() => {
+        if (!shouldSkipGlobalUnreadPoll()) refreshUnreadBadge();
+    }, 12000);
 }
 
 // 全局事件
@@ -821,6 +836,7 @@ async function refreshUnreadBadge(preloaded) {
         clearNavUnreadBadges();
         return;
     }
+    if (!preloaded && shouldSkipGlobalUnreadPoll()) return;
     try {
         const raw = preloaded || await getUnreadCounts();
         const messages = Math.max(0, Number(raw.messages) || 0);

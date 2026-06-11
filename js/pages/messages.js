@@ -19,6 +19,7 @@ import {
     listNotifications,
     markNotificationsRead,
     getUnreadCounts,
+    invalidateUnreadCache,
 } from '../api.js';
 import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
 import { t } from '../i18n.js';
@@ -416,6 +417,7 @@ function stopRealtimeSync() {
     _convoSyncTimer = null;
     _syncMode = null;
     _chatSyncActive = false;
+    window._unreadPollingPaused = false;
 }
 
 function startRealtimeSync() {
@@ -427,6 +429,7 @@ function startRealtimeSync() {
     if (openChatPeerId && chatState.peerId) {
         _syncMode = 'chat';
         _chatSyncActive = true;
+        window._unreadPollingPaused = true;
         void runChatSyncLoop();
     } else if (currentTab === 'chats') {
         _syncMode = 'convo';
@@ -948,6 +951,7 @@ async function renderInteract({ force = false } = {}) {
                     ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
                     : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
                 await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
+                invalidateUnreadCache();
                 refreshAllBadges();
             })
             .catch(() => {});
@@ -960,6 +964,7 @@ async function renderInteract({ force = false } = {}) {
             ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
             : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
         await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
+        invalidateUnreadCache();
         refreshAllBadges();
     } catch {
         view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
