@@ -44,6 +44,9 @@
     border-bottom-color: var(--btn-primary-bg);
 }
 .msg-tab .msg-badge {
+    position: absolute;
+    top: 4px;
+    right: 6px;
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
@@ -51,8 +54,15 @@
     background: var(--danger, #e5484d);
     color: #fff;
     font-size: 0.66rem;
+    font-weight: 800;
     line-height: 18px;
     text-align: center;
+    pointer-events: none;
+    z-index: 1;
+    box-shadow: 0 0 0 2px var(--atlas-bg, #fff);
+}
+.msg-tab.has-badge {
+    padding-right: 22px;
 }
 
 /* ── 通用头像色块 ── */
@@ -468,3 +478,51 @@
     background: var(--atlas-card);
 }
 :root[data-theme="dark"] .msg-convo-item:hover { background: rgba(255,255,255,0.05); }
+
+/* ── 加载骨架 / 乐观发送 / 移动端聊天 ── */
+.msg-skeleton {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 0.86rem;
+}
+.msg-skeleton-inline {
+    padding: 12px 8px;
+}
+.msg-bubble-row.is-pending {
+    opacity: 0.88;
+}
+.msg-bubble-row.is-pending .msg-bubble {
+    filter: none;
+}
+.msg-load-hint {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    padding: 6px 0 10px;
+}
+.msg-section-highlight {
+    color: var(--btn-primary-bg);
+}
+.msg-friends-layout {
+    display: flex;
+    flex-direction: column;
+}
+
+@media (max-width: 768px) {
+    .msg-chatroom {
+        height: calc(100dvh - var(--atlas-topbar) - var(--atlas-bottombar) - 120px);
+        min-height: 320px;
+        max-height: none;
+        border-radius: 14px;
+    }
+    .msg-friend-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 46%;
+    }
+    .msg-mini-btn {
+        padding: 6px 9px;
+        font-size: 0.72rem;
+    }
+}

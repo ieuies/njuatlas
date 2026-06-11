@@ -1,5 +1,5 @@
 import { isLoggedIn, getUser, doLogout } from './auth.js';
-import { showToast, renderAvatarInto } from './utils.js';
+import { showToast, renderAvatarInto, isMobileViewport } from './utils.js';
 import { getUnreadCounts } from './api.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
@@ -93,12 +93,22 @@ function prefetchPageModule(pageId) {
 }
 
 function prefetchCommonAssets() {
-    const run = (cb) => {
-        if (window.requestIdleCallback) window.requestIdleCallback(cb, { timeout: 4000 });
-        else setTimeout(cb, 1200);
+    const mobile = isMobileViewport();
+    const run = (cb, delay = 0) => {
+        const fn = () => {
+            if (window.requestIdleCallback && !mobile) window.requestIdleCallback(cb, { timeout: 4000 });
+            else setTimeout(cb, mobile ? 2500 : 1200);
+        };
+        if (delay) setTimeout(fn, delay);
+        else fn();
     };
-    // 首页展示后尽早拉高德 SDK（与首屏渲染错开约 0.5s，避免抢带宽）
-    setTimeout(() => prefetchAmapScript(), 500);
+
+    if (!mobile) {
+        setTimeout(() => prefetchAmapScript(), 500);
+    } else {
+        setTimeout(() => prefetchAmapScript(), 6000);
+    }
+
     run(() => {
         ['css/partner.css', 'css/guide.css', 'css/profile.css', 'css/components.css', 'css/ai.css']
             .forEach((href) => loadStyle(href));
@@ -106,8 +116,8 @@ function prefetchCommonAssets() {
         _loadGuide();
         _loadProfile();
         _loadAI();
-        prefetchAmapScript();
-    });
+        if (!mobile) prefetchAmapScript();
+    }, mobile ? 1500 : 0);
 }
 
 async function switchPage(pageId) {
@@ -260,6 +270,7 @@ function updateNavBar() {
         if (guestNav) guestNav.style.display = 'flex';
         if (userNav) userNav.style.display = 'none';
         document.body.classList.remove('logged-in');
+        clearNavUnreadBadges();
     }
 
     // 默认回到首页，避免未登录用户直接落到需要账号的功能页。
@@ -348,17 +359,28 @@ function initThemeToggle() {
 // ========== 首页粒子背景 ==========
 function initHomeParticles() {
     const canvas = document.getElementById('homeParticleCanvas');
-    if (!canvas || canvas.dataset.ready === 'true') return;
+    if (!canvas) return;
+
+    if (isMobileViewport()) {
+        canvas.style.display = 'none';
+        canvas.dataset.ready = 'true';
+        window._pauseHomeParticles = () => {};
+        window._resumeHomeParticles = () => {};
+        return;
+    }
+
+    if (canvas.dataset.ready === 'true') return;
     canvas.dataset.ready = 'true';
 
     const ctx = canvas.getContext('2d');
     let particles = [];
     let mouseX = -9999, mouseY = -9999, mouseOn = false;
     let animId;
+    const maxDpr = 2;
 
     function resize() {
         const rect = canvas.parentElement.getBoundingClientRect();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
         canvas.style.width = rect.width + 'px';
@@ -373,8 +395,9 @@ function initHomeParticles() {
     }
 
     function initParticles() {
-        const w = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
-        const h = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+        const w = canvas.width / dpr;
+        const h = canvas.height / dpr;
         const count = Math.floor(w * h / 3500);
         particles = [];
         for (let i = 0; i < count; i++) {
@@ -388,8 +411,9 @@ function initHomeParticles() {
     }
 
     function render() {
-        const w = canvas.width / (Math.min(window.devicePixelRatio || 1, 2));
-        const h = canvas.height / (Math.min(window.devicePixelRatio || 1, 2));
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+        const w = canvas.width / dpr;
+        const h = canvas.height / dpr;
         const [pr, pg, pb] = getColors();
         const t = performance.now() * 0.001;
 
@@ -469,13 +493,15 @@ function initHomeParticles() {
         mouseOn = true;
     }, { passive: true });
     homePage.addEventListener('mouseleave', () => { mouseOn = false; });
-    homePage.addEventListener('touchmove', e => {
-        const rect = canvas.getBoundingClientRect();
-        mouseX = e.touches[0].clientX - rect.left;
-        mouseY = e.touches[0].clientY - rect.top;
-        mouseOn = true;
-    }, { passive: true });
-    homePage.addEventListener('touchend', () => { mouseOn = false; });
+    if (!isMobileViewport()) {
+        homePage.addEventListener('touchmove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.touches[0].clientX - rect.left;
+            mouseY = e.touches[0].clientY - rect.top;
+            mouseOn = true;
+        }, { passive: true });
+        homePage.addEventListener('touchend', () => { mouseOn = false; });
+    }
 
     let rt;
     window.addEventListener('resize', () => {
@@ -528,11 +554,12 @@ function initMobileGrid() {
     grid.dataset.ready = 'true';
 
     const imgs = LANDMARK_IMAGES;
-
-    // 42个格子，随机取图
+    const mobile = isMobileViewport();
+    const cellCount = mobile ? 18 : 42;
+    const pickCount = mobile ? Math.min(6, imgs.length) : imgs.length;
     const cells = [];
-    for (let i = 0; i < 42; i++) {
-        cells.push(imgs[Math.floor(Math.random() * imgs.length)]);
+    for (let i = 0; i < cellCount; i++) {
+        cells.push(imgs[Math.floor(Math.random() * pickCount)]);
     }
 
     const frag = document.createDocumentFragment();
@@ -567,13 +594,17 @@ function playHomeIntro() {
     document.documentElement.classList.remove('home-intro-pending');
     initMobileGrid();
 
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const mobile = isMobileViewport();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || mobile) {
         home.classList.remove('home-intro');
         home.querySelectorAll('.home-intro-layer').forEach((el) => {
             el.classList.remove('is-in', 'home-intro-layer--done');
+            el.classList.add('is-in', 'home-intro-layer--done');
         });
-        window._resumeHomeParticles?.();
-        replayHomeCardsEnter(0);
+        if (!mobile) {
+            window._resumeHomeParticles?.();
+            replayHomeCardsEnter(0);
+        }
         return;
     }
 
@@ -610,6 +641,7 @@ function playHomeIntro() {
 function initHomeCards() {
     const grid = document.getElementById('homeCardGrid');
     if (!grid || grid.dataset.ready === 'true') return;
+    if (isMobileViewport()) return;
     grid.dataset.ready = 'true';
 
     const landmarks = LANDMARK_IMAGES;
@@ -757,7 +789,7 @@ function initLocaleRefresh() {
         }
         if (_messagesPageInited) {
             const mod = await _loadMessages();
-            await mod.refreshMessages();
+            await mod.refreshMessages({ force: true });
         }
     });
 }
@@ -779,11 +811,14 @@ document.getElementById('authModal')?.addEventListener('click', (e) => {
 window.switchPage = switchPage;
 window.updateNavBar = updateNavBar;
 
-async function refreshUnreadBadge() {
-    if (!isLoggedIn()) return;
+async function refreshUnreadBadge(preloaded) {
+    if (!isLoggedIn()) {
+        clearNavUnreadBadges();
+        return;
+    }
     try {
-        const data = await getUnreadCounts();
-        const total = data.total || 0;
+        const data = preloaded || await getUnreadCounts();
+        const total = Math.max(0, Number(data.total) || 0);
         document.querySelectorAll('.tab-item[data-page="messages"], .desktop-nav-item[data-page="messages"]').forEach((el) => {
             let badge = el.querySelector('.nav-unread-badge');
             if (total > 0) {
@@ -793,12 +828,21 @@ async function refreshUnreadBadge() {
                     el.appendChild(badge);
                 }
                 badge.textContent = total > 99 ? '99+' : String(total);
+                badge.hidden = false;
                 badge.style.display = '';
             } else if (badge) {
+                badge.hidden = true;
                 badge.style.display = 'none';
             }
         });
     } catch (e) { /* 静默 */ }
+}
+
+function clearNavUnreadBadges() {
+    document.querySelectorAll('.nav-unread-badge').forEach((badge) => {
+        badge.hidden = true;
+        badge.style.display = 'none';
+    });
 }
 
 window.refreshUnreadBadge = refreshUnreadBadge;

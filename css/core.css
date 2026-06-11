@@ -44,6 +44,10 @@
     --atlas-shadow-strong: 0 24px 70px rgba(74,29,110,0.17), 0 8px 20px rgba(20,16,31,0.08);
     --atlas-topbar: 68px;
     --atlas-bottombar: 66px;
+    --z-tabbar: 2800;
+    --z-topbar: 3000;
+    --z-modal: 3100;
+    --z-toast: 3200;
     --gradient-primary: linear-gradient(135deg, var(--atlas-purple), var(--atlas-purple-soft));
     /* 方案 E：杂志感按钮 */
     --btn-radius: 10px;
@@ -227,7 +231,7 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
     backdrop-filter: blur(6px);
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
 }
 .modal-card {
     background: var(--bg-primary);
@@ -323,11 +327,24 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
     color: var(--btn-primary-fg);
     padding: 10px 24px;
     border-radius: var(--btn-radius);
-    z-index: 2000;
+    z-index: var(--z-toast);
     font-size: 0.85rem;
     font-weight: 500;
     box-shadow: var(--shadow-lg);
     pointer-events: none;
+    max-width: min(92vw, 420px);
+    text-align: center;
+    line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+    .toast {
+        /* 底部 Tab 栏 66px + 间距，避免被遮挡（z-index 亦高于 Tab 栏） */
+        bottom: calc(var(--atlas-bottombar) + 14px + env(safe-area-inset-bottom, 0px));
+        max-width: calc(100vw - 28px);
+        padding: 10px 18px;
+        font-size: 0.82rem;
+    }
 }
 
 /* ========== 工具类 ========== */

@@ -220,24 +220,34 @@ def unread_dm_count(user_id):
 
 
 def unread_counts(user_id):
-    """一次往返返回通知与私信未读数。"""
+    """一次往返返回各 Tab 未读数（好友请求与互动通知分开，避免重复计数）。"""
     from sqlalchemy import text
 
     row = db.session.execute(
         text("""
             SELECT
                 (SELECT COUNT(*) FROM notifications
-                 WHERE user_id = :uid AND NOT is_read) AS notifications,
+                 WHERE user_id = :uid AND NOT is_read AND type != 'friend_request') AS interact,
+                (SELECT COUNT(*) FROM friendships
+                 WHERE addressee_id = :uid AND status = 'pending') AS friend_requests,
                 (SELECT COUNT(*) FROM direct_messages
                  WHERE receiver_id = :uid AND NOT is_read) AS messages
         """),
         {"uid": user_id},
     ).first()
     if not row:
-        return 0, 0
-    notifications = int(row[0] or 0)
-    messages = int(row[1] or 0)
-    return notifications, messages
+        return {"messages": 0, "interact": 0, "friend_requests": 0, "total": 0}
+    messages = int(row[2] or 0)
+    interact = int(row[0] or 0)
+    friend_requests = int(row[1] or 0)
+    total = messages + interact + friend_requests
+    return {
+        "messages": messages,
+        "interact": interact,
+        "friend_requests": friend_requests,
+        "notifications": interact + friend_requests,
+        "total": total,
+    }
 
 
 def conversation_summaries(user_id):

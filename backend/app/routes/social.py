@@ -41,16 +41,26 @@ def _dt(value):
     return value.isoformat() if value else None
 
 
+def _upload_root():
+    """本地开发用 backend/uploads；线上 Render 应挂载持久盘并设置 UPLOAD_ROOT。"""
+    custom = os.environ.get("UPLOAD_ROOT")
+    if custom:
+        root = os.path.abspath(custom)
+    else:
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        root = os.path.join(basedir, "..", "..", "uploads")
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
 def _avatar_dir():
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    path = os.path.join(basedir, "..", "..", "uploads", "avatars")
+    path = os.path.join(_upload_root(), "avatars")
     os.makedirs(path, exist_ok=True)
     return path
 
 
 def _cover_dir():
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    path = os.path.join(basedir, "..", "..", "uploads", "covers")
+    path = os.path.join(_upload_root(), "covers")
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -269,19 +279,37 @@ def list_conversations():
 def get_messages(peer_id):
     if not are_friends(g.current_user_id, peer_id):
         return error_response("只能与好友私信", 403, code="not_friends")
-    page = max(1, int(request.args.get("page", 1)))
     page_size = min(100, max(1, int(request.args.get("page_size", 50))))
-    q = DirectMessage.query.filter(
+    tail = request.args.get("tail") == "1"
+    base_q = DirectMessage.query.filter(
         or_(
             (DirectMessage.sender_id == g.current_user_id) & (DirectMessage.receiver_id == peer_id),
             (DirectMessage.sender_id == peer_id) & (DirectMessage.receiver_id == g.current_user_id),
         )
-    ).order_by(DirectMessage.created_at.asc())
-    total = q.count()
-    rows = q.offset((page - 1) * page_size).limit(page_size).all()
+    )
     DirectMessage.query.filter_by(
         sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
     ).update({"is_read": True})
+
+    if tail:
+        rows = (
+            base_q.order_by(DirectMessage.created_at.desc())
+            .limit(page_size)
+            .all()
+        )
+        rows = list(reversed(rows))
+        total = base_q.count()
+        page = max(1, (total + page_size - 1) // page_size) if total else 1
+    else:
+        page = max(1, int(request.args.get("page", 1)))
+        total = base_q.count()
+        rows = (
+            base_q.order_by(DirectMessage.created_at.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
     db.session.commit()
     peer_user = User.query.get(peer_id)
     return jsonify({
@@ -361,12 +389,8 @@ def list_notifications():
 @jwt_required
 @limiter.limit("120 per minute")
 def unread_counts():
-    notifications, messages = fetch_unread_counts(g.current_user_id)
-    return jsonify({
-        "notifications": notifications,
-        "messages": messages,
-        "total": notifications + messages,
-    })
+    data = fetch_unread_counts(g.current_user_id)
+    return jsonify(data)
 
 
 @social_bp.route("/notifications/read", methods=["POST"])
@@ -375,10 +399,17 @@ def unread_counts():
 def mark_notifications_read():
     data = get_json_body(request) or {}
     ids = data.get("ids")
+    exclude_types = data.get("exclude_types") or []
     if ids:
         Notification.query.filter(
             Notification.user_id == g.current_user_id,
             Notification.id.in_(ids),
+        ).update({"is_read": True}, synchronize_session=False)
+    elif exclude_types:
+        Notification.query.filter(
+            Notification.user_id == g.current_user_id,
+            Notification.is_read.is_(False),
+            Notification.type.notin_(exclude_types),
         ).update({"is_read": True}, synchronize_session=False)
     else:
         Notification.query.filter_by(user_id=g.current_user_id, is_read=False).update(

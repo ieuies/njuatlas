@@ -14,8 +14,15 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: flask db upgrade; gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
+    startCommand: flask db upgrade; gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload
+    # 头像/封面写入此目录；无持久盘时每次部署会清空，导致 DB 里 URL 404
+    disk:
+      name: njuatlas-uploads
+      mountPath: /opt/render/project/src/uploads
+      sizeGB: 1
     envVars:
+      - key: UPLOAD_ROOT
+        value: /opt/render/project/src/uploads
       - key: FLASK_APP
         value: app:create_app
       - key: SECRET_KEY

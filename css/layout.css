@@ -283,7 +283,7 @@
     width: min(100%, 520px);
     height: 66px;
     padding: 4px 8px;
-    z-index: 2800;
+    z-index: var(--z-tabbar);
     border-top: 1px solid var(--atlas-line);
     background: var(--atlas-card);
     backdrop-filter: blur(18px);
@@ -313,11 +313,10 @@
 }
 .tab-item i { font-size: 1.15rem; }
 .tab-item.active { color: var(--btn-primary-bg); }
-.tab-item, .desktop-nav-item { position: relative; }
+.tab-item, .desktop-nav-item { position: relative; overflow: visible; }
 .nav-unread-badge {
     position: absolute;
     top: 2px;
-    right: 2px;
     min-width: 16px;
     height: 16px;
     padding: 0 4px;
@@ -329,8 +328,15 @@
     line-height: 16px;
     text-align: center;
     pointer-events: none;
+    z-index: 2;
+    box-shadow: 0 0 0 2px var(--atlas-bg, #fff);
 }
-.desktop-nav-item .nav-unread-badge { top: 8px; right: 4px; }
+.tab-item .nav-unread-badge {
+    left: 50%;
+    margin-left: 6px;
+    right: auto;
+}
+.desktop-nav-item .nav-unread-badge { top: 6px; right: 2px; left: auto; margin-left: 0; }
 
 /* ========== 按钮美化覆盖 ========== */
 .logout-btn, .map-expand-btn, .primary-btn,
@@ -471,7 +477,7 @@
         top: 0 !important;
         left: 0 !important;
         right: 0 !important;
-        z-index: 3000 !important;
+        z-index: var(--z-topbar) !important;
         height: var(--atlas-topbar) !important;
         width: 100% !important;
         padding: 0 clamp(18px, 4vw, 56px) !important;

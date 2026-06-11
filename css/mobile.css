@@ -1,0 +1,114 @@
+/*! nju.atlas - mobile.css 移动端性能与体验优化 */
+
+@media (max-width: 768px) {
+    /* 单一滚动容器，避免 main-content + content-area 嵌套滚动抢帧 */
+    .main-content {
+        overflow: hidden;
+        min-height: 0;
+    }
+    .content-area {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+    }
+
+    /* backdrop-filter 在移动端 GPU 开销极大 */
+    .top-bar,
+    .bottom-tab-bar,
+    html .modal,
+    .guide-refresh-btn,
+    .partner-search-bar,
+    .ai-sidebar,
+    .ai-chat-head {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    .top-bar {
+        background: var(--atlas-card) !important;
+    }
+    .bottom-tab-bar {
+        background: var(--atlas-card) !important;
+    }
+
+    /* 页面切换动画：移动端直接显示，减少 compositor 压力 */
+    .page.active-page {
+        animation: none !important;
+    }
+
+    /* 首页：关闭粒子画布 */
+    .home-particles {
+        display: none !important;
+    }
+
+    /* 轻量图片网格（18 格） */
+    .home-mobile-grid {
+        grid-template-rows: repeat(3, 1fr);
+        height: 38vh;
+        min-height: 200px;
+    }
+
+    /* 列表长内容：跳过屏外绘制 */
+    .partner-card,
+    .msg-convo-item,
+    .msg-friend-item,
+    .msg-notif-item,
+    .guide-card {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 120px;
+    }
+
+    .partner-waterfall {
+        contain: layout style;
+    }
+
+    /* 减少 hover/transform 过渡在触摸设备上的误触发 */
+    html .primary-btn:hover,
+    html .ai-send-btn:hover,
+    html .home-feat-card:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* 模态框动画简化 */
+    .modal-card {
+        animation: none !important;
+    }
+
+    html .ai-welcome-avatar,
+    html .guide-prefetch-hint {
+        animation: none !important;
+    }
+
+    html .ai-msg {
+        animation: none !important;
+    }
+
+    /* 聊天 / 消息：减少滤镜类效果 */
+    .msg-bubble-row.is-pending .msg-bubble {
+        filter: none;
+        opacity: 0.7;
+    }
+
+    /* 更快点击响应 */
+    button,
+    .tab-item,
+    .msg-tab,
+    .filter-chip,
+    .guide-chip {
+        touch-action: manipulation;
+    }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

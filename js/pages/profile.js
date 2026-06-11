@@ -239,6 +239,7 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
         }
     } catch (e) {
         console.warn('头像上传服务端失败，已保存本地:', e?.message);
+        showToast('头像已保存在本机，同步服务器失败，其他设备可能看不到');
     }
     renderAvatar(getUser());
     if (typeof window.updateNavBar === 'function') window.updateNavBar();
@@ -510,7 +511,6 @@ async function renderProfileHeader() {
 
     renderAvatar(user);
     loadProfileCover(user);
-    loadAndRenderBio();
 
     const statusEl = document.getElementById('profileEmailVerified');
     const resendBtn = document.getElementById('sendVerifyEmailBtn');
@@ -524,15 +524,18 @@ async function renderProfileHeader() {
     if (resendBtn) resendBtn.style.display = verified ? 'none' : 'inline-flex';
 
     try {
-        const stats = await getUserProfile(user.id);
-        document.getElementById('friendCount').innerText = stats.friend_count ?? 0;
-        if (stats.avatar_url || stats.cover_url) {
+        const profile = await getMyProfile();
+        _profileBioCache = profile;
+        _applyProfileBio(profile);
+        document.getElementById('friendCount').innerText = profile.friend_count ?? 0;
+        if (profile.avatar_url || profile.cover_url) {
             const nextUser = {
                 ...user,
-                avatar_url: stats.avatar_url || user.avatar_url || '',
-                cover_url: stats.cover_url || user.cover_url || '',
+                avatar_url: profile.avatar_url || user.avatar_url || '',
+                cover_url: profile.cover_url || user.cover_url || '',
             };
             updateUserFromLogin(nextUser);
+            renderAvatar(nextUser);
             loadProfileCover(nextUser);
         }
     } catch (e) { /* 静默 */ }

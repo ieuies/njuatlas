@@ -1,4 +1,4 @@
-import { showToast, escapeHtml, avatarHtmlForUser } from '../../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
 import { partnerStore, PAGE_SIZE } from './shared.js';
@@ -476,9 +476,10 @@ let scrollTimeout = null;
 export function handleScroll() {
     if (scrollTimeout) return;
     scrollTimeout = setTimeout(async () => {
-        const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        const winHeight = window.innerHeight;
-        const docHeight = document.documentElement.scrollHeight;
+        const scroller = getAppScroller();
+        const scrollTop = scroller.scrollTop;
+        const winHeight = scroller.clientHeight;
+        const docHeight = scroller.scrollHeight;
 
         if (scrollTop + winHeight >= docHeight - 300) {
             if (!partnerStore.isLoading && partnerStore.hasMore) {
@@ -487,5 +488,5 @@ export function handleScroll() {
             }
         }
         scrollTimeout = null;
-    }, 100);
+    }, 120);
 }

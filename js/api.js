@@ -15,7 +15,7 @@ export function getAuthToken() {
     return authToken;
 }
 
-async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS, silent = false) {
     const url = `${API_BASE}${endpoint}`;
     const headers = { 'Content-Type': 'application/json' };
     if (needAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -52,7 +52,7 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
         }
         if (err.message === 'UNAUTHORIZED') throw err;
         console.error('API请求错误:', err);
-        showToast(err.message || '网络错误，请检查后端是否启动');
+        if (!silent) showToast(err.message || '网络错误，请检查后端是否启动');
         throw err;
     }
 }
@@ -290,11 +290,13 @@ export async function removeFriend(userId) {
 export async function listDmConversations() {
     return request('/social/messages/conversations', 'GET');
 }
-export async function getDmMessages(peerId, { page = 1, page_size = 50 } = {}) {
-    return request(`/social/messages/${peerId}?page=${page}&page_size=${page_size}`, 'GET');
+export async function getDmMessages(peerId, { page = 1, page_size = 50, tail = false } = {}) {
+    let url = `/social/messages/${peerId}?page=${page}&page_size=${page_size}`;
+    if (tail) url += '&tail=1';
+    return request(url, 'GET');
 }
 export async function sendDmMessage(peerId, content) {
-    return request(`/social/messages/${peerId}`, 'POST', { content });
+    return request(`/social/messages/${peerId}`, 'POST', { content }, true, DEFAULT_TIMEOUT_MS, true);
 }
 export async function listNotifications({ page = 1, page_size = 30 } = {}) {
     return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');
@@ -302,11 +304,14 @@ export async function listNotifications({ page = 1, page_size = 30 } = {}) {
 export async function getUnreadCounts() {
     return request('/social/notifications/unread', 'GET');
 }
-export async function markNotificationsRead(ids = null) {
-    return request('/social/notifications/read', 'POST', ids ? { ids } : {});
+export async function markNotificationsRead(ids = null, { excludeTypes = null } = {}) {
+    const body = ids
+        ? { ids }
+        : (excludeTypes?.length ? { exclude_types: excludeTypes } : {});
+    return request('/social/notifications/read', 'POST', body);
 }
 export async function uploadAvatar(dataUrl) {
-    return request('/social/me/avatar', 'POST', { avatar: dataUrl });
+    return request('/social/me/avatar', 'POST', { avatar: dataUrl }, true, 30000, true);
 }
 export async function uploadCover(dataUrl) {
     return request('/social/me/cover', 'POST', { cover: dataUrl });

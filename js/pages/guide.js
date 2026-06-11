@@ -158,6 +158,38 @@ async function _fetchCategoryItems(campus, cat) {
     return [];
 }
 
+async function _loadCampusBundle(campus, gen) {
+    const cache = _ensureCampusCache(campus);
+    if (cache.gen !== gen) return;
+    if (_isPrefetchComplete(campus)) return;
+    if (cache._bundleInflight) return cache._bundleInflight;
+
+    cache._bundleInflight = (async () => {
+        try {
+            const url = `${API_BASE}/places/guide-bundle?campus=${encodeURIComponent(campus)}`;
+            const res = await fetch(url);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`);
+            if (cache.gen !== gen) return;
+            for (const cat of CATEGORY_NAMES) {
+                if (cache.cats[cat] !== undefined) continue;
+                cache.cats[cat] = Array.isArray(data.categories?.[cat]) ? data.categories[cat] : [];
+            }
+        } catch (e) {
+            console.warn(`guide-bundle（${campus}）失败，回退分分类请求:`, e.message);
+            const todo = CATEGORY_NAMES.filter(cat => cache.cats[cat] === undefined);
+            await Promise.all(todo.map(cat => _loadCategory(campus, cat, gen)));
+        } finally {
+            delete cache._bundleInflight;
+            if (_guideCache[campus]?.gen === gen) {
+                _guideCache[campus].prefetching = false;
+            }
+        }
+    })();
+
+    return cache._bundleInflight;
+}
+
 async function _loadCategory(campus, cat, gen) {
     const cache = _ensureCampusCache(campus);
     if (cache.cats[cat] !== undefined) return cache.cats[cat];
@@ -203,26 +235,17 @@ function _maybeRender(campus, gen, { force = false } = {}) {
 
 function _kickPrefetch(campus) {
     const cache = _guideCache[campus];
-    if (!cache || cache.prefetching) return;
+    if (!cache || cache.prefetching || cache._bundleInflight) return;
+    if (_isPrefetchComplete(campus)) return;
 
     const gen = cache.gen;
-    const remaining = CATEGORY_NAMES.filter(
-        cat => cache.cats[cat] === undefined && !cache._inflight?.[cat]
-    );
-    if (remaining.length === 0) return;
-
     cache.prefetching = true;
     if (currentGuideCat === 'all' && _resolveCampus() === campus) {
         _setPrefetchHint(true);
     }
     (async () => {
-        for (const cat of remaining) {
-            if (_guideCache[campus]?.gen !== gen) break;
-            await _loadCategory(campus, cat, gen);
-            // 预加载过程中不重绘列表，避免卡片不断重排闪烁
-        }
+        await _loadCampusBundle(campus, gen);
         if (_guideCache[campus]?.gen === gen) {
-            _guideCache[campus].prefetching = false;
             if (currentGuideCat === 'all' && _resolveCampus() === campus) {
                 _maybeRender(campus, gen, { force: true });
             } else {
@@ -301,6 +324,7 @@ async function _applyGuideFilters(force = false) {
         c.gen += 1;
         c.cats = {};
         c._inflight = {};
+        c._bundleInflight = null;
         c.prefetching = false;
         _lastRenderKey = '';
         _setPrefetchHint(false);
@@ -314,15 +338,15 @@ async function _applyGuideFilters(force = false) {
     }
 
     const cache = _ensureCampusCache(campus);
-    const needed = currentGuideCat === 'all' ? _getPriorityCategories() : [currentGuideCat];
-    const missing = needed.filter(cat => cache.cats[cat] === undefined);
+    const gen = cache.gen;
+    const needed = (currentGuideCat === 'all' ? _getPriorityCategories() : [currentGuideCat])
+        .filter(cat => cache.cats[cat] === undefined);
 
-    if (missing.length > 0) {
+    if (needed.length > 0) {
         if (container && cached === null) {
             container.innerHTML = '<div class="guide-loading">加载中...</div>';
         }
-        const gen = cache.gen;
-        await Promise.all(missing.map(cat => _loadCategory(campus, cat, gen)));
+        await Promise.all(needed.map(cat => _loadCategory(campus, cat, gen)));
     }
 
     const items = _getDisplayItems(campus, currentGuideCat);

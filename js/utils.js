@@ -1,5 +1,13 @@
 import { API_BASE } from './config.js';
 
+export function isMobileViewport() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+export function getAppScroller() {
+    return document.getElementById('contentArea') || document.documentElement;
+}
+
 export function showToast(msg, duration = 2500) {
     const toast = document.createElement('div');
     toast.className = 'toast';
@@ -122,6 +130,31 @@ export function avatarStorageKey(user) {
     return `user_avatar_${user.id}`;
 }
 
+export function getAvatarInitial(user) {
+    const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
+    const initial = (name.charAt(0) || '?').toUpperCase();
+    const hue = [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+    return { initial, bg: `hsl(${hue}, 55%, 55%)` };
+}
+
+/** 服务端图片 404 时：本人先回退 localStorage，再显示首字母 */
+function handleAvatarImgError(img) {
+    const uid = img.dataset.userId;
+    if (uid && img.dataset.avatarRetry !== '1') {
+        const saved = localStorage.getItem(`user_avatar_${uid}`);
+        if (saved && img.src !== saved) {
+            img.dataset.avatarRetry = '1';
+            img.src = saved;
+            return;
+        }
+    }
+    img.remove();
+}
+
+if (typeof window !== 'undefined' && !window.__njuAtlasAvatarErr) {
+    window.__njuAtlasAvatarErr = handleAvatarImgError;
+}
+
 /** 返回头像描述对象：{ type:'image', src } 或 { type:'initial', initial, bg } */
 export function getUserAvatar(user) {
     const serverUrl = resolveAvatarUrl(user?.avatar_url);
@@ -129,32 +162,52 @@ export function getUserAvatar(user) {
     const key = avatarStorageKey(user);
     const saved = key ? localStorage.getItem(key) : null;
     if (saved) return { type: 'image', src: saved };
-    const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
-    const initial = (name.charAt(0) || '?').toUpperCase();
-    const hue = [...name].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
-    return { type: 'initial', initial, bg: `hsl(${hue}, 55%, 55%)` };
+    return { type: 'initial', ...getAvatarInitial(user) };
+}
+
+function bindAvatarImg(img, user) {
+    if (!img || img.dataset.avatarBound === '1') return;
+    img.dataset.avatarBound = '1';
+    if (user?.id != null) img.dataset.userId = String(user.id);
+    img.addEventListener('error', () => handleAvatarImgError(img));
 }
 
 /** 渲染用户头像到容器；user 可为 { id, username, avatar_url } */
 export function renderAvatarInto(el, user, fontSize = '2rem') {
     if (!el) return;
     const avatar = getUserAvatar(user);
+    const init = getAvatarInitial(user);
     if (avatar.type === 'image') {
-        el.innerHTML = `<img src="${avatar.src}" alt="头像" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">`;
-        el.style.background = 'transparent';
+        el.style.position = 'relative';
+        el.style.background = init.bg;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;border-radius:inherit;">${escapeHtml(init.initial)}</span>`;
+        const img = document.createElement('img');
+        img.src = avatar.src;
+        img.alt = '头像';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;';
+        bindAvatarImg(img, user);
+        el.appendChild(img);
     } else {
-        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;background:${avatar.bg};border-radius:inherit;">${escapeHtml(avatar.initial)}</span>`;
         el.style.background = avatar.bg;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;background:${avatar.bg};border-radius:inherit;">${escapeHtml(avatar.initial)}</span>`;
     }
 }
 
 /** 生成可复用的头像 HTML 字符串（用于列表卡片等） */
 export function avatarHtmlForUser(user, size = 40) {
     const avatar = getUserAvatar(user);
+    const init = getAvatarInitial(user);
+    const fs = size * 0.42;
+    const initialStyle = `display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;font-size:${fs}px;font-weight:800;color:#fff;background:${init.bg};`;
     if (avatar.type === 'image') {
-        return `<img class="user-avatar-img" src="${avatar.src}" alt="" width="${size}" height="${size}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;">`;
+        const uidAttr = user?.id != null ? ` data-user-id="${user.id}"` : '';
+        return `<span class="user-avatar-slot" style="position:relative;display:inline-flex;width:${size}px;height:${size}px;flex-shrink:0;">` +
+            `<span class="user-avatar-initial" style="${initialStyle}">${escapeHtml(init.initial)}</span>` +
+            `<img class="user-avatar-img"${uidAttr} src="${escapeHtml(avatar.src)}" alt="" width="${size}" height="${size}" ` +
+            `style="position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="window.__njuAtlasAvatarErr?.(this)">` +
+            `</span>`;
     }
-    return `<span class="user-avatar-initial" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;font-size:${size * 0.42}px;font-weight:800;color:#fff;background:${avatar.bg};">${escapeHtml(avatar.initial)}</span>`;
+    return `<span class="user-avatar-initial" style="${initialStyle}">${escapeHtml(init.initial)}</span>`;
 }
 
 // ============================================================

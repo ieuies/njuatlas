@@ -1,5 +1,6 @@
 /**
- * 消息中心：私信 + 好友 + 互动通知（接真实后端 API）
+ * 消息中心：私信 + 好友 + 互动通知
+ * 优化：Tab 缓存、聊天增量渲染、乐观发送、好友页局部刷新
  */
 import { getUser } from '../auth.js';
 import {
@@ -17,6 +18,7 @@ import {
     searchUsers,
     listNotifications,
     markNotificationsRead,
+    getUnreadCounts,
 } from '../api.js';
 import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
 import { t } from '../i18n.js';
@@ -29,12 +31,47 @@ import {
     setChatBackground,
 } from '../chatBackground.js';
 
+const CACHE_TTL_MS = 30000;
+const CHAT_PAGE_SIZE = 50;
+
 let currentTab = 'chats';
 let openChatPeerId = null;
 let _bound = false;
+let _searchSeq = 0;
+let _friendsShellReady = false;
+let _pendingPeerHint = null;
+
+const tabCache = {
+    chats: { items: null, at: 0 },
+    friends: { friends: null, requests: null, sent: null, at: 0 },
+    interact: { items: null, at: 0 },
+};
+
+const chatState = {
+    peerId: null,
+    peer: null,
+    messages: [],
+    page: 1,
+    total: 0,
+    loadingMore: false,
+    myBubbleStyle: null,
+    peerBubbleStyle: null,
+};
 
 function fmtTime(iso) {
     return formatTimeBrief(iso);
+}
+
+function isCacheFresh(at) {
+    return at && (Date.now() - at) < CACHE_TTL_MS;
+}
+
+function invalidateCache(...keys) {
+    keys.forEach((key) => {
+        if (key === 'chats') tabCache.chats = { items: null, at: 0 };
+        if (key === 'friends') tabCache.friends = { friends: null, requests: null, sent: null, at: 0 };
+        if (key === 'interact') tabCache.interact = { items: null, at: 0 };
+    });
 }
 
 function resolveSenderBubbleStyle(senderId, myUserId, myStyle, peerStyle) {
@@ -70,9 +107,48 @@ function notifActionHtml(n) {
     `;
 }
 
+function setTabBadge(tabId, count) {
+    const tab = document.querySelector(`#messagesPage .msg-tab[data-tab="${tabId}"]`);
+    if (!tab) return;
+    const n = Math.max(0, Number(count) || 0);
+    let badge = tab.querySelector('.msg-badge');
+    if (n > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'msg-badge';
+            tab.appendChild(badge);
+        }
+        badge.textContent = n > 99 ? '99+' : String(n);
+        badge.hidden = false;
+        tab.classList.add('has-badge');
+        const label = tab.querySelector('span')?.textContent?.trim() || tabId;
+        tab.setAttribute('aria-label', `${label} (${n})`);
+    } else {
+        tab.classList.remove('has-badge');
+        tab.removeAttribute('aria-label');
+        if (badge) badge.hidden = true;
+    }
+}
+
+async function refreshAllBadges(preloaded) {
+    try {
+        const data = preloaded || await getUnreadCounts();
+        setTabBadge('chats', data.messages);
+        setTabBadge('interact', data.interact ?? 0);
+        setTabBadge('friends', data.friend_requests ?? 0);
+        if (typeof window.refreshUnreadBadge === 'function') {
+            await window.refreshUnreadBadge(data);
+        }
+    } catch { /* 静默 */ }
+}
+
+async function updateTabBadges() {
+    await refreshAllBadges();
+}
+
 function renderTabs() {
-    document.querySelectorAll('#messagesPage .msg-tab').forEach((t) => {
-        t.classList.toggle('active', t.dataset.tab === currentTab);
+    document.querySelectorAll('#messagesPage .msg-tab').forEach((el) => {
+        el.classList.toggle('active', el.dataset.tab === currentTab);
     });
     ['msgChatsView', 'msgFriendsView', 'msgInteractView'].forEach((id) => {
         const el = document.getElementById(id);
@@ -83,146 +159,574 @@ function renderTabs() {
     if (view) view.style.display = 'block';
 }
 
-async function renderChats() {
+// ── 会话列表 ──────────────────────────────────────────────────
+
+function convoListHtml(items) {
+    if (!items?.length) {
+        return `<div class="msg-empty"><i class="fas fa-comments"></i><p>${t('messages.noChats')}</p></div>`;
+    }
+    return items.map((c) => `
+        <button class="msg-convo-item" data-chat="${c.peer_id}" type="button">
+            ${avatarHtmlForUser(c.peer, 48)}
+            <div class="msg-convo-main">
+                <div class="msg-convo-top">
+                    <span class="msg-convo-name">${escapeHtml(c.peer?.username || t('messages.user'))}</span>
+                    <span class="msg-convo-time">${fmtTime(c.last_at)}</span>
+                </div>
+                <div class="msg-convo-preview">${escapeHtml(c.last_message || '')}${c.unread_count ? ` <span class="msg-unread-dot">${c.unread_count}</span>` : ''}</div>
+            </div>
+        </button>`).join('');
+}
+
+function paintConvoList(items) {
+    const list = document.getElementById('msgConvoList');
+    if (!list) return;
+    list.innerHTML = convoListHtml(items);
+}
+
+async function fetchConversations() {
+    const data = await listDmConversations();
+    const items = data.items || [];
+    tabCache.chats = { items, at: Date.now() };
+    return items;
+}
+
+function ensureConvoWrap(view) {
+    if (view.querySelector('#msgConvoWrap')) return;
+    view.innerHTML = `
+        <div id="msgConvoWrap">
+            <div id="msgConvoList" class="msg-convo-list"></div>
+        </div>
+        <div id="msgChatWrap" hidden></div>`;
+}
+
+function showConvoList() {
+    document.getElementById('msgConvoWrap')?.removeAttribute('hidden');
+    document.getElementById('msgChatWrap')?.setAttribute('hidden', '');
+}
+
+function showChatRoom() {
+    document.getElementById('msgConvoWrap')?.setAttribute('hidden', '');
+    document.getElementById('msgChatWrap')?.removeAttribute('hidden');
+}
+
+async function renderChats({ force = false } = {}) {
     const view = document.getElementById('msgChatsView');
     if (!view) return;
 
     if (openChatPeerId) {
-        await renderChatRoom(view, openChatPeerId);
+        showChatRoom();
+        await openChatRoom(openChatPeerId, { force });
+        return;
+    }
+
+    ensureConvoWrap(view);
+    showConvoList();
+
+    const cached = tabCache.chats.items;
+    const fresh = !force && isCacheFresh(tabCache.chats.at);
+
+    if (cached) {
+        paintConvoList(cached);
+    } else {
+        const list = document.getElementById('msgConvoList');
+        if (list) list.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+    }
+
+    if (fresh) {
+        fetchConversations()
+            .then((items) => { paintConvoList(items); updateTabBadges(); })
+            .catch(() => {});
         return;
     }
 
     try {
-        const data = await listDmConversations();
-        const items = data.items || [];
-        if (!items.length) {
-            view.innerHTML = `<div class="msg-empty"><i class="fas fa-comments"></i><p>${t('messages.noChats')}</p></div>`;
-            return;
-        }
-        view.innerHTML = `<div class="msg-convo-list">${items.map((c) => `
-            <button class="msg-convo-item" data-chat="${c.peer_id}" type="button">
-                ${avatarHtmlForUser(c.peer, 48)}
-                <div class="msg-convo-main">
-                    <div class="msg-convo-top">
-                        <span class="msg-convo-name">${escapeHtml(c.peer?.username || t('messages.user'))}</span>
-                        <span class="msg-convo-time">${fmtTime(c.last_at)}</span>
-                    </div>
-                    <div class="msg-convo-preview">${escapeHtml(c.last_message || '')}${c.unread_count ? ` <span class="msg-unread-dot">${c.unread_count}</span>` : ''}</div>
-                </div>
-            </button>`).join('')}</div>`;
-    } catch (e) {
-        view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
+        const items = await fetchConversations();
+        paintConvoList(items);
+        updateTabBadges();
+    } catch {
+        const list = document.getElementById('msgConvoList');
+        if (list) list.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
     }
 }
 
-async function renderChatRoom(view, peerId) {
-    let peer = { id: peerId, username: t('messages.user') };
-    try {
-        const data = await getDmMessages(peerId);
-        const msgs = data.items || [];
-        const conv = (await listDmConversations()).items?.find((c) => c.peer_id === peerId);
-        if (conv?.peer) peer = conv.peer;
-        const me = getUser();
-        const myUserId = me?.id;
-        const myBubbleStyle = normalizeBubbleStyle(me?.bubble_style || DEFAULT_BUBBLE_STYLE);
-        const peerBubbleStyle = normalizeBubbleStyle(peer?.bubble_style || DEFAULT_BUBBLE_STYLE);
+// ── 聊天室 ────────────────────────────────────────────────────
 
-        const bubbles = msgs.map((m) => `
-            <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}">
-                ${m.is_mine ? '' : avatarHtmlForUser(peer, 32)}
-                <div class="msg-bubble" style="${bubbleThemeCssVars(resolveSenderBubbleStyle(m.sender_id, myUserId, myBubbleStyle, peerBubbleStyle))}">${escapeHtml(m.content)}</div>
-            </div>`).join('');
-
-        view.innerHTML = `
-            <div class="msg-chatroom">
-                <div class="msg-chat-header">
-                    <button class="msg-back-btn" id="msgBackBtn" type="button"><i class="fas fa-arrow-left"></i></button>
-                    ${avatarHtmlForUser(peer, 36)}
-                    <span class="msg-chat-title">${escapeHtml(peer.username || t('messages.user'))}</span>
-                    <button class="msg-chat-bg-btn" id="msgChatBgBtn" type="button" aria-label="${t('messages.chatBgBtn')}" title="${t('messages.chatBg')}">
-                        <i class="fas fa-image"></i>
-                    </button>
-                </div>
-                <div class="msg-chat-body" id="msgChatBody" data-peer-id="${peerId}">${bubbles || `<div class="msg-empty-sm">${t('messages.startChat')}</div>`}</div>
-                <form class="msg-chat-input" id="msgChatForm">
-                    <input type="text" id="msgChatText" placeholder="${t('messages.chatPlaceholder')}" autocomplete="off" maxlength="500">
-                    <button type="submit" class="msg-send-btn"><i class="fas fa-paper-plane"></i></button>
-                </form>
-                ${buildChatBgPanelHtml(peerId)}
-            </div>`;
-        const body = document.getElementById('msgChatBody');
-        applyChatBackground(body, peerId);
-        if (body) body.scrollTop = body.scrollHeight;
-    } catch (e) {
-        view.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;
-    }
+function syncBubbleStyles() {
+    const me = getUser();
+    chatState.myBubbleStyle = normalizeBubbleStyle(me?.bubble_style || DEFAULT_BUBBLE_STYLE);
+    chatState.peerBubbleStyle = normalizeBubbleStyle(chatState.peer?.bubble_style || DEFAULT_BUBBLE_STYLE);
 }
 
-async function renderFriends() {
-    const view = document.getElementById('msgFriendsView');
+function bubbleRowHtml(m, { pending = false } = {}) {
+    const me = getUser();
+    const myUserId = me?.id;
+    const peer = chatState.peer || { id: chatState.peerId };
+    const style = bubbleThemeCssVars(
+        resolveSenderBubbleStyle(m.sender_id, myUserId, chatState.myBubbleStyle, chatState.peerBubbleStyle)
+    );
+    const pendingCls = pending ? ' is-pending' : '';
+    const tempAttr = m._tempId ? ` data-temp-id="${m._tempId}"` : '';
+    return `
+        <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}${pendingCls}"${tempAttr}>
+            ${m.is_mine ? '' : avatarHtmlForUser(peer, 32)}
+            <div class="msg-bubble" style="${style}">${escapeHtml(m.content)}</div>
+        </div>`;
+}
+
+function paintChatMessages({ scrollToBottom = true } = {}) {
+    const body = document.getElementById('msgChatBody');
+    if (!body) return;
+
+    const frag = document.createDocumentFragment();
+
+    if (chatState.page > 1) {
+        const hint = document.createElement('div');
+        hint.className = 'msg-load-hint';
+        hint.id = 'msgLoadMoreHint';
+        hint.textContent = t('messages.loadOlder');
+        frag.appendChild(hint);
+    }
+
+    if (!chatState.messages.length) {
+        const empty = document.createElement('div');
+        empty.className = 'msg-empty-sm';
+        empty.textContent = t('messages.startChat');
+        frag.appendChild(empty);
+    } else {
+        chatState.messages.forEach((m) => {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = bubbleRowHtml(m);
+            frag.appendChild(wrap.firstElementChild);
+        });
+    }
+
+    body.replaceChildren(frag);
+    applyChatBackground(body, chatState.peerId);
+    if (scrollToBottom) body.scrollTop = body.scrollHeight;
+}
+
+function updateChatHeader() {
+    const peer = chatState.peer || { username: t('messages.user') };
+    const title = document.getElementById('msgChatTitle');
+    const avatarSlot = document.getElementById('msgChatAvatar');
+    if (title) title.textContent = peer.username || t('messages.user');
+    if (avatarSlot) avatarSlot.innerHTML = avatarHtmlForUser(peer, 36);
+}
+
+function ensureChatShell(view, peerId) {
+    const wrap = document.getElementById('msgChatWrap');
+    if (!wrap) return;
+
+    const needRebuild = !wrap.querySelector('.msg-chatroom') || Number(wrap.dataset.peerId) !== peerId;
+    if (!needRebuild) return;
+
+    wrap.dataset.peerId = String(peerId);
+    wrap.innerHTML = `
+        <div class="msg-chatroom">
+            <div class="msg-chat-header">
+                <button class="msg-back-btn" id="msgBackBtn" type="button"><i class="fas fa-arrow-left"></i></button>
+                <span id="msgChatAvatar"></span>
+                <span class="msg-chat-title" id="msgChatTitle"></span>
+                <button class="msg-chat-bg-btn" id="msgChatBgBtn" type="button" aria-label="${t('messages.chatBgBtn')}" title="${t('messages.chatBg')}">
+                    <i class="fas fa-image"></i>
+                </button>
+            </div>
+            <div class="msg-chat-body" id="msgChatBody" data-peer-id="${peerId}"></div>
+            <form class="msg-chat-input" id="msgChatForm">
+                <input type="text" id="msgChatText" placeholder="${t('messages.chatPlaceholder')}" autocomplete="off" maxlength="500">
+                <button type="submit" class="msg-send-btn"><i class="fas fa-paper-plane"></i></button>
+            </form>
+            ${buildChatBgPanelHtml(peerId)}
+        </div>`;
+
+    bindChatScrollLoad();
+}
+
+function bindChatScrollLoad() {
+    const body = document.getElementById('msgChatBody');
+    if (!body || body.dataset.scrollBound === '1') return;
+    body.dataset.scrollBound = '1';
+
+    body.addEventListener('scroll', () => {
+        if (chatState.loadingMore || chatState.page <= 1) return;
+        if (body.scrollTop > 80) return;
+        loadOlderMessages();
+    });
+}
+
+async function fetchChatThread(peerId) {
+    const data = await getDmMessages(peerId, { tail: true, page_size: CHAT_PAGE_SIZE });
+    const total = data.total || 0;
+    const peer = data.peer || { id: peerId, username: t('messages.user') };
+    const messages = data.items || [];
+    const page = data.page || Math.max(1, Math.ceil(total / CHAT_PAGE_SIZE));
+    return { peer, messages, page, total };
+}
+
+async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
+    const view = document.getElementById('msgChatsView');
     if (!view) return;
-    view.innerHTML = `<div class="profile-loading">${t('common.loading')}</div>`;
+
+    ensureConvoWrap(view);
+    ensureChatShell(view, peerId);
+    showChatRoom();
+
+    const samePeer = chatState.peerId === peerId && chatState.messages.length && !force;
+    if (samePeer) {
+        updateChatHeader();
+        paintChatMessages({ scrollToBottom: false });
+        return;
+    }
+
+    chatState.peerId = peerId;
+    chatState.messages = [];
+    chatState.page = 1;
+    chatState.total = 0;
+
+    const body = document.getElementById('msgChatBody');
+    if (body) body.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+
     try {
-        const [friendsData, reqData, sentReqData] = await Promise.all([
-            listFriends(),
-            listFriendRequests(),
-            listSentFriendRequests(),
-        ]);
-        const friends = friendsData.items || [];
-        const requests = reqData.items || [];
-        const sentRequests = sentReqData.items || [];
+        const cachedPeer = peerHint
+            || _pendingPeerHint
+            || tabCache.chats.items?.find((c) => c.peer_id === peerId)?.peer;
+        _pendingPeerHint = null;
+        const { peer, messages, page, total } = await fetchChatThread(peerId);
+        chatState.peer = cachedPeer || peer;
+        chatState.messages = messages;
+        chatState.page = page;
+        chatState.total = total;
+        syncBubbleStyles();
+        updateChatHeader();
+        paintChatMessages({ scrollToBottom: true });
+        document.getElementById('msgChatText')?.focus();
+        invalidateCache('chats');
+        fetchConversations().catch(() => {});
+        refreshAllBadges();
+    } catch (e) {
+        if (body) body.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;
+    }
+}
 
-        const requestRows = requests.map((r) => `
-            <div class="msg-friend-item">
-                ${avatarHtmlForUser(r.requester, 44)}
-                <div class="msg-friend-main">
-                    <span class="msg-friend-name">${escapeHtml(r.requester?.username || '')}</span>
-                    <span class="msg-friend-bio">${escapeHtml(r.requester?.campus ? campusLabel(r.requester.campus) : t('messages.friendRequestBio'))}</span>
-                </div>
-                <div class="msg-friend-actions">
-                    <button class="msg-mini-btn primary" data-accept="${r.id}" type="button">${t('messages.accept')}</button>
-                    <button class="msg-mini-btn" data-reject="${r.id}" type="button">${t('messages.reject')}</button>
-                </div>
-            </div>`).join('');
+async function loadOlderMessages() {
+    if (chatState.loadingMore || chatState.page <= 1 || !chatState.peerId) return;
+    chatState.loadingMore = true;
+    const body = document.getElementById('msgChatBody');
+    const prevHeight = body?.scrollHeight || 0;
 
-        const sentRows = sentRequests.map((r) => `
-            <div class="msg-friend-item">
-                ${avatarHtmlForUser(r.addressee, 44)}
-                <div class="msg-friend-main">
-                    <span class="msg-friend-name">${escapeHtml(r.addressee?.username || '')}</span>
-                    <span class="msg-friend-bio">${escapeHtml(r.addressee?.campus ? campusLabel(r.addressee.campus) : t('messages.waitPending'))}</span>
-                </div>
-                <div class="msg-friend-actions">
-                    <button class="msg-mini-btn" data-cancel-request="${r.id}" type="button">${t('messages.cancelRequest')}</button>
-                </div>
-            </div>`).join('');
+    try {
+        const prevPage = chatState.page - 1;
+        const data = await getDmMessages(chatState.peerId, { page: prevPage, page_size: CHAT_PAGE_SIZE });
+        const older = data.items || [];
+        if (older.length) {
+            chatState.messages = [...older, ...chatState.messages];
+            chatState.page = prevPage;
+            paintChatMessages({ scrollToBottom: false });
+            if (body) body.scrollTop = body.scrollHeight - prevHeight;
+        }
+    } catch { /* 静默 */ }
+    chatState.loadingMore = false;
+}
 
-        const friendRows = friends.length ? friends.map((u) => `
-            <div class="msg-friend-item">
-                ${avatarHtmlForUser(u, 44)}
-                <div class="msg-friend-main">
-                    <span class="msg-friend-name">${escapeHtml(u.username || '')}</span>
-                    <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus ? `${u.campus || ''} ${u.bio || ''}`.trim() : '')}</span>
-                </div>
-                <div class="msg-friend-actions">
-                    <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> ${t('messages.sendMsg')}</button>
-                    <button class="msg-mini-btn" data-view-user="${u.id}" type="button">${t('messages.homepage')}</button>
-                    <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">${t('messages.removeFriend')}</button>
-                </div>
-            </div>`).join('') : `<div class="msg-empty-sm">${t('messages.noFriends')}</div>`;
+function appendChatBubble(message, { pending = false, scroll = true } = {}) {
+    const body = document.getElementById('msgChatBody');
+    if (!body) return;
 
-        view.innerHTML = `
+    const empty = body.querySelector('.msg-empty-sm');
+    if (empty) empty.remove();
+
+    const row = document.createElement('div');
+    row.innerHTML = bubbleRowHtml(message, { pending });
+    body.appendChild(row.firstElementChild);
+    if (scroll) body.scrollTop = body.scrollHeight;
+}
+
+let _sendQueue = Promise.resolve();
+let _convoRefreshTimer = null;
+const CONVO_REFRESH_DEBOUNCE_MS = 2500;
+
+function scheduleConvoListSync() {
+    clearTimeout(_convoRefreshTimer);
+    _convoRefreshTimer = setTimeout(() => {
+        _convoRefreshTimer = null;
+        fetchConversations()
+            .then((items) => {
+                if (!openChatPeerId) paintConvoList(items);
+                refreshAllBadges();
+            })
+            .catch(() => {});
+    }, CONVO_REFRESH_DEBOUNCE_MS);
+}
+
+/** 发送后本地更新会话预览，避免每条消息都拉全量会话列表 */
+function bumpLocalConvoPreview(peerId, text) {
+    const now = new Date().toISOString();
+    let items = tabCache.chats.items;
+    if (!Array.isArray(items)) {
+        tabCache.chats.items = items = [];
+    }
+    const idx = items.findIndex((c) => c.peer_id === peerId);
+    const peer = chatState.peer || (idx >= 0 ? items[idx].peer : null);
+    const entry = {
+        peer_id: peerId,
+        peer: peer || { id: peerId, username: t('messages.user') },
+        last_message: text,
+        last_at: now,
+        unread_count: 0,
+    };
+    if (idx >= 0) items[idx] = { ...items[idx], ...entry };
+    else items.unshift(entry);
+    items.sort((a, b) => (b.last_at || '').localeCompare(a.last_at || ''));
+    tabCache.chats.at = Date.now();
+}
+
+function enqueueSendChatMessage(text) {
+    const peerId = openChatPeerId;
+    if (!peerId || !text) return;
+
+    const me = getUser();
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimistic = {
+        _tempId: tempId,
+        sender_id: me?.id,
+        content: text,
+        is_mine: true,
+    };
+
+    appendChatBubble(optimistic, { pending: true });
+    bumpLocalConvoPreview(peerId, text);
+
+    _sendQueue = _sendQueue
+        .then(() => sendChatMessageOnce(peerId, tempId, text))
+        .catch(() => {});
+}
+
+async function sendChatMessageOnce(peerId, tempId, text) {
+    try {
+        const saved = await sendDmMessage(peerId, text);
+        const row = document.querySelector(`[data-temp-id="${tempId}"]`);
+        if (row) {
+            row.classList.remove('is-pending');
+            row.removeAttribute('data-temp-id');
+        }
+        chatState.messages.push({
+            id: saved.id,
+            sender_id: saved.sender_id,
+            content: saved.content,
+            is_mine: true,
+            created_at: saved.created_at,
+        });
+        scheduleConvoListSync();
+    } catch (err) {
+        document.querySelector(`[data-temp-id="${tempId}"]`)?.remove();
+        showToast(err.message || t('messages.sendFail'));
+    }
+}
+
+// ── 好友页 ────────────────────────────────────────────────────
+
+function friendRequestRowHtml(r) {
+    return `
+        <div class="msg-friend-item" data-request-id="${r.id}">
+            ${avatarHtmlForUser(r.requester, 44)}
+            <div class="msg-friend-main">
+                <span class="msg-friend-name">${escapeHtml(r.requester?.username || '')}</span>
+                <span class="msg-friend-bio">${escapeHtml(r.requester?.campus ? campusLabel(r.requester.campus) : t('messages.friendRequestBio'))}</span>
+            </div>
+            <div class="msg-friend-actions">
+                <button class="msg-mini-btn primary" data-accept="${r.id}" type="button">${t('messages.accept')}</button>
+                <button class="msg-mini-btn" data-reject="${r.id}" type="button">${t('messages.reject')}</button>
+            </div>
+        </div>`;
+}
+
+function sentRequestRowHtml(r) {
+    return `
+        <div class="msg-friend-item" data-sent-id="${r.id}">
+            ${avatarHtmlForUser(r.addressee, 44)}
+            <div class="msg-friend-main">
+                <span class="msg-friend-name">${escapeHtml(r.addressee?.username || '')}</span>
+                <span class="msg-friend-bio">${escapeHtml(r.addressee?.campus ? campusLabel(r.addressee.campus) : t('messages.waitPending'))}</span>
+            </div>
+            <div class="msg-friend-actions">
+                <button class="msg-mini-btn" data-cancel-request="${r.id}" type="button">${t('messages.cancelRequest')}</button>
+            </div>
+        </div>`;
+}
+
+function friendRowHtml(u) {
+    return `
+        <div class="msg-friend-item" data-friend-id="${u.id}">
+            ${avatarHtmlForUser(u, 44)}
+            <div class="msg-friend-main">
+                <span class="msg-friend-name">${escapeHtml(u.username || '')}</span>
+                <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus ? `${u.campus || ''} ${u.bio || ''}`.trim() : '')}</span>
+            </div>
+            <div class="msg-friend-actions">
+                <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> ${t('messages.sendMsg')}</button>
+                <button class="msg-mini-btn" data-view-user="${u.id}" type="button">${t('messages.homepage')}</button>
+                <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">${t('messages.removeFriend')}</button>
+            </div>
+        </div>`;
+}
+
+function searchResultRowHtml(u) {
+    return `
+        <div class="msg-friend-item">
+            ${avatarHtmlForUser(u, 40)}
+            <div class="msg-friend-main">
+                <span class="msg-friend-name">${escapeHtml(u.username)}</span>
+                <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus || '')}</span>
+            </div>
+            ${u.friendship_status === 'friends' ? `
+                    <div class="msg-friend-actions">
+                        <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> ${t('messages.sendMsg')}</button>
+                        <button class="msg-mini-btn" data-view-user="${u.id}" type="button">${t('messages.homepage')}</button>
+                        <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">${t('messages.removeFriend')}</button>
+                    </div>`
+                : u.friendship_status === 'pending_sent' && u.friendship_request_id ? `
+                    <div class="msg-friend-actions">
+                        <span class="msg-tag-pending">${t('messages.pendingSent')}</span>
+                        <button class="msg-mini-btn" data-cancel-request="${u.friendship_request_id}" type="button">${t('messages.cancelRequest')}</button>
+                    </div>`
+                : u.friendship_status === 'pending_sent' ? `<span class="msg-tag-pending">${t('messages.pendingSent')}</span>`
+                : u.friendship_status === 'pending_received' && u.friendship_request_id ? `
+                    <div class="msg-friend-actions">
+                        <button class="msg-mini-btn primary" data-accept="${u.friendship_request_id}" type="button">${t('messages.accept')}</button>
+                        <button class="msg-mini-btn" data-reject="${u.friendship_request_id}" type="button">${t('messages.reject')}</button>
+                    </div>`
+                : u.friendship_status === 'pending_received' ? `<span class="msg-tag-pending">${t('messages.pendingReceived')}</span>`
+                : `<button class="msg-mini-btn primary" data-add="${u.id}" type="button">${t('messages.addFriend')}</button>`}
+        </div>`;
+}
+
+function ensureFriendsShell(view) {
+    if (_friendsShellReady && view.querySelector('#msgFriendsLayout')) return;
+    _friendsShellReady = true;
+    view.innerHTML = `
+        <div id="msgFriendsLayout" class="msg-friends-layout">
             <div class="msg-add-row">
-                <input type="text" id="msgAddInput" placeholder="${t('messages.searchFriend')}" autocomplete="off">
+                <input type="text" id="msgAddInput" data-i18n-placeholder="messages.searchFriend" placeholder="${t('messages.searchFriend')}" autocomplete="off">
                 <button class="msg-mini-btn primary" id="msgAddBtn" type="button"><i class="fas fa-user-plus"></i> ${t('messages.addFriend')}</button>
             </div>
             <div id="msgAddResults" class="msg-add-results"></div>
-            ${sentRequests.length ? `<h4 class="msg-section-title">${t('messages.sectionSent', { n: sentRequests.length })}</h4>${sentRows}` : ''}
-            ${requests.length ? `<h4 class="msg-section-title">${t('messages.sectionNew', { n: requests.length })}</h4>${requestRows}` : ''}
-            <h4 class="msg-section-title">${t('messages.sectionFriends', { n: friends.length })}</h4>
-            ${friendRows}`;
-    } catch (e) {
-        view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
+            <div id="msgRequestsBlock" hidden>
+                <h4 class="msg-section-title msg-section-highlight" id="msgRequestsTitle"></h4>
+                <div id="msgRequestsList"></div>
+            </div>
+            <div id="msgSentBlock" hidden>
+                <h4 class="msg-section-title" id="msgSentTitle"></h4>
+                <div id="msgSentList"></div>
+            </div>
+            <h4 class="msg-section-title" id="msgFriendsTitle"></h4>
+            <div id="msgFriendsList"></div>
+        </div>`;
+}
+
+function paintFriendsData({ friends = [], requests = [], sent = [] } = {}) {
+    const reqBlock = document.getElementById('msgRequestsBlock');
+    const reqList = document.getElementById('msgRequestsList');
+    const reqTitle = document.getElementById('msgRequestsTitle');
+    const sentBlock = document.getElementById('msgSentBlock');
+    const sentList = document.getElementById('msgSentList');
+    const sentTitle = document.getElementById('msgSentTitle');
+    const friendsList = document.getElementById('msgFriendsList');
+    const friendsTitle = document.getElementById('msgFriendsTitle');
+
+    if (requests.length) {
+        reqBlock.hidden = false;
+        reqTitle.textContent = t('messages.sectionNew', { n: requests.length });
+        reqList.innerHTML = requests.map(friendRequestRowHtml).join('');
+    } else if (reqBlock) {
+        reqBlock.hidden = true;
+        if (reqList) reqList.innerHTML = '';
+    }
+
+    if (sent.length) {
+        sentBlock.hidden = false;
+        sentTitle.textContent = t('messages.sectionSent', { n: sent.length });
+        sentList.innerHTML = sent.map(sentRequestRowHtml).join('');
+    } else if (sentBlock) {
+        sentBlock.hidden = true;
+        if (sentList) sentList.innerHTML = '';
+    }
+
+    if (friendsTitle) friendsTitle.textContent = t('messages.sectionFriends', { n: friends.length });
+    if (friendsList) {
+        friendsList.innerHTML = friends.length
+            ? friends.map(friendRowHtml).join('')
+            : `<div class="msg-empty-sm">${t('messages.noFriends')}</div>`;
+    }
+}
+
+async function fetchFriendsData() {
+    const [friendsData, reqData, sentReqData] = await Promise.all([
+        listFriends(),
+        listFriendRequests(),
+        listSentFriendRequests(),
+    ]);
+    const payload = {
+        friends: friendsData.items || [],
+        requests: reqData.items || [],
+        sent: sentReqData.items || [],
+    };
+    tabCache.friends = { ...payload, at: Date.now() };
+    return payload;
+}
+
+async function renderFriends({ force = false } = {}) {
+    const view = document.getElementById('msgFriendsView');
+    if (!view) return;
+
+    ensureFriendsShell(view);
+
+    const hadCache = tabCache.friends.friends !== null;
+    const fresh = !force && isCacheFresh(tabCache.friends.at);
+
+    if (hadCache) {
+        paintFriendsData(tabCache.friends);
+    } else {
+        const friendsList = document.getElementById('msgFriendsList');
+        if (friendsList) friendsList.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+    }
+
+    if (fresh) {
+        fetchFriendsData()
+            .then((data) => { paintFriendsData(data); updateTabBadges(); })
+            .catch(() => {});
+        return;
+    }
+
+    try {
+        const data = await fetchFriendsData();
+        paintFriendsData(data);
+        updateTabBadges();
+    } catch {
+        const friendsList = document.getElementById('msgFriendsList');
+        if (friendsList) friendsList.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
+    }
+}
+
+async function reloadFriendsPreserveSearch() {
+    const input = document.getElementById('msgAddInput');
+    const keyword = input?.value?.trim() || '';
+    const selStart = input?.selectionStart;
+    const selEnd = input?.selectionEnd;
+
+    invalidateCache('friends');
+    try {
+        const data = await fetchFriendsData();
+        paintFriendsData(data);
+        updateTabBadges();
+    } catch {
+        showToast(t('messages.loadFail'));
+    }
+
+    if (input && keyword) {
+        input.value = keyword;
+        if (selStart != null) input.setSelectionRange(selStart, selEnd);
+        await searchAndRender(keyword);
     }
 }
 
@@ -231,78 +735,81 @@ async function searchAndRender(q) {
     if (!view) return;
     const key = q.trim();
     if (!key) { view.innerHTML = ''; return; }
+
+    const seq = ++_searchSeq;
+    view.innerHTML = `<div class="msg-skeleton msg-skeleton-inline">${t('common.loading')}</div>`;
+
     try {
         const data = await searchUsers(key);
+        if (seq !== _searchSeq) return;
         const hits = data.items || [];
         if (!hits.length) {
             view.innerHTML = `<div class="msg-empty-sm">${t('messages.notFound', { key: escapeHtml(key) })}</div>`;
             return;
         }
-        view.innerHTML = hits.map((u) => `
-            <div class="msg-friend-item">
-                ${avatarHtmlForUser(u, 40)}
-                <div class="msg-friend-main">
-                    <span class="msg-friend-name">${escapeHtml(u.username)}</span>
-                    <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus || '')}</span>
-                </div>
-                ${u.friendship_status === 'friends' ? `
-                        <div class="msg-friend-actions">
-                            <button class="msg-mini-btn primary" data-chat-with="${u.id}" type="button"><i class="fas fa-comment"></i> ${t('messages.sendMsg')}</button>
-                            <button class="msg-mini-btn" data-view-user="${u.id}" type="button">${t('messages.homepage')}</button>
-                            <button class="msg-mini-btn danger" data-remove-friend="${u.id}" type="button">${t('messages.removeFriend')}</button>
-                        </div>`
-                    : u.friendship_status === 'pending_sent' && u.friendship_request_id ? `
-                        <div class="msg-friend-actions">
-                            <span class="msg-tag-pending">${t('messages.pendingSent')}</span>
-                            <button class="msg-mini-btn" data-cancel-request="${u.friendship_request_id}" type="button">${t('messages.cancelRequest')}</button>
-                        </div>`
-                    : u.friendship_status === 'pending_sent' ? `<span class="msg-tag-pending">${t('messages.pendingSent')}</span>`
-                    : u.friendship_status === 'pending_received' && u.friendship_request_id ? `
-                        <div class="msg-friend-actions">
-                            <button class="msg-mini-btn primary" data-accept="${u.friendship_request_id}" type="button">${t('messages.accept')}</button>
-                            <button class="msg-mini-btn" data-reject="${u.friendship_request_id}" type="button">${t('messages.reject')}</button>
-                        </div>`
-                    : u.friendship_status === 'pending_received' ? `<span class="msg-tag-pending">${t('messages.pendingReceived')}</span>`
-                    : `<button class="msg-mini-btn primary" data-add="${u.id}" type="button">${t('messages.addFriend')}</button>`}
-            </div>`).join('');
-    } catch (e) {
+        view.innerHTML = hits.map(searchResultRowHtml).join('');
+    } catch {
+        if (seq !== _searchSeq) return;
         view.innerHTML = `<div class="msg-empty-sm">${t('messages.searchFail')}</div>`;
     }
 }
 
-async function refreshFriendsWithSearch() {
-    const keyword = document.getElementById('msgAddInput')?.value?.trim() || '';
-    await renderFriends();
-    if (!keyword) return;
-    const input = document.getElementById('msgAddInput');
-    if (input) input.value = keyword;
-    await searchAndRender(keyword);
+function notifListHtml(items) {
+    return items.map((n) => `
+        <div class="msg-notif-item ${n.is_read ? '' : 'unread'}" data-notif="${n.id}" data-type="${n.type}" data-post="${n.post_id || ''}" data-friendship="${n.friendship_id || ''}" role="button" tabindex="0">
+            ${avatarHtmlForUser(n.actor, 40)}
+            <div class="msg-notif-main">
+                <div class="msg-notif-text">${escapeHtml(notifText(n))}</div>
+                ${n.post_title ? `<div class="msg-notif-sub">${escapeHtml(n.post_title)}</div>` : ''}
+                <div class="msg-notif-time">${fmtTime(n.created_at)}</div>
+                ${notifActionHtml(n)}
+            </div>
+        </div>`).join('');
 }
 
-async function renderInteract() {
+async function fetchNotifications() {
+    const data = await listNotifications();
+    const items = data.items || [];
+    tabCache.interact = { items, at: Date.now() };
+    return items;
+}
+
+async function renderInteract({ force = false } = {}) {
     const view = document.getElementById('msgInteractView');
     if (!view) return;
-    view.innerHTML = `<div class="profile-loading">${t('common.loading')}</div>`;
+
+    const fresh = !force && isCacheFresh(tabCache.interact.at);
+
+    if (tabCache.interact.items) {
+        const items = tabCache.interact.items;
+        view.innerHTML = items.length
+            ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
+            : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
+    } else {
+        view.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+    }
+
+    if (fresh) {
+        fetchNotifications()
+            .then(async (items) => {
+                view.innerHTML = items.length
+                    ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
+                    : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
+                await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
+                refreshAllBadges();
+            })
+            .catch(() => {});
+        return;
+    }
+
     try {
-        const data = await listNotifications();
-        const items = data.items || [];
-        if (!items.length) {
-            view.innerHTML = `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
-            return;
-        }
-        view.innerHTML = `<div class="msg-notif-list">${items.map((n) => `
-            <div class="msg-notif-item ${n.is_read ? '' : 'unread'}" data-notif="${n.id}" data-type="${n.type}" data-post="${n.post_id || ''}" data-friendship="${n.friendship_id || ''}" role="button" tabindex="0">
-                ${avatarHtmlForUser(n.actor, 40)}
-                <div class="msg-notif-main">
-                    <div class="msg-notif-text">${escapeHtml(notifText(n))}</div>
-                    ${n.post_title ? `<div class="msg-notif-sub">${escapeHtml(n.post_title)}</div>` : ''}
-                    <div class="msg-notif-time">${fmtTime(n.created_at)}</div>
-                    ${notifActionHtml(n)}
-                </div>
-            </div>`).join('')}</div>`;
-        await markNotificationsRead();
-        if (typeof window.refreshUnreadBadge === 'function') window.refreshUnreadBadge();
-    } catch (e) {
+        const items = await fetchNotifications();
+        view.innerHTML = items.length
+            ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
+            : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
+        await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
+        refreshAllBadges();
+    } catch {
         view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
     }
 }
@@ -313,9 +820,9 @@ function bindEvents() {
     const page = document.getElementById('messagesPage');
     if (!page) return;
 
-    page.querySelectorAll('.msg-tab').forEach((t) => {
-        t.addEventListener('click', async () => {
-            currentTab = t.dataset.tab;
+    page.querySelectorAll('.msg-tab').forEach((tab) => {
+        tab.addEventListener('click', async () => {
+            currentTab = tab.dataset.tab;
             openChatPeerId = null;
             renderTabs();
             if (currentTab === 'chats') await renderChats();
@@ -333,7 +840,8 @@ function bindEvents() {
         }
         if (e.target.closest('#msgBackBtn')) {
             openChatPeerId = null;
-            await renderChats();
+            chatState.peerId = null;
+            await renderChats({ force: true });
             return;
         }
         if (e.target.closest('#msgChatBgBtn')) {
@@ -358,11 +866,8 @@ function bindEvents() {
             const peerId = Number(bgPreset.dataset.peerId);
             const presetId = bgPreset.dataset.chatBgPreset;
             if (!peerId) return;
-            if (presetId === 'default') {
-                clearChatBackground(peerId);
-            } else {
-                setChatBackground(peerId, { type: 'preset', id: presetId });
-            }
+            if (presetId === 'default') clearChatBackground(peerId);
+            else setChatBackground(peerId, { type: 'preset', id: presetId });
             applyChatBackground(document.getElementById('msgChatBody'), peerId);
             document.getElementById('msgChatBgPanel')?.querySelectorAll('.msg-chat-bg-swatch').forEach((el) => {
                 el.classList.toggle('active', el === bgPreset);
@@ -393,8 +898,10 @@ function bindEvents() {
         }
         const chatWith = e.target.closest('[data-chat-with]');
         if (chatWith) {
+            const userId = Number(chatWith.dataset.chatWith);
+            _pendingPeerHint = tabCache.friends.friends?.find((u) => u.id === userId) || null;
             currentTab = 'chats';
-            openChatPeerId = Number(chatWith.dataset.chatWith);
+            openChatPeerId = userId;
             renderTabs();
             await renderChats();
             return;
@@ -415,10 +922,11 @@ function bindEvents() {
                 showToast(t('messages.friendRemoved'));
                 if (openChatPeerId === userId) {
                     openChatPeerId = null;
+                    chatState.peerId = null;
                     currentTab = 'friends';
                     renderTabs();
                 }
-                await refreshFriendsWithSearch();
+                await reloadFriendsPreserveSearch();
             } catch (err) {
                 showToast(err.message);
                 remove.disabled = false;
@@ -431,8 +939,10 @@ function bindEvents() {
                 accept.disabled = true;
                 await acceptFriendRequest(Number(accept.dataset.accept));
                 showToast(t('messages.friendAdded'));
-                if (currentTab === 'interact') await renderInteract();
-                else await refreshFriendsWithSearch();
+                invalidateCache('friends', 'chats', 'interact');
+                if (currentTab === 'interact') await renderInteract({ force: true });
+                else await reloadFriendsPreserveSearch();
+                refreshAllBadges();
             } catch (err) {
                 showToast(err.message);
                 accept.disabled = false;
@@ -445,8 +955,10 @@ function bindEvents() {
                 reject.disabled = true;
                 await rejectFriendRequest(Number(reject.dataset.reject));
                 showToast(t('messages.requestRejected'));
-                if (currentTab === 'interact') await renderInteract();
-                else await refreshFriendsWithSearch();
+                invalidateCache('friends', 'interact');
+                if (currentTab === 'interact') await renderInteract({ force: true });
+                else await reloadFriendsPreserveSearch();
+                refreshAllBadges();
             } catch (err) {
                 showToast(err.message);
                 reject.disabled = false;
@@ -459,7 +971,7 @@ function bindEvents() {
                 add.disabled = true;
                 await sendFriendRequest(Number(add.dataset.add));
                 showToast(t('messages.requestSent'));
-                await refreshFriendsWithSearch();
+                await reloadFriendsPreserveSearch();
             } catch (err) {
                 showToast(err.message);
                 add.disabled = false;
@@ -472,7 +984,7 @@ function bindEvents() {
                 cancel.disabled = true;
                 await cancelFriendRequest(Number(cancel.dataset.cancelRequest));
                 showToast(t('messages.requestCancelled'));
-                await refreshFriendsWithSearch();
+                await reloadFriendsPreserveSearch();
             } catch (err) {
                 showToast(err.message);
                 cancel.disabled = false;
@@ -492,7 +1004,7 @@ function bindEvents() {
                 currentTab = 'friends';
                 openChatPeerId = null;
                 renderTabs();
-                await renderFriends();
+                await renderFriends({ force: true });
             }
             return;
         }
@@ -526,6 +1038,7 @@ function bindEvents() {
             page._searchTimer = setTimeout(() => searchAndRender(e.target.value), 300);
         }
     });
+
     page.addEventListener('keydown', async (e) => {
         if (e.target.id === 'msgAddInput' && e.key === 'Enter') {
             e.preventDefault();
@@ -546,12 +1059,7 @@ function bindEvents() {
         const text = input?.value.trim();
         if (!text || !openChatPeerId) return;
         input.value = '';
-        try {
-            await sendDmMessage(openChatPeerId, text);
-            await renderChats();
-        } catch (err) {
-            showToast(err.message || t('messages.sendFail'));
-        }
+        enqueueSendChatMessage(text);
     });
 }
 
@@ -565,19 +1073,21 @@ export function setMessagesTab(tabId) {
 }
 
 /** 从外部打开与某好友的私信 */
-export function openChatWith(userId) {
+export function openChatWith(userId, peerHint = null) {
     currentTab = 'chats';
     openChatPeerId = userId;
+    _pendingPeerHint = peerHint;
     renderTabs();
     renderChats();
 }
 
-export async function refreshMessages() {
+export async function refreshMessages({ force = false } = {}) {
     bindEvents();
     renderTabs();
-    if (currentTab === 'chats') await renderChats();
-    else if (currentTab === 'friends') await renderFriends();
-    else await renderInteract();
+    updateTabBadges();
+    if (currentTab === 'chats') await renderChats({ force });
+    else if (currentTab === 'friends') await renderFriends({ force });
+    else await renderInteract({ force });
 }
 
 export function getMessagesState() {

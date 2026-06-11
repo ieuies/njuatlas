@@ -76,8 +76,9 @@ export async function initPartnerPage() {
         window.addEventListener('resize', () => {
             setTimeout(() => window._refreshCategoryArrows?.(), 150);
         });
-        // 注册滚动监听
-        window.addEventListener('scroll', handleScroll);
+        const scroller = document.getElementById('contentArea');
+        const scrollTarget = scroller || window;
+        scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
     }
 }
 
