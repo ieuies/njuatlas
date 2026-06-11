@@ -309,6 +309,9 @@ export async function getDmMessages(
 export async function sendDmMessage(peerId, content) {
     return request(`/social/messages/${peerId}`, 'POST', { content }, true, DEFAULT_TIMEOUT_MS, true);
 }
+export function markDmThreadRead(peerId) {
+    return request(`/social/messages/${peerId}/read`, 'POST', null, true, DEFAULT_TIMEOUT_MS, true);
+}
 export async function listNotifications({ page = 1, page_size = 30 } = {}) {
     return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');
 }

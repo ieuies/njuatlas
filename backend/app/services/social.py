@@ -319,13 +319,13 @@ def dm_messages_before(current_user_id, peer_id, before_id, page_size):
 
 
 def dm_tail_messages(current_user_id, peer_id, page_size):
-    """取会话最近 N 条：双向各取 N 条再合并，走 ix_dm_thread / ix_dm_thread_rev。"""
+    """取会话最近 N 条：双向各取 N 条再合并（按 id 降序，走线程索引）。"""
     forward = (
         DirectMessage.query.filter(
             DirectMessage.sender_id == current_user_id,
             DirectMessage.receiver_id == peer_id,
         )
-        .order_by(DirectMessage.created_at.desc())
+        .order_by(DirectMessage.id.desc())
         .limit(page_size)
         .all()
     )
@@ -334,12 +334,24 @@ def dm_tail_messages(current_user_id, peer_id, page_size):
             DirectMessage.sender_id == peer_id,
             DirectMessage.receiver_id == current_user_id,
         )
-        .order_by(DirectMessage.created_at.desc())
+        .order_by(DirectMessage.id.desc())
         .limit(page_size)
         .all()
     )
-    newest = sorted(forward + backward, key=lambda m: m.created_at, reverse=True)[:page_size]
+    newest = sorted(forward + backward, key=lambda m: m.id, reverse=True)[:page_size]
     return list(reversed(newest))
+
+
+def mark_dm_thread_read(current_user_id, peer_id):
+    """将某好友发来的未读私信标为已读（独立接口，不阻塞 tail 加载）。"""
+    return (
+        DirectMessage.query.filter_by(
+            sender_id=peer_id,
+            receiver_id=current_user_id,
+            is_read=False,
+        )
+        .update({"is_read": True}, synchronize_session=False)
+    )
 
 
 def dm_thread_message_count(current_user_id, peer_id):

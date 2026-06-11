@@ -19,6 +19,7 @@ from app.services.social import (
     dm_messages_before,
     dm_tail_messages,
     dm_thread_message_count,
+    mark_dm_thread_read,
     count_friends,
     count_likes_received,
     count_user_posts,
@@ -362,7 +363,6 @@ def get_messages(peer_id):
     if before_raw is not None and before_raw != "":
         before_id = max(0, int(before_raw))
         rows, has_more = dm_messages_before(g.current_user_id, peer_id, before_id, page_size)
-        db.session.commit()
         peer_user = User.query.get(peer_id)
         return jsonify({
             "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
@@ -371,17 +371,20 @@ def get_messages(peer_id):
             "has_more": has_more,
         })
 
-    DirectMessage.query.filter_by(
-        sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
-    ).update({"is_read": True})
-
     has_more = None
     if tail:
         rows = dm_tail_messages(g.current_user_id, peer_id, page_size)
         has_more = len(rows) >= page_size
-        total = None
-        page = None
+        peer_user = User.query.get(peer_id)
+        return jsonify({
+            "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
+            "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
+            "page_size": page_size,
+            "has_more": has_more,
+            "api": "tail-v2",
+        })
     else:
+        mark_dm_thread_read(g.current_user_id, peer_id)
         page = max(1, int(request.args.get("page", 1)))
         total = dm_thread_message_count(g.current_user_id, peer_id)
         rows = (
@@ -390,19 +393,26 @@ def get_messages(peer_id):
             .limit(page_size)
             .all()
         )
+        db.session.commit()
+        peer_user = User.query.get(peer_id)
+        return jsonify({
+            "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
+            "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
+            "page_size": page_size,
+            "total": total,
+            "page": page,
+        })
 
+
+@social_bp.route("/messages/<int:peer_id>/read", methods=["POST"])
+@jwt_required
+@limiter.limit("120 per minute")
+def mark_dm_read(peer_id):
+    if not are_friends(g.current_user_id, peer_id):
+        return error_response("只能与好友私信", 403, code="not_friends")
+    mark_dm_thread_read(g.current_user_id, peer_id)
     db.session.commit()
-    peer_user = User.query.get(peer_id)
-    payload = {
-        "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
-        "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
-        "page_size": page_size,
-        "total": total,
-        "page": page,
-    }
-    if has_more is not None:
-        payload["has_more"] = has_more
-    return jsonify(payload)
+    return jsonify({"ok": True})
 
 
 @social_bp.route("/messages/<int:peer_id>", methods=["POST"])

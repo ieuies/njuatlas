@@ -20,6 +20,7 @@ import {
     markNotificationsRead,
     getUnreadCounts,
     invalidateUnreadCache,
+    markDmThreadRead,
 } from '../api.js';
 import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
 import { t } from '../i18n.js';
@@ -559,7 +560,12 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         document.getElementById('msgChatText')?.focus();
         invalidateCache('chats');
         fetchConversations().catch(() => {});
-        refreshAllBadges();
+        markDmThreadRead(peerId)
+            .then(() => {
+                invalidateUnreadCache();
+                refreshAllBadges();
+            })
+            .catch(() => {});
         startRealtimeSync();
     } catch (e) {
         if (body) body.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;

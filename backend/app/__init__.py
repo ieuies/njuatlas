@@ -67,6 +67,10 @@ def create_app():
 
     @app.route("/health")
     def health():
-        return jsonify({"status": "ok", "service": "njuatlas-backend"})
+        return jsonify({
+            "status": "ok",
+            "service": "njuatlas-backend",
+            "dm_api": "tail-v2",
+        })
 
     return app
