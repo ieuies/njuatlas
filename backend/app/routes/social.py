@@ -2,6 +2,7 @@
 import base64
 import os
 import re
+import time
 
 from flask import Blueprint, current_app, g, jsonify, request, Response, send_from_directory
 from sqlalchemy import or_
@@ -267,6 +268,58 @@ def remove_friend(user_id):
 
 # ── 私信 ──────────────────────────────────────────────────────
 
+def _dm_item_dict(m, current_user_id):
+    return {
+        "id": m.id,
+        "sender_id": m.sender_id,
+        "receiver_id": m.receiver_id,
+        "content": m.content,
+        "is_read": m.is_read,
+        "created_at": _dt(m.created_at),
+        "is_mine": m.sender_id == current_user_id,
+    }
+
+
+def _dm_thread_query(current_user_id, peer_id):
+    return DirectMessage.query.filter(
+        or_(
+            (DirectMessage.sender_id == current_user_id) & (DirectMessage.receiver_id == peer_id),
+            (DirectMessage.sender_id == peer_id) & (DirectMessage.receiver_id == current_user_id),
+        )
+    )
+
+
+def _dm_rows_after(base_q, peer_id, current_user_id, after_id):
+    return (
+        base_q.filter(DirectMessage.id > after_id)
+        .order_by(DirectMessage.created_at.asc())
+        .limit(100)
+        .all()
+    )
+
+
+def _dm_sync_after(base_q, peer_id, current_user_id, after_id):
+    rows = _dm_rows_after(base_q, peer_id, current_user_id, after_id)
+    if rows:
+        DirectMessage.query.filter_by(
+            sender_id=peer_id, receiver_id=current_user_id, is_read=False
+        ).update({"is_read": True})
+        db.session.commit()
+    return rows
+
+
+def _dm_wait_for_new(base_q, peer_id, current_user_id, after_id, wait_sec):
+    """长轮询：最多 wait_sec 秒，每 ~350ms 查一次新消息（零额外服务成本）。"""
+    poll_interval = 0.35
+    deadline = time.monotonic() + wait_sec
+    rows = _dm_sync_after(base_q, peer_id, current_user_id, after_id)
+    while not rows and time.monotonic() < deadline:
+        time.sleep(poll_interval)
+        db.session.expire_all()
+        rows = _dm_sync_after(base_q, peer_id, current_user_id, after_id)
+    return rows
+
+
 @social_bp.route("/messages/conversations", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")
@@ -276,47 +329,29 @@ def list_conversations():
 
 @social_bp.route("/messages/<int:peer_id>", methods=["GET"])
 @jwt_required
-@limiter.limit("120 per minute")
+@limiter.limit("180 per minute")
 def get_messages(peer_id):
     if not are_friends(g.current_user_id, peer_id):
         return error_response("只能与好友私信", 403, code="not_friends")
     page_size = min(100, max(1, int(request.args.get("page_size", 50))))
     tail = request.args.get("tail") == "1"
-    base_q = DirectMessage.query.filter(
-        or_(
-            (DirectMessage.sender_id == g.current_user_id) & (DirectMessage.receiver_id == peer_id),
-            (DirectMessage.sender_id == peer_id) & (DirectMessage.receiver_id == g.current_user_id),
-        )
-    )
+    base_q = _dm_thread_query(g.current_user_id, peer_id)
     after_raw = request.args.get("after_id")
     if after_raw is not None and after_raw != "":
         after_id = max(0, int(after_raw))
-        rows = (
-            base_q.filter(DirectMessage.id > after_id)
-            .order_by(DirectMessage.created_at.asc())
-            .limit(100)
-            .all()
-        )
-        if rows:
-            DirectMessage.query.filter_by(
-                sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
-            ).update({"is_read": True})
-        db.session.commit()
-        peer_user = User.query.get(peer_id)
+        wait_sec = 0
+        wait_raw = request.args.get("wait")
+        if wait_raw is not None and wait_raw != "":
+            try:
+                wait_sec = min(25, max(0, int(wait_raw)))
+            except (TypeError, ValueError):
+                wait_sec = 0
+        if wait_sec > 0:
+            rows = _dm_wait_for_new(base_q, peer_id, g.current_user_id, after_id, wait_sec)
+        else:
+            rows = _dm_sync_after(base_q, peer_id, g.current_user_id, after_id)
         return jsonify({
-            "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
-            "items": [
-                {
-                    "id": m.id,
-                    "sender_id": m.sender_id,
-                    "receiver_id": m.receiver_id,
-                    "content": m.content,
-                    "is_read": m.is_read,
-                    "created_at": _dt(m.created_at),
-                    "is_mine": m.sender_id == g.current_user_id,
-                }
-                for m in rows
-            ],
+            "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
             "sync": True,
         })
 
@@ -347,18 +382,7 @@ def get_messages(peer_id):
     peer_user = User.query.get(peer_id)
     return jsonify({
         "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
-        "items": [
-            {
-                "id": m.id,
-                "sender_id": m.sender_id,
-                "receiver_id": m.receiver_id,
-                "content": m.content,
-                "is_read": m.is_read,
-                "created_at": _dt(m.created_at),
-                "is_mine": m.sender_id == g.current_user_id,
-            }
-            for m in rows
-        ],
+        "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
         "page": page,
         "page_size": page_size,
         "total": total,

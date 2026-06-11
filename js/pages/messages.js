@@ -383,13 +383,20 @@ function bindChatScrollLoad() {
     });
 }
 
-const CHAT_POLL_MS = 2500;
-const CONVO_POLL_MS = 6000;
+const CHAT_POLL_MS = 1000;
+const CONVO_POLL_MS = 3000;
+const CHAT_LONG_POLL_WAIT_SEC = 20;
+const CHAT_LONG_POLL_TIMEOUT_MS = (CHAT_LONG_POLL_WAIT_SEC + 8) * 1000;
 
-let _syncTimer = null;
+let _convoSyncTimer = null;
 let _syncMode = null;
-let _syncInFlight = false;
+let _chatSyncActive = false;
+let _convoSyncInFlight = false;
 let _visibilityBound = false;
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function getLastConfirmedMessageId() {
     let max = 0;
@@ -405,9 +412,10 @@ function isChatNearBottom(body, threshold = 96) {
 }
 
 function stopRealtimeSync() {
-    if (_syncTimer) clearInterval(_syncTimer);
-    _syncTimer = null;
+    if (_convoSyncTimer) clearInterval(_convoSyncTimer);
+    _convoSyncTimer = null;
     _syncMode = null;
+    _chatSyncActive = false;
 }
 
 function startRealtimeSync() {
@@ -418,57 +426,70 @@ function startRealtimeSync() {
 
     if (openChatPeerId && chatState.peerId) {
         _syncMode = 'chat';
-        void pollChatOnce();
-        _syncTimer = setInterval(pollChatOnce, CHAT_POLL_MS);
+        _chatSyncActive = true;
+        void runChatSyncLoop();
     } else if (currentTab === 'chats') {
         _syncMode = 'convo';
         void pollConvoOnce();
-        _syncTimer = setInterval(pollConvoOnce, CONVO_POLL_MS);
+        _convoSyncTimer = setInterval(pollConvoOnce, CONVO_POLL_MS);
     }
 }
 
-async function pollChatOnce() {
-    if (_syncInFlight || document.hidden || _syncMode !== 'chat') return;
-    const peerId = openChatPeerId || chatState.peerId;
-    if (!peerId || !chatState.messages.length) return;
+function applyIncomingChatMessages(peerId, data) {
+    const body = document.getElementById('msgChatBody');
+    const stickBottom = isChatNearBottom(body);
 
-    const afterId = getLastConfirmedMessageId();
-    if (afterId <= 0) return;
+    const incoming = (data.items || []).filter(
+        (m) => m.id && !chatState.messages.some((x) => x.id === m.id),
+    );
+    if (!incoming.length) return;
 
-    _syncInFlight = true;
-    try {
-        const data = await getDmMessages(peerId, { after_id: afterId }, true);
-        const body = document.getElementById('msgChatBody');
-        const stickBottom = isChatNearBottom(body);
-
-        const incoming = (data.items || []).filter(
-            (m) => m.id && !chatState.messages.some((x) => x.id === m.id),
-        );
-        if (!incoming.length) return;
-
-        for (const m of incoming) {
-            chatState.messages.push(m);
-            appendChatBubble(m, { scroll: false });
-            if (!m.is_mine) {
-                bumpLocalConvoPreview(peerId, m.content);
-            }
+    for (const m of incoming) {
+        chatState.messages.push(m);
+        appendChatBubble(m, { scroll: false });
+        if (!m.is_mine) {
+            bumpLocalConvoPreview(peerId, m.content);
         }
-        if (stickBottom && body) body.scrollTop = body.scrollHeight;
-        refreshAllBadges();
-    } catch { /* 静默 */ } finally {
-        _syncInFlight = false;
+    }
+    if (stickBottom && body) body.scrollTop = body.scrollHeight;
+    refreshAllBadges();
+}
+
+async function runChatSyncLoop() {
+    let useLongPoll = true;
+    while (_chatSyncActive && _syncMode === 'chat' && !document.hidden) {
+        const peerId = openChatPeerId || chatState.peerId;
+        if (!peerId) break;
+
+        const afterId = getLastConfirmedMessageId();
+        try {
+            const data = useLongPoll
+                ? await getDmMessages(
+                    peerId,
+                    { after_id: afterId, wait: CHAT_LONG_POLL_WAIT_SEC },
+                    true,
+                    CHAT_LONG_POLL_TIMEOUT_MS,
+                )
+                : await getDmMessages(peerId, { after_id: afterId }, true);
+            applyIncomingChatMessages(peerId, data);
+            useLongPoll = true;
+        } catch {
+            if (!_chatSyncActive || _syncMode !== 'chat') break;
+            useLongPoll = false;
+            await sleep(CHAT_POLL_MS);
+        }
     }
 }
 
 async function pollConvoOnce() {
-    if (_syncInFlight || document.hidden || _syncMode !== 'convo' || openChatPeerId) return;
-    _syncInFlight = true;
+    if (_convoSyncInFlight || document.hidden || _syncMode !== 'convo' || openChatPeerId) return;
+    _convoSyncInFlight = true;
     try {
         const items = await fetchConversations();
         paintConvoList(items);
         refreshAllBadges();
     } catch { /* 静默 */ } finally {
-        _syncInFlight = false;
+        _convoSyncInFlight = false;
     }
 }
 

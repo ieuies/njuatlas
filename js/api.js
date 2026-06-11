@@ -291,11 +291,17 @@ export async function removeFriend(userId) {
 export async function listDmConversations() {
     return request('/social/messages/conversations', 'GET');
 }
-export async function getDmMessages(peerId, { page = 1, page_size = 50, tail = false, after_id = null } = {}, silent = false) {
+export async function getDmMessages(
+    peerId,
+    { page = 1, page_size = 50, tail = false, after_id = null, wait = null } = {},
+    silent = false,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+) {
     let url = `/social/messages/${peerId}?page=${page}&page_size=${page_size}`;
     if (tail) url += '&tail=1';
-    if (after_id != null && after_id > 0) url += `&after_id=${after_id}`;
-    return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, silent);
+    if (after_id != null && after_id >= 0) url += `&after_id=${after_id}`;
+    if (wait != null && wait > 0) url += `&wait=${wait}`;
+    return request(url, 'GET', null, true, timeoutMs, silent);
 }
 export async function sendDmMessage(peerId, content) {
     return request(`/social/messages/${peerId}`, 'POST', { content }, true, DEFAULT_TIMEOUT_MS, true);
