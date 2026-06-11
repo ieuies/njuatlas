@@ -275,6 +275,7 @@ function updateNavBar() {
         if (userNav) userNav.style.display = 'none';
         document.body.classList.remove('logged-in');
         clearNavUnreadBadges();
+        if (typeof window.clearMessagesTabBadges === 'function') window.clearMessagesTabBadges();
     }
 
     // 默认回到首页，避免未登录用户直接落到需要账号的功能页。
@@ -821,8 +822,22 @@ async function refreshUnreadBadge(preloaded) {
         return;
     }
     try {
-        const data = preloaded || await getUnreadCounts();
-        const total = Math.max(0, Number(data.total) || 0);
+        const raw = preloaded || await getUnreadCounts();
+        const messages = Math.max(0, Number(raw.messages) || 0);
+        const friendRequests = Math.max(0, Number(raw.friend_requests) || 0);
+        let interact = raw.interact;
+        if (interact == null) {
+            const legacyNotif = Math.max(0, Number(raw.notifications) || 0);
+            interact = Math.max(0, legacyNotif - friendRequests);
+        } else {
+            interact = Math.max(0, Number(interact) || 0);
+        }
+        let total = raw.total;
+        if (total == null || Number.isNaN(Number(total))) {
+            total = messages + interact + friendRequests;
+        } else {
+            total = Math.max(0, Number(total) || 0);
+        }
         document.querySelectorAll('.tab-item[data-page="messages"], .desktop-nav-item[data-page="messages"]').forEach((el) => {
             let badge = el.querySelector('.nav-unread-badge');
             if (total > 0) {
@@ -835,21 +850,20 @@ async function refreshUnreadBadge(preloaded) {
                 badge.hidden = false;
                 badge.style.display = '';
             } else if (badge) {
-                badge.hidden = true;
-                badge.style.display = 'none';
+                badge.remove();
             }
         });
-    } catch (e) { /* 静默 */ }
+    } catch {
+        clearNavUnreadBadges();
+    }
 }
 
 function clearNavUnreadBadges() {
-    document.querySelectorAll('.nav-unread-badge').forEach((badge) => {
-        badge.hidden = true;
-        badge.style.display = 'none';
-    });
+    document.querySelectorAll('.nav-unread-badge').forEach((badge) => badge.remove());
 }
 
 window.refreshUnreadBadge = refreshUnreadBadge;
+window.clearNavUnreadBadges = clearNavUnreadBadges;
 
 window.openUserProfile = async (userId) => {
     const mod = await _loadProfile();

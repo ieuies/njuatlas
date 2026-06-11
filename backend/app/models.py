@@ -24,8 +24,12 @@ class User(db.Model):
     bio = db.Column(db.String(300))            # 个人简介
     campus = db.Column(db.String(20))           # 校区：鼓楼/仙林/浦口/苏州
     tags = db.Column(db.String(500))           # JSON 数组: '["川菜","羽毛球","王者"]'
-    avatar_url = db.Column(db.String(500))     # 头像链接（预留）
-    cover_url = db.Column(db.String(500))      # 封面图链接（跨端同步）
+    avatar_url = db.Column(db.String(500))     # 头像访问路径（/api/social/avatars/user_{id}.jpg）
+    avatar_data = db.Column(db.LargeBinary)    # 头像二进制（Render 等同 Postgres 持久化，不依赖磁盘）
+    avatar_mime = db.Column(db.String(32))     # image/jpeg 等
+    cover_url = db.Column(db.String(500))      # 封面访问路径（/api/social/covers/user_{id}.jpg）
+    cover_data = db.Column(db.LargeBinary)       # 封面二进制（Postgres 持久化）
+    cover_mime = db.Column(db.String(32))
     bubble_style = db.Column(db.String(50), default="atlas-classic", nullable=False)  # 聊天气泡样式
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 

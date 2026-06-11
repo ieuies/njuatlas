@@ -5,6 +5,7 @@
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
 import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser } from '../utils.js';
+import { t } from '../i18n.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
 import { API_BASE } from '../config.js';
 
@@ -122,7 +123,7 @@ const CROP_PRESETS = {
         exportWidth: 320,
         exportHeight: 320,
         title: '调整头像',
-        hint: '拖拽或缩放图片，头像按 1:1 显示（仅自己可见）',
+        hint: '拖拽或缩放图片，上传后将保存到你的账号',
         successMsg: '头像已更新',
     },
 };
@@ -199,35 +200,34 @@ async function saveCoverFromCropped(canvas, originalDataUrl) {
     const user = getUser();
     if (!user) throw new Error('请先登录');
     const storageKey = getCoverStorageKey();
-    const base64 = canvas.toDataURL('image/jpeg', 0.92);
+    const base64 = canvas.toDataURL('image/jpeg', 0.88);
     const fallback = _fallbackCoverByUserId(user.id);
-    let synced = false;
+    const origKey = getCoverOriginalKey();
+    if (origKey && originalDataUrl) {
+        safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1920, 0.86));
+    }
     try {
         const res = await uploadCover(base64);
         if (res?.cover_url) {
             updateUserFromLogin({ ...user, cover_url: res.cover_url });
             setProfileCover(res.cover_url, fallback);
-            synced = true;
+            if (storageKey) localStorage.setItem(storageKey, base64);
+            showToast(t('profile.coverSynced'));
+            return;
         }
+        throw new Error('服务器未返回封面地址');
     } catch (e) {
         console.warn('封面上传服务端失败，回退本地存储:', e?.message);
-    }
-    if (!synced) {
         if (storageKey) localStorage.setItem(storageKey, base64);
         setProfileCover(base64, fallback);
-    }
-    // 保存裁剪前原图（缩放后）供“查看大图”
-    const origKey = getCoverOriginalKey();
-    if (origKey && originalDataUrl) {
-        safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1920, 0.86));
+        showToast(t('profile.coverLocalOnly'));
     }
 }
 
 async function saveAvatarFromCropped(canvas, originalDataUrl) {
     const storageKey = avatarStorageKey(getUser());
     if (!storageKey) throw new Error('请先登录');
-    const base64 = canvas.toDataURL('image/jpeg', 0.9);
-    localStorage.setItem(storageKey, base64);
+    const base64 = canvas.toDataURL('image/jpeg', 0.88);
     const origKey = getAvatarOriginalKey();
     if (origKey && originalDataUrl) {
         safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1280, 0.88));
@@ -236,10 +236,15 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
         const res = await uploadAvatar(base64);
         if (res?.avatar_url) {
             updateUserFromLogin({ ...getUser(), avatar_url: res.avatar_url });
+            localStorage.setItem(storageKey, base64);
+            showToast(t('profile.avatarSynced'));
+        } else {
+            throw new Error('服务器未返回头像地址');
         }
     } catch (e) {
         console.warn('头像上传服务端失败，已保存本地:', e?.message);
-        showToast('头像已保存在本机，同步服务器失败，其他设备可能看不到');
+        localStorage.setItem(storageKey, base64);
+        showToast(t('profile.avatarLocalOnly'));
     }
     renderAvatar(getUser());
     if (typeof window.updateNavBar === 'function') window.updateNavBar();

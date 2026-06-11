@@ -40,8 +40,20 @@ def ensure_user_auth_schema():
     if "avatar_url" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)"))
 
+    if "avatar_data" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN avatar_data BLOB"))
+
+    if "avatar_mime" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN avatar_mime VARCHAR(32)"))
+
     if "cover_url" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN cover_url VARCHAR(500)"))
+
+    if "cover_data" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN cover_data BLOB"))
+
+    if "cover_mime" not in existing_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN cover_mime VARCHAR(32)"))
 
     if "bubble_style" not in existing_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN bubble_style VARCHAR(50) DEFAULT 'atlas-classic' NOT NULL"))

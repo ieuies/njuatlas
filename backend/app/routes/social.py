@@ -2,9 +2,8 @@
 import base64
 import os
 import re
-import uuid
 
-from flask import Blueprint, current_app, g, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, g, jsonify, request, Response, send_from_directory
 from sqlalchemy import or_
 
 from app import db
@@ -454,18 +453,84 @@ def mark_notifications_read():
 # ── 头像/封面上传与静态访问 ───────────────────────────────────
 
 _DATA_URL_RE = re.compile(r"^data:image/(jpeg|jpg|png|webp);base64,", re.I)
+_AVATAR_FNAME_RE = re.compile(r"^user_(\d+)(?:_[\w-]+)?\.(jpg|jpeg|png|webp)$", re.I)
+_COVER_FNAME_RE = _AVATAR_FNAME_RE
+
+
+def _image_mime(ext):
+    ext = (ext or "jpg").lower()
+    if ext in ("jpg", "jpeg"):
+        return "image/jpeg"
+    return f"image/{ext}"
+
+
+def _avatar_mime(ext):
+    return _image_mime(ext)
+
+
+def _user_id_from_image_filename(filename, pattern=_AVATAR_FNAME_RE):
+    m = pattern.match(os.path.basename(filename or ""))
+    return int(m.group(1)) if m else None
+
+
+def _mime_from_image_filename(filename, pattern=_AVATAR_FNAME_RE):
+    m = pattern.match(os.path.basename(filename or ""))
+    return _image_mime(m.group(2) if m else "jpg")
+
+
+def _user_id_from_avatar_filename(filename):
+    return _user_id_from_image_filename(filename, _AVATAR_FNAME_RE)
+
+
+def _mime_from_avatar_filename(filename):
+    return _mime_from_image_filename(filename, _AVATAR_FNAME_RE)
+
+
+def _user_id_from_cover_filename(filename):
+    return _user_id_from_image_filename(filename, _COVER_FNAME_RE)
+
+
+def _mime_from_cover_filename(filename):
+    return _mime_from_image_filename(filename, _COVER_FNAME_RE)
+
+
+def _serve_user_image(filename, image_dir, user_id_fn, mime_fn, data_attr, not_found_code):
+    safe_name = os.path.basename(filename)
+    filepath = os.path.join(image_dir, safe_name)
+    if os.path.isfile(filepath):
+        return send_from_directory(image_dir, safe_name)
+
+    uid = user_id_fn(safe_name)
+    if uid:
+        user = User.query.get(uid)
+        blob = getattr(user, data_attr, None) if user else None
+        if blob:
+            mime_attr = data_attr.replace("_data", "_mime")
+            mime = getattr(user, mime_attr, None) or mime_fn(safe_name)
+            return Response(
+                blob,
+                mimetype=mime,
+                headers={"Cache-Control": "public, max-age=300"},
+            )
+    return error_response("图片不存在", 404, code=not_found_code)
 
 
 @social_bp.route("/avatars/<path:filename>", methods=["GET"])
 @limiter.limit("300 per minute")
 def serve_avatar(filename):
-    return send_from_directory(_avatar_dir(), filename)
+    return _serve_user_image(
+        filename, _avatar_dir(), _user_id_from_avatar_filename,
+        _mime_from_avatar_filename, "avatar_data", "avatar_not_found",
+    )
 
 
 @social_bp.route("/covers/<path:filename>", methods=["GET"])
 @limiter.limit("300 per minute")
 def serve_cover(filename):
-    return send_from_directory(_cover_dir(), filename)
+    return _serve_user_image(
+        filename, _cover_dir(), _user_id_from_cover_filename,
+        _mime_from_cover_filename, "cover_data", "cover_not_found",
+    )
 
 
 @social_bp.route("/me/avatar", methods=["POST"])
@@ -488,13 +553,21 @@ def upload_avatar():
     if len(binary) > 2 * 1024 * 1024:
         return error_response("图片不能超过 2MB", 400, code="too_large")
 
-    filename = f"user_{g.current_user_id}_{uuid.uuid4().hex[:12]}.{ext}"
-    filepath = os.path.join(_avatar_dir(), filename)
-    with open(filepath, "wb") as f:
-        f.write(binary)
-
     user = g.current_user
+    filename = f"user_{g.current_user_id}.{ext}"
+    mime = _avatar_mime(ext)
+
+    user.avatar_data = binary
+    user.avatar_mime = mime
     user.avatar_url = f"/api/social/avatars/{filename}"
+
+    filepath = os.path.join(_avatar_dir(), filename)
+    try:
+        with open(filepath, "wb") as f:
+            f.write(binary)
+    except OSError:
+        pass
+
     db.session.commit()
     return jsonify({"avatar_url": user.avatar_url})
 
@@ -519,12 +592,20 @@ def upload_cover():
     if len(binary) > 5 * 1024 * 1024:
         return error_response("封面图片不能超过 5MB", 400, code="too_large")
 
-    filename = f"user_{g.current_user_id}_{uuid.uuid4().hex[:12]}.{ext}"
-    filepath = os.path.join(_cover_dir(), filename)
-    with open(filepath, "wb") as f:
-        f.write(binary)
-
     user = g.current_user
+    filename = f"user_{g.current_user_id}.{ext}"
+    mime = _image_mime(ext)
+
+    user.cover_data = binary
+    user.cover_mime = mime
     user.cover_url = f"/api/social/covers/{filename}"
+
+    filepath = os.path.join(_cover_dir(), filename)
+    try:
+        with open(filepath, "wb") as f:
+            f.write(binary)
+    except OSError:
+        pass
+
     db.session.commit()
     return jsonify({"cover_url": user.cover_url})

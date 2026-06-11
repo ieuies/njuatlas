@@ -130,16 +130,43 @@ function setTabBadge(tabId, count) {
     }
 }
 
+function clearTabBadges() {
+    ['chats', 'friends', 'interact'].forEach((tabId) => setTabBadge(tabId, 0));
+}
+
+function normalizeUnreadCounts(data = {}) {
+    const messages = Math.max(0, Number(data.messages) || 0);
+    const friendRequests = Math.max(0, Number(data.friend_requests) || 0);
+    let interact = data.interact;
+    if (interact == null) {
+        // 兼容旧后端：只有 notifications 字段时，尽量拆到互动 Tab
+        const legacyNotif = Math.max(0, Number(data.notifications) || 0);
+        interact = Math.max(0, legacyNotif - friendRequests);
+    } else {
+        interact = Math.max(0, Number(interact) || 0);
+    }
+    let total = data.total;
+    if (total == null || Number.isNaN(Number(total))) {
+        total = messages + interact + friendRequests;
+    } else {
+        total = Math.max(0, Number(total) || 0);
+    }
+    return { messages, interact, friend_requests: friendRequests, total };
+}
+
 async function refreshAllBadges(preloaded) {
     try {
-        const data = preloaded || await getUnreadCounts();
+        const data = normalizeUnreadCounts(preloaded || await getUnreadCounts());
         setTabBadge('chats', data.messages);
-        setTabBadge('interact', data.interact ?? 0);
-        setTabBadge('friends', data.friend_requests ?? 0);
+        setTabBadge('interact', data.interact);
+        setTabBadge('friends', data.friend_requests);
         if (typeof window.refreshUnreadBadge === 'function') {
             await window.refreshUnreadBadge(data);
         }
-    } catch { /* 静默 */ }
+    } catch {
+        clearTabBadges();
+        if (typeof window.clearNavUnreadBadges === 'function') window.clearNavUnreadBadges();
+    }
 }
 
 async function updateTabBadges() {
@@ -1175,6 +1202,14 @@ export function initMessagesPage() {
 
 export function stopMessagesRealtimeSync() {
     stopRealtimeSync();
+}
+
+export function clearMessagesTabBadges() {
+    clearTabBadges();
+}
+
+if (typeof window !== 'undefined') {
+    window.clearMessagesTabBadges = clearMessagesTabBadges;
 }
 
 export function setMessagesTab(tabId) {
