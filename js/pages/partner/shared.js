@@ -4,6 +4,8 @@ import { t, tPartnerCategory } from '../../i18n.js';
 
 export const PAGE_SIZE = 20;
 export const LIST_CACHE_TTL_MS = 45000;
+/** 已完整加载（触底无更多）的列表缓存有效期 */
+export const FULL_LIST_CACHE_TTL_MS = 30 * 60 * 1000;
 export const LIST_RENDER_BATCH = 6;
 
 /** 列表内存缓存：key -> { at, posts, hasMore } */

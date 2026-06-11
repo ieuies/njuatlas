@@ -2,7 +2,7 @@ import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller, isMobileViewp
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
 import {
-    partnerStore, PAGE_SIZE, LIST_CACHE_TTL_MS, LIST_RENDER_BATCH,
+    partnerStore, PAGE_SIZE, LIST_CACHE_TTL_MS, FULL_LIST_CACHE_TTL_MS, LIST_RENDER_BATCH,
     partnerListCache, partnerListCacheKey,
 } from './shared.js';
 import { mapPost, typeLabel, isCurrentUserOwner } from './shared.js';
@@ -13,18 +13,112 @@ import { refreshPreviewMarkers } from './map.js';
 // 数据加载：分页从后端 API 获取帖子列表
 // ============================================================
 
-function _writeListCache(page, posts, hasMore) {
-    if (page !== 1) return;
-    const key = partnerListCacheKey(partnerStore.currentCategory, partnerStore.searchQuery, 1);
-    partnerListCache.set(key, { at: Date.now(), posts, hasMore });
+const PARTNER_SESSION_CACHE_PREFIX = 'partner_list_v1_';
+
+function _isCacheFresh(entry) {
+    if (!entry?.at) return false;
+    const ttl = entry.fullyLoaded ? FULL_LIST_CACHE_TTL_MS : LIST_CACHE_TTL_MS;
+    return Date.now() - entry.at < ttl;
 }
 
-function _readListCache(page) {
-    if (page !== 1) return null;
-    const key = partnerListCacheKey(partnerStore.currentCategory, partnerStore.searchQuery, 1);
-    const cached = partnerListCache.get(key);
-    if (!cached || Date.now() - cached.at > LIST_CACHE_TTL_MS) return null;
+function _persistSessionCache(key, entry) {
+    try {
+        sessionStorage.setItem(PARTNER_SESSION_CACHE_PREFIX + key, JSON.stringify(entry));
+    } catch (_) { /* quota or private mode */ }
+}
+
+function _hydrateSessionCache(key) {
+    try {
+        const raw = sessionStorage.getItem(PARTNER_SESSION_CACHE_PREFIX + key);
+        return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function _writeListCacheFor(category, searchQuery, posts, hasMore, pagesLoaded = 1) {
+    const key = partnerListCacheKey(category, searchQuery, 1);
+    const entry = {
+        at: Date.now(),
+        posts,
+        hasMore,
+        pagesLoaded,
+        fullyLoaded: !hasMore,
+    };
+    partnerListCache.set(key, entry);
+    _persistSessionCache(key, entry);
+}
+
+function _getCategoryCache(category, searchQuery) {
+    const key = partnerListCacheKey(category, searchQuery, 1);
+    let cached = partnerListCache.get(key);
+    if (!cached) {
+        cached = _hydrateSessionCache(key);
+        if (cached) partnerListCache.set(key, cached);
+    }
     return cached;
+}
+
+function _writeListCache(posts, hasMore, pagesLoaded = partnerStore.currentPage) {
+    _writeListCacheFor(
+        partnerStore.currentCategory,
+        partnerStore.searchQuery,
+        posts,
+        hasMore,
+        pagesLoaded,
+    );
+}
+
+function _readListCache() {
+    return _getCategoryCache(partnerStore.currentCategory, partnerStore.searchQuery);
+}
+
+function _filterPostsByCategory(posts, category) {
+    if (category === 'all') return posts;
+    return posts.filter(p => p.tags.includes(category));
+}
+
+function _resolveCategoryPosts(category, searchQuery) {
+    const direct = _getCategoryCache(category, searchQuery);
+    if (direct?.posts) {
+        return {
+            posts: direct.posts,
+            hasMore: direct.hasMore,
+            pagesLoaded: direct.pagesLoaded || 1,
+            stale: !_isCacheFresh(direct),
+        };
+    }
+
+    if (category !== 'all' && !searchQuery) {
+        const allCached = _getCategoryCache('all', '');
+        if (allCached?.fullyLoaded && allCached.posts?.length) {
+            const filtered = _filterPostsByCategory(allCached.posts, category);
+            _writeListCacheFor(category, '', filtered, false, allCached.pagesLoaded || 1);
+            return {
+                posts: filtered,
+                hasMore: false,
+                pagesLoaded: allCached.pagesLoaded || 1,
+                stale: !_isCacheFresh(allCached),
+            };
+        }
+    }
+    return null;
+}
+
+function _applyCachedCategoryView(category, searchQuery) {
+    const resolved = _resolveCategoryPosts(category, searchQuery);
+    if (!resolved) return false;
+
+    partnerStore.allPartnersData = resolved.posts;
+    partnerStore.partnersData = resolved.posts;
+    partnerStore.hasMore = resolved.hasMore;
+    partnerStore.currentPage = resolved.pagesLoaded;
+    renderWaterfall();
+    refreshPreviewMarkers();
+    if (resolved.stale) {
+        loadPostsByPage(1, false, { background: true });
+    }
+    return true;
 }
 
 export function showPartnerSkeleton(count = 6) {
@@ -47,11 +141,7 @@ export function prefetchPartnerList() {
         try {
             const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'hot' });
             const posts = (result.items || []).map(mapPost);
-            partnerListCache.set(partnerListCacheKey('all', '', 1), {
-                at: Date.now(),
-                posts,
-                hasMore: posts.length === PAGE_SIZE,
-            });
+            _writeListCacheFor('all', '', posts, posts.length === PAGE_SIZE, 1);
         } catch (e) {
             partnerStore._prefetchPromise = null;
         }
@@ -64,14 +154,16 @@ export async function loadPostsByPage(page, append = false, { background = false
     if (partnerStore.isLoading && !background) return [];
 
     if (!append && page === 1 && !background) {
-        const cached = _readListCache(page);
-        if (cached?.posts?.length) {
+        const cached = _readListCache();
+        if (cached?.posts) {
             partnerStore.allPartnersData = cached.posts;
             partnerStore.partnersData = cached.posts;
             partnerStore.hasMore = cached.hasMore;
-            partnerStore.currentPage = 1;
+            partnerStore.currentPage = cached.pagesLoaded || 1;
             renderWaterfall();
-            loadPostsByPage(1, false, { background: true });
+            if (!_isCacheFresh(cached)) {
+                loadPostsByPage(1, false, { background: true });
+            }
             return cached.posts;
         }
         showPartnerSkeleton();
@@ -105,6 +197,7 @@ export async function loadPostsByPage(page, append = false, { background = false
             partnerStore.allPartnersData.push(...newPosts);
             partnerStore.partnersData = partnerStore.allPartnersData;
             appendWaterfallCards(newPosts);
+            _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, page);
         } else {
             const prevIds = background
                 ? partnerStore.allPartnersData.map(p => p.id).join(',')
@@ -114,7 +207,7 @@ export async function loadPostsByPage(page, append = false, { background = false
             if (!background || prevIds !== newPosts.map(p => p.id).join(',')) {
                 renderWaterfall();
             }
-            _writeListCache(1, newPosts, partnerStore.hasMore);
+            _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, page);
         }
         return newPosts;
     } catch (err) {
@@ -308,11 +401,23 @@ function _applyCategoryFilter() {
     partnerStore.partnersData = partnerStore.allPartnersData;
 }
 
-/** 切换分类时重置分页并重新加载 */
+/** 切换分类时优先读本地缓存，未命中再请求网络 */
 export async function switchCategory(category) {
     if (partnerStore.currentCategory === category) return;
+
+    if (partnerStore.allPartnersData.length) {
+        _writeListCache(
+            partnerStore.allPartnersData,
+            partnerStore.hasMore,
+            partnerStore.currentPage,
+        );
+    }
+
     partnerStore.currentCategory = category;
     partnerStore.currentPage = 1;
+
+    if (_applyCachedCategoryView(category, partnerStore.searchQuery)) return;
+
     partnerStore.hasMore = true;
     partnerStore.allPartnersData = [];
     partnerStore.partnersData = [];
@@ -324,12 +429,24 @@ export async function switchCategory(category) {
     refreshPreviewMarkers();
 }
 
-/** 关键词搜索：重置分页并重新加载 */
+/** 关键词搜索：优先读本地缓存，未命中再请求网络 */
 export async function switchSearch(query) {
     const next = (query || '').trim();
     if (partnerStore.searchQuery === next) return;
+
+    if (partnerStore.allPartnersData.length) {
+        _writeListCache(
+            partnerStore.allPartnersData,
+            partnerStore.hasMore,
+            partnerStore.currentPage,
+        );
+    }
+
     partnerStore.searchQuery = next;
     partnerStore.currentPage = 1;
+
+    if (_applyCachedCategoryView(partnerStore.currentCategory, next)) return;
+
     partnerStore.hasMore = true;
     partnerStore.allPartnersData = [];
     partnerStore.partnersData = [];
@@ -377,6 +494,7 @@ export async function handleParticipate(postId) {
         }
         const post = partnerStore.allPartnersData.find(p => p.id === postId);
         _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 2);
+        _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, partnerStore.currentPage);
         // 后台静默刷新当前页面数据（不重置分页，仅更新缓存）
         silentRefreshCurrentPage();
     } catch (err) {
@@ -451,6 +569,7 @@ async function handleToggleLike(postId, clickedBtn = null) {
         post.isLiked = Boolean(result?.liked);
         post.likeCount = Number(result?.like_count ?? post.likeCount ?? 0);
         _syncLikeButton(btn, post.isLiked, post.likeCount);
+        _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, partnerStore.currentPage);
     } catch (err) {
         post.isLiked = prevLiked;
         post.likeCount = prevCount;
@@ -484,6 +603,7 @@ async function handleToggleFavorite(postId, clickedBtn = null) {
         post.isFavorited = Boolean(result?.favorited);
         post.favoriteCount = Number(result?.favorite_count ?? post.favoriteCount ?? 0);
         _syncFavoriteButton(btn, post.isFavorited, post.favoriteCount);
+        _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, partnerStore.currentPage);
     } catch (err) {
         post.isFavorited = prevFavorited;
         post.favoriteCount = prevCount;
@@ -513,19 +633,13 @@ export async function silentRefreshCurrentPage() {
         // 替换当前页在缓存中的部分（简单做法：整体重新拉取并重置全部，但保留已加载的页数？为了简单，重置整个缓存为第一页）
         // 更严谨：只更新当前页对应的条目，但为了保持简单且不错位，这里重置缓存并重新加载第一页，同时重置滚动位置。
         // 注意：这会丢失之前已加载的后续页面，但保证了数据一致性，体验尚可。
-        if (partnerStore.currentPage === 1) {
-            partnerStore.allPartnersData = newPosts;
-            partnerStore.partnersData = partnerStore.allPartnersData;
-            renderWaterfall();
-            refreshPreviewMarkers();
-        } else {
-            // 如果不是第一页，重置到第一页以避免数据错乱
-            partnerStore.currentPage = 1;
-            partnerStore.allPartnersData = newPosts;
-            partnerStore.partnersData = partnerStore.allPartnersData;
-            renderWaterfall();
-            refreshPreviewMarkers();
-        }
+        partnerStore.currentPage = 1;
+        partnerStore.allPartnersData = newPosts;
+        partnerStore.partnersData = partnerStore.allPartnersData;
+        partnerStore.hasMore = newPosts.length === PAGE_SIZE;
+        _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, 1);
+        renderWaterfall();
+        refreshPreviewMarkers();
     } catch (err) {
         console.warn('静默刷新失败', err);
     } finally {

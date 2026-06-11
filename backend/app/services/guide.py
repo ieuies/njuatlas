@@ -1,6 +1,7 @@
 """吃喝玩乐 guide 页：共享配置、POI 转换、Place  enrichment 与排序。"""
 
 import random
+import time
 
 from sqlalchemy import func
 
@@ -73,16 +74,22 @@ def fetch_guide_category(campus, cat, cfg=None):
     city = guide_search_city(campus)
     pois = []
     for page in range(1, cfg["max_pages"] + 1):
-        result = search_places(
-            cfg["keyword"],
-            city=city,
-            location=location,
-            page=page,
-            page_size=GUIDE_PAGE_SIZE,
-            radius=GUIDE_SEARCH_RADIUS,
-            types=cfg["types"],
-            sortrule=GUIDE_SORT_RULE,
-        )
+        result = None
+        for attempt in range(3):
+            result = search_places(
+                cfg["keyword"],
+                city=city,
+                location=location,
+                page=page,
+                page_size=GUIDE_PAGE_SIZE,
+                radius=GUIDE_SEARCH_RADIUS,
+                types=cfg["types"],
+                sortrule=GUIDE_SORT_RULE,
+            )
+            if result.get("status") == "1":
+                break
+            if attempt < 2:
+                time.sleep(0.25 * (attempt + 1))
         if result.get("status") != "1":
             break
         batch = result.get("pois") or []

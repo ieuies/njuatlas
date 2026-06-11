@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.errors import error_response
 from app.rate_limit import limiter
@@ -153,23 +153,55 @@ def guide_bundle():
         campus = "鼓楼"
         campuses = [campus]
 
+    app = current_app._get_current_object()
+
+    def _fetch_in_app_context(campus_name, category, category_cfg):
+        with app.app_context():
+            return fetch_guide_category(campus_name, category, category_cfg)
+
     raw_by_cat = {cat: [] for cat in GUIDE_CATEGORY_CONFIG}
-    max_workers = min(24, len(campuses) * len(GUIDE_CATEGORY_CONFIG))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [
-            pool.submit(fetch_guide_category, c, cat, cfg)
-            for c in campuses
-            for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
-        ]
-        for future in as_completed(futures):
-            items = future.result()
-            if items:
-                raw_by_cat[items[0]["type"]].extend(items)
+    failed_jobs = []
+    per_campus_workers = min(2, len(GUIDE_CATEGORY_CONFIG))
+
+    for campus_name in campuses:
+        with ThreadPoolExecutor(max_workers=per_campus_workers) as pool:
+            futures = {
+                pool.submit(_fetch_in_app_context, campus_name, cat, cfg): (campus_name, cat)
+                for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
+            }
+            for future in as_completed(futures):
+                campus_name, category = futures[future]
+                try:
+                    items = future.result()
+                except Exception:
+                    failed_jobs.append((campus_name, category))
+                    continue
+                if items:
+                    raw_by_cat[category].extend(items)
+                else:
+                    failed_jobs.append((campus_name, category))
+
+    for campus_name, category in failed_jobs:
+        try:
+            items = _fetch_in_app_context(campus_name, category, GUIDE_CATEGORY_CONFIG[category])
+        except Exception:
+            items = []
+        if items:
+            raw_by_cat[category].extend(items)
 
     categories = {
         cat: finalize_guide_items(raw_by_cat[cat], random_order=random_order)
         for cat in GUIDE_CATEGORY_CONFIG
     }
+
+    # #region agent log
+    import json, time as _time
+    try:
+        with open(".cursor/debug-7ff40e.log", "a", encoding="utf-8") as _lf:
+            _lf.write(json.dumps({"sessionId": "7ff40e", "location": "places.py:guide_bundle", "message": "bundle response", "data": {"requested_campus": campus, "cat_counts": {k: len(v) for k, v in categories.items()}}, "timestamp": int(_time.time() * 1000), "hypothesisId": "E", "runId": "post-fix"}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+    # #endregion
 
     return jsonify({"campus": campus, "categories": categories})
 

@@ -72,10 +72,26 @@ function _setPrefetchHint(visible) {
     }
 }
 
+function _isCategoryReady(cache, cat) {
+    if (cache.cats[cat] !== undefined) return true;
+    return Boolean(cache._attempted?.[cat]);
+}
+
+function _markCategoryAttempted(cache, cat) {
+    cache._attempted = cache._attempted || {};
+    cache._attempted[cat] = true;
+}
+
+function _resetCategoryLoadState(cache, cat) {
+    delete cache.cats[cat];
+    if (cache._attempted) delete cache._attempted[cat];
+    if (cache._inflight) delete cache._inflight[cat];
+}
+
 function _isPrefetchComplete(cacheKey) {
     const cache = _guideCache[cacheKey];
     if (!cache) return true;
-    return _categoryNames().every(cat => cache.cats[cat] !== undefined);
+    return _categoryNames().every(cat => _isCategoryReady(cache, cat));
 }
 
 function _ensureCache(cacheKey) {
@@ -140,7 +156,9 @@ function _getDisplayItems(cacheKey, cat) {
 
     if (cat !== 'all') {
         const items = cache.cats[cat];
-        return items !== undefined ? _sortGuideItems(items) : null;
+        if (items !== undefined) return _sortGuideItems(items);
+        if (cache._attempted?.[cat]) return [];
+        return null;
     }
 
     const merged = [];
@@ -236,13 +254,21 @@ async function _loadCampusBundle(cacheKey, gen) {
             if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`);
             if (cache.gen !== gen) return;
             for (const cat of _categoryNames()) {
-                if (cache.cats[cat] !== undefined) continue;
-                cache.cats[cat] = Array.isArray(data.categories?.[cat]) ? data.categories[cat] : [];
+                if (_isCategoryReady(cache, cat)) continue;
+                const batch = data.categories?.[cat];
+                if (Array.isArray(batch) && batch.length > 0) {
+                    cache.cats[cat] = batch;
+                } else {
+                    _markCategoryAttempted(cache, cat);
+                }
             }
+            // #region agent log
+            fetch('http://127.0.0.1:7674/ingest/a9c8b029-6f57-4620-b9c8-40b66edae200',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7ff40e'},body:JSON.stringify({sessionId:'7ff40e',location:'guide.js:_loadCampusBundle:ok',message:'bundle loaded',data:{cacheKey,bundleCampus,catCounts:Object.fromEntries(_categoryNames().map(c=>[c,(cache.cats[c]||[]).length])),attempted:cache._attempted||{}},timestamp:Date.now(),hypothesisId:'H',runId:'suzhou-fix'})}).catch(()=>{});
+            // #endregion
         } catch (e) {
             console.warn(`guide-bundle（${bundleCampus}）失败，回退分分类请求:`, e.message);
             const campuses = cacheKey === 'all' ? ALL_CAMPUSES : [cacheKey];
-            const todo = _categoryNames().filter(cat => cache.cats[cat] === undefined);
+            const todo = _categoryNames().filter(cat => !_isCategoryReady(cache, cat));
             for (const cat of todo) {
                 const merged = [];
                 for (const campus of campuses) {
@@ -253,7 +279,11 @@ async function _loadCampusBundle(cacheKey, gen) {
                     }
                 }
                 if (cache.gen === gen) {
-                    cache.cats[cat] = _sortGuideItems(merged);
+                    if (merged.length > 0) {
+                        cache.cats[cat] = _sortGuideItems(merged);
+                    } else {
+                        _markCategoryAttempted(cache, cat);
+                    }
                 }
             }
         } finally {
@@ -269,7 +299,7 @@ async function _loadCampusBundle(cacheKey, gen) {
 
 async function _loadCategory(cacheKey, cat, gen) {
     const cache = _ensureCache(cacheKey);
-    if (cache.cats[cat] !== undefined) return cache.cats[cat];
+    if (_isCategoryReady(cache, cat)) return cache.cats[cat] || [];
     if (cache.gen !== gen) return [];
 
     cache._inflight = cache._inflight || {};
@@ -282,11 +312,17 @@ async function _loadCategory(cacheKey, cat, gen) {
                 return cache.cats[cat] || [];
             }
             const items = await _fetchCategoryItems(cacheKey, cat);
-            if (cache.gen === gen) cache.cats[cat] = items;
+            if (cache.gen === gen) {
+                if (items.length > 0) {
+                    cache.cats[cat] = items;
+                } else {
+                    _markCategoryAttempted(cache, cat);
+                }
+            }
             return items;
         } catch (e) {
             console.warn(`高德搜索 ${cat}（${cacheKey}）失败:`, e.message);
-            if (cache.gen === gen) cache.cats[cat] = [];
+            if (cache.gen === gen) _markCategoryAttempted(cache, cat);
             return [];
         } finally {
             delete cache._inflight[cat];
@@ -387,6 +423,7 @@ async function _applyGuideFilters(force = false) {
         const c = _ensureCache(cacheKey);
         c.gen += 1;
         c.cats = {};
+        c._attempted = {};
         c._inflight = {};
         c._bundleInflight = null;
         c.prefetching = false;
@@ -394,9 +431,9 @@ async function _applyGuideFilters(force = false) {
         _setPrefetchHint(false);
     }
 
-    const cached = _getDisplayItems(cacheKey, currentGuideCat);
-    if (!force && cached !== null) {
-        renderGuideGrid(cached, { cacheKey, cat: currentGuideCat });
+    const resolved = _getDisplayItems(cacheKey, currentGuideCat);
+    if (!force && resolved !== null && !(currentGuideCat !== 'all' && resolved.length === 0)) {
+        renderGuideGrid(resolved, { cacheKey, cat: currentGuideCat });
         _kickPrefetch(cacheKey);
         return;
     }
@@ -404,10 +441,10 @@ async function _applyGuideFilters(force = false) {
     const cache = _ensureCache(cacheKey);
     const gen = cache.gen;
     const needed = (currentGuideCat === 'all' ? _getPriorityCategories() : [currentGuideCat])
-        .filter(cat => cache.cats[cat] === undefined);
+        .filter(cat => !_isCategoryReady(cache, cat));
 
     if (needed.length > 0) {
-        if (container && cached === null) {
+        if (container && resolved === null) {
             container.innerHTML = '<div class="guide-loading">加载中...</div>';
         }
         await Promise.all(needed.map(cat => _loadCategory(cacheKey, cat, gen)));
@@ -457,6 +494,7 @@ function filterGuideItems(cat) {
     currentGuideCat = cat;
     _randomOrder = false;
     _lastRenderKey = '';
+    _resetCategoryLoadState(_ensureCache(_getCacheKey()), cat);
     document.querySelectorAll('#guideFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === cat);
     });
@@ -470,6 +508,10 @@ function _filterGuideCampus(campus) {
     document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
         chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === campus);
     });
+    const cache = _ensureCache(_getCacheKey());
+    for (const cat of _categoryNames()) {
+        if (!cache.cats[cat]?.length) _resetCategoryLoadState(cache, cat);
+    }
     _applyGuideFilters();
 }
 

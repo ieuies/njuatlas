@@ -16,7 +16,7 @@ _CACHE_LOCK = Lock()
 
 # 连接池，跳过系统代理（AMap 直连比走代理快 ~800ms）
 urllib3.disable_warnings()
-_POOL = urllib3.PoolManager()
+_POOL = urllib3.PoolManager(num_pools=4, maxsize=8)
 
 
 def _normalize_cache_value(value):
