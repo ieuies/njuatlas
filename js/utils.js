@@ -206,6 +206,15 @@ export function avatarStorageKey(user) {
     return `user_avatar_${user.id}`;
 }
 
+export function avatarVersionKey(userId) {
+    return userId != null ? `user_avatar_ver_${userId}` : null;
+}
+
+export function bumpAvatarVersion(userId) {
+    const key = avatarVersionKey(userId);
+    if (key) localStorage.setItem(key, String(Date.now()));
+}
+
 export function getAvatarInitial(user) {
     const name = user?.username || (user?.email ? user.email.split('@')[0] : '同学');
     const initial = (name.charAt(0) || '?').toUpperCase();
@@ -234,8 +243,24 @@ if (typeof window !== 'undefined' && !window.__njuAtlasAvatarErr) {
 
 /** 返回头像描述对象：{ type:'image', src } 或 { type:'initial', initial, bg } */
 export function getUserAvatar(user) {
+    if (isSelfUser(user)) {
+        const key = avatarStorageKey(user);
+        const saved = key ? localStorage.getItem(key) : null;
+        if (saved?.startsWith('data:')) return { type: 'image', src: saved };
+    }
+
     const serverUrl = resolveAvatarUrl(user?.avatar_url);
-    if (serverUrl) return { type: 'image', src: serverUrl };
+    if (serverUrl) {
+        let src = serverUrl;
+        const canonical = /\/users\/\d+\/avatar/.test(user?.avatar_url || serverUrl);
+        if (canonical) {
+            const verKey = avatarVersionKey(user?.id);
+            const ver = verKey ? localStorage.getItem(verKey) : null;
+            if (ver) src = `${serverUrl}${serverUrl.includes('?') ? '&' : '?'}v=${ver}`;
+        }
+        return { type: 'image', src };
+    }
+
     if (isSelfUser(user)) {
         const key = avatarStorageKey(user);
         const saved = key ? localStorage.getItem(key) : null;

@@ -4,7 +4,7 @@
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
-import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser, resolveApiAssetUrl } from '../utils.js';
+import { showToast, escapeHtml, formatDate, avatarStorageKey, resolveApiAssetUrl, getAvatarInitial, bumpAvatarVersion } from '../utils.js';
 import { t } from '../i18n.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
 
@@ -291,6 +291,128 @@ function loadProfileCover(targetUser = null) {
     setProfileCover('', fallback, opts);
 }
 
+// ========== 头像（与封面相同的加载 / 上传 / 回退逻辑） ==========
+function _localAvatarForUser(userId) {
+    const me = getUser();
+    if (!me || userId == null || String(me.id) !== String(userId)) return null;
+    return _readLocalAvatarDataUrl(avatarStorageKey(me));
+}
+
+function _readLocalAvatarDataUrl(storageKey) {
+    if (!storageKey) return null;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) {
+        localStorage.removeItem(storageKey);
+        return null;
+    }
+    return raw.startsWith('data:') ? raw : null;
+}
+
+function _legacyAvatarCandidates(userId) {
+    if (userId == null) return [];
+    const id = Number(userId);
+    if (!Number.isFinite(id) || id <= 0) return [];
+    return ['jpg', 'jpeg', 'png', 'webp'].map(
+        (ext) => resolveApiAssetUrl(`/api/social/avatars/user_${id}.${ext}`),
+    );
+}
+
+function resolveAvatarDisplayUrl(raw, { cacheBust = false } = {}) {
+    if (!raw || typeof raw !== 'string') return '';
+    if (raw.startsWith('data:')) return raw;
+    return resolveApiAssetUrl(raw, { cacheBust });
+}
+
+function _buildAvatarCandidates(avatarUrl, userId, { cacheBust = false } = {}) {
+    const candidates = [];
+    const add = (url) => {
+        if (!url) return;
+        if (!candidates.includes(url)) candidates.push(url);
+    };
+
+    const local = _localAvatarForUser(userId);
+    if (local?.startsWith('data:')) add(local);
+
+    const primary = resolveAvatarDisplayUrl(avatarUrl, {
+        cacheBust: cacheBust || Boolean(avatarUrl && String(avatarUrl).includes('/users/')),
+    });
+    add(primary);
+
+    for (const legacy of _legacyAvatarCandidates(userId)) add(legacy);
+
+    if (local && !local.startsWith('data:')) add(local);
+
+    return candidates;
+}
+
+function _applyAvatarToElement(el, candidates, user, fontSize = '2rem') {
+    if (!el) return;
+    const init = getAvatarInitial(user);
+
+    const showInitial = () => {
+        el.style.position = '';
+        el.style.background = init.bg;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;background:${init.bg};border-radius:inherit;">${escapeHtml(init.initial)}</span>`;
+    };
+
+    if (!candidates.length) {
+        showInitial();
+        return;
+    }
+
+    let idx = 0;
+    const tryLoad = () => {
+        const src = candidates[idx];
+        el.style.position = 'relative';
+        el.style.background = init.bg;
+        el.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:${fontSize};font-weight:800;color:#fff;border-radius:inherit;">${escapeHtml(init.initial)}</span>`;
+        const img = document.createElement('img');
+        img.alt = '头像';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;';
+        if (user?.id != null) img.dataset.userId = String(user.id);
+        img.onerror = () => {
+            idx += 1;
+            if (idx < candidates.length) tryLoad();
+            else showInitial();
+        };
+        img.src = src;
+        el.appendChild(img);
+    };
+    tryLoad();
+}
+
+function setProfileAvatar(avatarUrl, { userId = null, username = '', cacheBust = false } = {}) {
+    const uid = userId ?? getUser()?.id;
+    const user = { id: uid, username: username || getUser()?.username || '' };
+    const candidates = _buildAvatarCandidates(avatarUrl, uid, {
+        cacheBust: cacheBust || Boolean(avatarUrl && String(avatarUrl).includes('/users/')),
+    });
+    _applyAvatarToElement(document.getElementById('profileAvatarLarge'), candidates, user, '2rem');
+    _applyAvatarToElement(document.getElementById('editAvatarPreview'), candidates, user, '2rem');
+}
+
+function loadProfileAvatar(targetUser = null) {
+    const user = targetUser || getUser();
+    if (!user) return;
+    const opts = { userId: user.id, username: user.username || '' };
+    const isSelf = !targetUser || (getUser() && String(getUser().id) === String(user.id));
+    const storageKey = isSelf ? avatarStorageKey(getUser()) : null;
+    const localAvatar = _readLocalAvatarDataUrl(storageKey);
+
+    if (user.avatar_url) {
+        setProfileAvatar(user.avatar_url, opts);
+        return;
+    }
+
+    if (localAvatar?.startsWith('data:')) {
+        setProfileAvatar(localAvatar, opts);
+        return;
+    }
+
+    setProfileAvatar('', opts);
+}
+
 async function saveCoverFromCropped(canvas, originalDataUrl) {
     const user = getUser();
     if (!user) throw new Error('请先登录');
@@ -319,29 +441,34 @@ async function saveCoverFromCropped(canvas, originalDataUrl) {
 }
 
 async function saveAvatarFromCropped(canvas, originalDataUrl) {
-    const storageKey = avatarStorageKey(getUser());
-    if (!storageKey) throw new Error('请先登录');
+    const user = getUser();
+    if (!user) throw new Error('请先登录');
+    const storageKey = avatarStorageKey(user);
     const base64 = canvas.toDataURL('image/jpeg', 0.88);
     const origKey = getAvatarOriginalKey();
     if (origKey && originalDataUrl) {
         safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1280, 0.88));
     }
+    if (storageKey) localStorage.setItem(storageKey, base64);
+    setProfileAvatar(base64, { userId: user.id, username: user.username || '' });
+    if (typeof window.updateNavBar === 'function') window.updateNavBar();
     try {
         const res = await uploadAvatar(base64);
         if (res?.avatar_url) {
             updateUserFromLogin({ ...getUser(), avatar_url: res.avatar_url });
-            localStorage.setItem(storageKey, base64);
-            showToast(t('profile.avatarSynced'));
-        } else {
-            throw new Error('服务器未返回头像地址');
+            bumpAvatarVersion(user.id);
+            setProfileAvatar(res.avatar_url, { userId: user.id, username: user.username || '', cacheBust: true });
+            if (typeof window.updateNavBar === 'function') window.updateNavBar();
+            return;
         }
+        throw new Error('服务器未返回头像地址');
     } catch (e) {
         console.warn('头像上传服务端失败，已保存本地:', e?.message);
-        localStorage.setItem(storageKey, base64);
+        updateUserFromLogin({ ...getUser(), avatar_url: '' });
         showToast(t('profile.avatarLocalOnly'));
+        setProfileAvatar(base64, { userId: user.id, username: user.username || '' });
+        if (typeof window.updateNavBar === 'function') window.updateNavBar();
     }
-    renderAvatar(getUser());
-    if (typeof window.updateNavBar === 'function') window.updateNavBar();
 }
 
 const CROP_SAVERS = {
@@ -589,7 +716,7 @@ async function renderProfileHeader() {
             const profile = _viewingProfileCache || await getUserProfile(_viewingUserId);
             _viewingProfileCache = profile;
             document.getElementById('profileUsername').innerText = profile.username || '用户';
-            renderAvatarInto(document.getElementById('profileAvatarLarge'), profile, '2rem');
+            setProfileAvatar(profile.avatar_url || '', { userId: profile.id, username: profile.username || '' });
             loadProfileCover(profile);
             _applyProfileBio(profile);
             document.getElementById('postCount').innerText = profile.post_count ?? 0;
@@ -638,15 +765,14 @@ async function renderProfileHeader() {
                 cover_url: profile.cover_url || user.cover_url || '',
             };
             updateUserFromLogin(nextUser);
-            renderAvatar(nextUser);
+            loadProfileAvatar(nextUser);
             loadProfileCover(nextUser);
         }
     } catch (e) { /* 静默 */ }
 }
 
 function renderAvatar(user) {
-    renderAvatarInto(document.getElementById('profileAvatarLarge'), user, '2rem');
-    renderAvatarInto(document.getElementById('editAvatarPreview'), user, '2rem');
+    loadProfileAvatar(user);
 }
 
 // ========== 图片查看灯箱（头像原图 / 背景大图） ==========
@@ -668,7 +794,7 @@ function openImageViewer(src, { circle = false } = {}) {
     document.body.appendChild(overlay);
 }
 
-// ========== 头像上传与裁剪（本地存储，仅本人可见） ==========
+// ========== 头像上传与裁剪（与封面相同：先本地预览，再同步服务器） ==========
 // 上传入口位于「编辑资料」弹窗内的头像预览；个人页大头像点击仅用于查看原图。
 function initAvatarEditor() {
     const fileInput = document.getElementById('avatarFileInput');
@@ -1206,7 +1332,10 @@ export async function refreshProfile() {
         _viewingProfileCache = null;
     }
     await renderProfileHeader();
-    if (isViewingSelf()) loadProfileCover();
+    if (isViewingSelf()) {
+        loadProfileCover();
+        loadProfileAvatar();
+    }
     if (!isViewingSelf()) {
         currentProfileTab = 'posts';
     } else if (currentProfileTab === 'friends') {
@@ -1231,6 +1360,7 @@ export function initProfilePage() {
     initCoverViewer();
     initAvatarEditor();
     loadProfileCover();
+    loadProfileAvatar();
     renderProfileHeader();
 
     const verifyBtn = document.getElementById('sendVerifyEmailBtn');
