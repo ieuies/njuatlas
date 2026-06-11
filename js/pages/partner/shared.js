@@ -10,7 +10,9 @@ export const LIST_RENDER_BATCH = 6;
 export const partnerListCache = new Map();
 
 export function partnerListCacheKey(category, searchQuery, page) {
-    return `${category}|${searchQuery}|${page}`;
+    const user = getUser();
+    const userKey = user?.id ?? user?.user_id ?? 'anon';
+    return `${userKey}|${category}|${searchQuery}|${page}`;
 }
 
 /** 跨模块共享可变状态（import 的 let 绑定在其它模块里只读，须用对象属性） */

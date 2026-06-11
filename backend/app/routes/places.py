@@ -5,6 +5,13 @@ from flask import Blueprint, jsonify, request
 from app.errors import error_response
 from app.rate_limit import limiter
 from app.services.amap import geocode, regeocode, search_places
+from app.services.guide import (
+    GUIDE_CAMPUS_COORDS,
+    GUIDE_CATEGORY_CONFIG,
+    fetch_guide_category,
+    finalize_guide_items,
+    guide_config_payload,
+)
 from app.validators import clean_string, int_range, validate_location
 
 
@@ -125,83 +132,44 @@ CATEGORY_TREE = [
 ]
 
 
-GUIDE_CAMPUS_COORDS = {
-    "鼓楼": "118.780,32.058",
-    "仙林": "118.954,32.114",
-    "浦口": "118.652,32.157",
-    "苏州": "120.39,31.36",
-}
-GUIDE_CATEGORY_CONFIG = {
-    "美食": {"types": "050000", "keyword": "", "max_pages": 2},
-    "咖啡饮品": {"types": "050500|050600|050700|050900", "keyword": "", "max_pages": 2},
-    "休闲娱乐": {"types": "080300|080600", "keyword": "", "max_pages": 2},
-    "运动健身": {"types": "080100", "keyword": "", "max_pages": 2},
-    "购物商圈": {"types": "060100|061000", "keyword": "", "max_pages": 2},
-    "景点公园": {"types": "110000|140100|140200|140300|140400|140500", "keyword": "", "max_pages": 3},
-}
-
-
-def _guide_search_city(campus):
-    return "苏州" if campus == "苏州" else "南京"
-
-
-def _fetch_guide_category(campus, cat, cfg):
-    location = GUIDE_CAMPUS_COORDS.get(campus, GUIDE_CAMPUS_COORDS["鼓楼"])
-    city = _guide_search_city(campus)
-    pois = []
-    for page in range(1, cfg["max_pages"] + 1):
-        result = search_places(
-            cfg["keyword"],
-            city=city,
-            location=location,
-            page=page,
-            page_size=10,
-            radius=20000,
-            types=cfg["types"],
-            sortrule="weight",
-        )
-        if result.get("status") != "1":
-            break
-        batch = result.get("pois") or []
-        if not batch:
-            break
-        pois.extend(batch)
-    items = []
-    for poi in pois:
-        items.append({
-            "name": poi.get("name"),
-            "desc": poi.get("address") or "",
-            "image": (poi.get("photos") or [{}])[0].get("url", "") if poi.get("photos") else "",
-            "type": cat,
-            "campus": campus,
-            "rating": (poi.get("biz_ext") or {}).get("rating", ""),
-            "price": (
-                f"¥{(poi.get('biz_ext') or {}).get('cost')}/人"
-                if (poi.get("biz_ext") or {}).get("cost")
-                else ""
-            ),
-            "address": poi.get("address") or "",
-        })
-    return cat, items
+@places_bp.route("/guide-config", methods=["GET"])
+def guide_config():
+    """返回吃喝玩乐检索配置，供前端与 guide-bundle 保持一致。"""
+    return jsonify(guide_config_payload())
 
 
 @places_bp.route("/guide-bundle", methods=["GET"])
 @limiter.limit("30 per minute")
 def guide_bundle():
-    """一次性拉取吃喝玩乐六类 POI（服务端并行 + AMap 缓存）。"""
+    """一次性拉取吃喝玩乐六类 POI（服务端并行 + AMap 缓存 + Place enrichment）。"""
     campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
-    if campus not in GUIDE_CAMPUS_COORDS:
-        campus = "鼓楼"
+    random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
 
-    categories = {}
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = {
-            pool.submit(_fetch_guide_category, campus, cat, cfg): cat
+    if campus == "all":
+        campuses = list(GUIDE_CAMPUS_COORDS.keys())
+    elif campus in GUIDE_CAMPUS_COORDS:
+        campuses = [campus]
+    else:
+        campus = "鼓楼"
+        campuses = [campus]
+
+    raw_by_cat = {cat: [] for cat in GUIDE_CATEGORY_CONFIG}
+    max_workers = min(24, len(campuses) * len(GUIDE_CATEGORY_CONFIG))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [
+            pool.submit(fetch_guide_category, c, cat, cfg)
+            for c in campuses
             for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
-        }
+        ]
         for future in as_completed(futures):
-            cat, items = future.result()
-            categories[cat] = items
+            items = future.result()
+            if items:
+                raw_by_cat[items[0]["type"]].extend(items)
+
+    categories = {
+        cat: finalize_guide_items(raw_by_cat[cat], random_order=random_order)
+        for cat in GUIDE_CATEGORY_CONFIG
+    }
 
     return jsonify({"campus": campus, "categories": categories})
 

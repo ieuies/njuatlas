@@ -198,7 +198,8 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (page_size) params.set('page_size', page_size);
     if (q) params.set('q', q);
     const qs = params.toString();
-    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, false);
+    // 已登录时附带 JWT，后端才会返回 is_liked / participation_status 等个人状态
+    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken);
 }
 export async function getPost(postId) {
     return request(`/posts/${postId}`, 'GET', null, true);

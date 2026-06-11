@@ -2,47 +2,47 @@ import { API_BASE } from '../config.js';
 import { getUser } from '../auth.js';
 import { showToast } from '../utils.js';
 
-// ── 校区坐标（WGS-84） ──
-const CAMPUS_COORDS = {
-    '鼓楼': [118.780, 32.058],
-    '仙林': [118.954, 32.114],
-    '浦口': [118.652, 32.157],
-    '苏州': [120.39, 31.36],
-};
 const DEFAULT_CAMPUS = '鼓楼';
+const ALL_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州'];
 
-// ── 分类配置
-const CATEGORY_CONFIG = {
-    '美食':     { types: '050000',                          keyword: '' },
-    '咖啡饮品': { types: '050500|050600|050700|050900',      keyword: '' },
-    '休闲娱乐': { types: '080300|080600',                    keyword: '' },
-    '运动健身': { types: '080100',                          keyword: '' },
-    '购物商圈': { types: '060100|061000',                    keyword: '' },
-    '景点公园': { types: '110000|140000',                    keyword: '' },
-};
-const SEARCH_RADIUS = 5000;
+/** @type {{ campuses: Record<string, string>, categories: Record<string, object>, search_radius: number, page_size: number, sortrule: string } | null} */
+let _guideConfig = null;
 
 let currentGuideCat = 'all';
 let currentGuideCampus = 'all';
-/** @type {Record<string, { cats: Record<string, object[]>, gen: number, prefetching?: boolean, _inflight?: Record<string, Promise<object[]>> }>} */
+/** @type {Record<string, { cats: Record<string, object[]>, gen: number, prefetching?: boolean, _inflight?: Record<string, Promise<object[]>>, _bundleInflight?: Promise<void> }>} */
 let _guideCache = {};
 let _isRefreshing = false;
-let _randomOrder = false;   // 随机排序标志
-const CATEGORY_NAMES = Object.keys(CATEGORY_CONFIG);
+let _randomOrder = false;
 let _lastRenderKey = '';
 
-// ── 工具 ──
-function _getCampusLocation(campus) {
-    const coords = CAMPUS_COORDS[campus] || CAMPUS_COORDS[DEFAULT_CAMPUS];
-    return `${coords[0]},${coords[1]}`;
+function _categoryNames() {
+    return _guideConfig ? Object.keys(_guideConfig.categories) : [];
 }
 
-function _resolveCampus() {
-    if (currentGuideCampus !== 'all') return currentGuideCampus;
-    const user = getUser();
-    const c = user?.campus || '';
-    if (CAMPUS_COORDS[c]) return c;
-    return DEFAULT_CAMPUS;
+function _getCacheKey() {
+    return currentGuideCampus === 'all' ? 'all' : currentGuideCampus;
+}
+
+function _searchCity(campus) {
+    return campus === '苏州' ? '苏州' : '南京';
+}
+
+async function _loadGuideConfig() {
+    if (_guideConfig) return _guideConfig;
+    const res = await fetch(`${API_BASE}/places/guide-config`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.message || `配置加载失败: ${res.status}`);
+    }
+    _guideConfig = data;
+    return _guideConfig;
+}
+
+function _getCampusLocation(campus) {
+    const coords = _guideConfig?.campuses?.[campus];
+    if (coords) return coords;
+    return _guideConfig?.campuses?.[DEFAULT_CAMPUS] || '118.780,32.058';
 }
 
 function _clearGuideCache() {
@@ -50,9 +50,9 @@ function _clearGuideCache() {
     _lastRenderKey = '';
 }
 
-function _renderKey(campus, cat, items) {
-    const names = (items || []).map(i => `${i.name}:${i.type}`).join('\0');
-    return `${campus}\x1f${cat}\x1f${names}`;
+function _renderKey(cacheKey, cat, items) {
+    const names = (items || []).map(i => `${i.poi_id || i.name}:${i.type}`).join('\0');
+    return `${cacheKey}\x1f${cat}\x1f${names}`;
 }
 
 function _setPrefetchHint(visible) {
@@ -72,189 +72,115 @@ function _setPrefetchHint(visible) {
     }
 }
 
-function _isPrefetchComplete(campus) {
-    const cache = _guideCache[campus];
+function _isPrefetchComplete(cacheKey) {
+    const cache = _guideCache[cacheKey];
     if (!cache) return true;
-    return CATEGORY_NAMES.every(cat => cache.cats[cat] !== undefined);
+    return _categoryNames().every(cat => cache.cats[cat] !== undefined);
 }
 
-function _ensureCampusCache(campus) {
-    if (!_guideCache[campus]) {
-        _guideCache[campus] = { cats: {}, gen: 0 };
+function _ensureCache(cacheKey) {
+    if (!_guideCache[cacheKey]) {
+        _guideCache[cacheKey] = { cats: {}, gen: 0 };
     }
-    return _guideCache[campus];
+    return _guideCache[cacheKey];
 }
 
-function _sortAndDedupe(allItems) {
+function _parseRating(value) {
+    const n = parseFloat(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function _effectiveRating(item) {
+    const amap = _parseRating(item.rating);
+    const platform = _parseRating(item.platform_rating);
+    if (platform && amap) return Math.max(amap, platform);
+    return platform || amap;
+}
+
+function _sortScore(item) {
+    const heat = (item.like_count || 0) * 2 + (item.review_count || 0);
+    return _effectiveRating(item) * 10 + heat;
+}
+
+function _dedupeKey(item) {
+    if (item.poi_id) return `poi:${item.poi_id}`;
+    return `name:${item.name || ''}|addr:${item.address || ''}`;
+}
+
+function _dedupeGuideItems(items) {
     const seen = new Set();
-    const deduped = allItems.filter(item => {
-        if (seen.has(item.name)) return false;
-        seen.add(item.name);
+    return items.filter(item => {
+        const key = _dedupeKey(item);
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
     });
-
-    if (_randomOrder) {
-        for (let i = deduped.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
-        }
-        return deduped;
-    }
-
-    deduped.sort((a, b) => {
-        const ra = parseFloat(a.rating) || 0;
-        const rb = parseFloat(b.rating) || 0;
-        return rb - ra;
-    });
-    return deduped;
 }
 
-function _getDisplayItems(campus, cat) {
-    const cache = _guideCache[campus];
+function _sortGuideItems(items) {
+    const list = _dedupeGuideItems([...items]);
+    if (_randomOrder) {
+        for (let i = list.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [list[i], list[j]] = [list[j], list[i]];
+        }
+        return list;
+    }
+    list.sort((a, b) => {
+        const diff = _sortScore(b) - _sortScore(a);
+        if (diff !== 0) return diff;
+        return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+    });
+    return list;
+}
+
+function _getDisplayItems(cacheKey, cat) {
+    const cache = _guideCache[cacheKey];
     if (!cache) return null;
 
     if (cat !== 'all') {
-        return cache.cats[cat] !== undefined ? cache.cats[cat] : null;
+        const items = cache.cats[cat];
+        return items !== undefined ? _sortGuideItems(items) : null;
     }
 
     const merged = [];
     let anyLoaded = false;
-    for (const name of CATEGORY_NAMES) {
+    for (const name of _categoryNames()) {
         if (cache.cats[name] !== undefined) {
             anyLoaded = true;
             merged.push(...cache.cats[name]);
         }
     }
-    return anyLoaded ? _sortAndDedupe(merged) : null;
+    return anyLoaded ? _sortGuideItems(merged) : null;
 }
 
 function _getPriorityCategories() {
     if (currentGuideCat !== 'all') return [currentGuideCat];
-    // 「全部」先拉美食（1 次请求），首屏更快
     return ['美食'];
 }
 
 function _poisToItems(pois, cat, campus) {
     if (!Array.isArray(pois)) return [];
-    return pois.map(poi => ({
-        name: poi.name,
-        desc: poi.address || '',
-        image: poi.photos?.[0]?.url || '',
-        type: cat,
-        campus,
-        rating: poi.biz_ext?.rating || '',
-        price: poi.biz_ext?.cost ? `¥${poi.biz_ext.cost}/人` : '',
-        address: poi.address || '',
-    }));
+    return pois.map(poi => {
+        const biz = poi.biz_ext || {};
+        const cost = biz.cost;
+        return {
+            poi_id: String(poi.id || '').trim(),
+            name: poi.name || '',
+            desc: poi.address || '',
+            image: poi.photos?.[0]?.url || '',
+            type: cat,
+            campus,
+            rating: biz.rating || '',
+            price: cost ? `¥${cost}/人` : '',
+            address: poi.address || '',
+            location: poi.location || '',
+            like_count: 0,
+            review_count: 0,
+        };
+    });
 }
 
-async function _fetchCategoryItems(campus, cat) {
-    const cfg = CATEGORY_CONFIG[cat];
-    const location = _getCampusLocation(campus);
-    const r = await _searchPlacesQuiet(cfg.keyword, '南京', location, 1, 10, SEARCH_RADIUS, cfg.types, 'weight');
-    if (r.status === '1' && Array.isArray(r.pois)) {
-        return _poisToItems(r.pois, cat, campus);
-    }
-    return [];
-}
-
-async function _loadCampusBundle(campus, gen) {
-    const cache = _ensureCampusCache(campus);
-    if (cache.gen !== gen) return;
-    if (_isPrefetchComplete(campus)) return;
-    if (cache._bundleInflight) return cache._bundleInflight;
-
-    cache._bundleInflight = (async () => {
-        try {
-            const url = `${API_BASE}/places/guide-bundle?campus=${encodeURIComponent(campus)}`;
-            const res = await fetch(url);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`);
-            if (cache.gen !== gen) return;
-            for (const cat of CATEGORY_NAMES) {
-                if (cache.cats[cat] !== undefined) continue;
-                cache.cats[cat] = Array.isArray(data.categories?.[cat]) ? data.categories[cat] : [];
-            }
-        } catch (e) {
-            console.warn(`guide-bundle（${campus}）失败，回退分分类请求:`, e.message);
-            const todo = CATEGORY_NAMES.filter(cat => cache.cats[cat] === undefined);
-            await Promise.all(todo.map(cat => _loadCategory(campus, cat, gen)));
-        } finally {
-            delete cache._bundleInflight;
-            if (_guideCache[campus]?.gen === gen) {
-                _guideCache[campus].prefetching = false;
-            }
-        }
-    })();
-
-    return cache._bundleInflight;
-}
-
-async function _loadCategory(campus, cat, gen) {
-    const cache = _ensureCampusCache(campus);
-    if (cache.cats[cat] !== undefined) return cache.cats[cat];
-    if (cache.gen !== gen) return [];
-
-    cache._inflight = cache._inflight || {};
-    if (cache._inflight[cat]) return cache._inflight[cat];
-
-    cache._inflight[cat] = (async () => {
-        try {
-            const items = await _fetchCategoryItems(campus, cat);
-            if (cache.gen === gen) cache.cats[cat] = items;
-            return items;
-        } catch (e) {
-            console.warn(`高德搜索 ${cat}（${campus}）失败:`, e.message);
-            if (cache.gen === gen) cache.cats[cat] = [];
-            return [];
-        } finally {
-            delete cache._inflight[cat];
-        }
-    })();
-
-    return cache._inflight[cat];
-}
-
-function _maybeRender(campus, gen, { force = false } = {}) {
-    if (_resolveCampus() !== campus) return;
-    const cache = _guideCache[campus];
-    if (!cache || cache.gen !== gen) return;
-
-    const items = _getDisplayItems(campus, currentGuideCat);
-    if (items === null) return;
-
-    const key = _renderKey(campus, currentGuideCat, items);
-    if (!force && key === _lastRenderKey) return;
-
-    renderGuideGrid(items, { campus, cat: currentGuideCat, renderKey: key });
-
-    if (_isPrefetchComplete(campus)) {
-        _setPrefetchHint(false);
-    }
-}
-
-function _kickPrefetch(campus) {
-    const cache = _guideCache[campus];
-    if (!cache || cache.prefetching || cache._bundleInflight) return;
-    if (_isPrefetchComplete(campus)) return;
-
-    const gen = cache.gen;
-    cache.prefetching = true;
-    if (currentGuideCat === 'all' && _resolveCampus() === campus) {
-        _setPrefetchHint(true);
-    }
-    (async () => {
-        await _loadCampusBundle(campus, gen);
-        if (_guideCache[campus]?.gen === gen) {
-            if (currentGuideCat === 'all' && _resolveCampus() === campus) {
-                _maybeRender(campus, gen, { force: true });
-            } else {
-                _setPrefetchHint(false);
-            }
-        }
-    })();
-}
-/** 吃喝玩乐批量拉取专用：失败时不弹全局 toast（避免 6 路并行请求刷屏） */
 async function _searchPlacesQuiet(keyword, city, location, page, pageSize, radius, types, sortrule) {
     let url = `${API_BASE}/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
@@ -270,7 +196,146 @@ async function _searchPlacesQuiet(keyword, city, location, page, pageSize, radiu
     return data;
 }
 
-// ── 渲染 ──
+async function _fetchCategoryItems(campus, cat) {
+    const cfg = _guideConfig.categories[cat];
+    const location = _getCampusLocation(campus);
+    const city = _searchCity(campus);
+    const maxPages = cfg.max_pages || 2;
+    const pois = [];
+    for (let page = 1; page <= maxPages; page++) {
+        const r = await _searchPlacesQuiet(
+            cfg.keyword || '',
+            city,
+            location,
+            page,
+            _guideConfig.page_size,
+            _guideConfig.search_radius,
+            cfg.types,
+            _guideConfig.sortrule,
+        );
+        if (r.status !== '1' || !Array.isArray(r.pois) || r.pois.length === 0) break;
+        pois.push(...r.pois);
+    }
+    return _sortGuideItems(_poisToItems(pois, cat, campus));
+}
+
+async function _loadCampusBundle(cacheKey, gen) {
+    const cache = _ensureCache(cacheKey);
+    if (cache.gen !== gen) return;
+    if (_isPrefetchComplete(cacheKey)) return;
+    if (cache._bundleInflight) return cache._bundleInflight;
+
+    const bundleCampus = cacheKey === 'all' ? 'all' : cacheKey;
+
+    cache._bundleInflight = (async () => {
+        try {
+            let url = `${API_BASE}/places/guide-bundle?campus=${encodeURIComponent(bundleCampus)}`;
+            if (_randomOrder) url += '&shuffle=1';
+            const res = await fetch(url);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`);
+            if (cache.gen !== gen) return;
+            for (const cat of _categoryNames()) {
+                if (cache.cats[cat] !== undefined) continue;
+                cache.cats[cat] = Array.isArray(data.categories?.[cat]) ? data.categories[cat] : [];
+            }
+        } catch (e) {
+            console.warn(`guide-bundle（${bundleCampus}）失败，回退分分类请求:`, e.message);
+            const campuses = cacheKey === 'all' ? ALL_CAMPUSES : [cacheKey];
+            const todo = _categoryNames().filter(cat => cache.cats[cat] === undefined);
+            for (const cat of todo) {
+                const merged = [];
+                for (const campus of campuses) {
+                    try {
+                        merged.push(...await _fetchCategoryItems(campus, cat));
+                    } catch (fetchErr) {
+                        console.warn(`高德搜索 ${cat}（${campus}）失败:`, fetchErr.message);
+                    }
+                }
+                if (cache.gen === gen) {
+                    cache.cats[cat] = _sortGuideItems(merged);
+                }
+            }
+        } finally {
+            delete cache._bundleInflight;
+            if (_guideCache[cacheKey]?.gen === gen) {
+                _guideCache[cacheKey].prefetching = false;
+            }
+        }
+    })();
+
+    return cache._bundleInflight;
+}
+
+async function _loadCategory(cacheKey, cat, gen) {
+    const cache = _ensureCache(cacheKey);
+    if (cache.cats[cat] !== undefined) return cache.cats[cat];
+    if (cache.gen !== gen) return [];
+
+    cache._inflight = cache._inflight || {};
+    if (cache._inflight[cat]) return cache._inflight[cat];
+
+    cache._inflight[cat] = (async () => {
+        try {
+            if (cacheKey === 'all') {
+                await _loadCampusBundle(cacheKey, gen);
+                return cache.cats[cat] || [];
+            }
+            const items = await _fetchCategoryItems(cacheKey, cat);
+            if (cache.gen === gen) cache.cats[cat] = items;
+            return items;
+        } catch (e) {
+            console.warn(`高德搜索 ${cat}（${cacheKey}）失败:`, e.message);
+            if (cache.gen === gen) cache.cats[cat] = [];
+            return [];
+        } finally {
+            delete cache._inflight[cat];
+        }
+    })();
+
+    return cache._inflight[cat];
+}
+
+function _maybeRender(cacheKey, gen, { force = false } = {}) {
+    if (_getCacheKey() !== cacheKey) return;
+    const cache = _guideCache[cacheKey];
+    if (!cache || cache.gen !== gen) return;
+
+    const items = _getDisplayItems(cacheKey, currentGuideCat);
+    if (items === null) return;
+
+    const key = _renderKey(cacheKey, currentGuideCat, items);
+    if (!force && key === _lastRenderKey) return;
+
+    renderGuideGrid(items, { cacheKey, cat: currentGuideCat, renderKey: key });
+
+    if (_isPrefetchComplete(cacheKey)) {
+        _setPrefetchHint(false);
+    }
+}
+
+function _kickPrefetch(cacheKey) {
+    const cache = _guideCache[cacheKey];
+    if (!cache || cache.prefetching || cache._bundleInflight) return;
+    if (_isPrefetchComplete(cacheKey)) return;
+
+    const gen = cache.gen;
+    cache.prefetching = true;
+    if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
+        _setPrefetchHint(true);
+    }
+    (async () => {
+        await _loadCampusBundle(cacheKey, gen);
+        if (_guideCache[cacheKey]?.gen === gen) {
+            if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
+                _maybeRender(cacheKey, gen, { force: true });
+            } else {
+                _setPrefetchHint(false);
+            }
+        }
+    })();
+}
+
 function renderGuideGrid(items, meta = {}) {
     const container = document.getElementById('guideGrid');
     if (!container) return;
@@ -281,9 +346,9 @@ function renderGuideGrid(items, meta = {}) {
         return;
     }
 
-    const campus = meta.campus ?? _resolveCampus();
+    const cacheKey = meta.cacheKey ?? _getCacheKey();
     const cat = meta.cat ?? currentGuideCat;
-    const renderKey = meta.renderKey ?? _renderKey(campus, cat, items);
+    const renderKey = meta.renderKey ?? _renderKey(cacheKey, cat, items);
     if (renderKey === _lastRenderKey) return;
     _lastRenderKey = renderKey;
 
@@ -293,7 +358,7 @@ function renderGuideGrid(items, meta = {}) {
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
-                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${item.rating}</span>` : ''}
+                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}</span>` : ''}
                 </div>
                 <div class="guide-desc">${esc(item.desc)}</div>
                 <div class="guide-meta">
@@ -314,13 +379,12 @@ function renderGuideGrid(items, meta = {}) {
     });
 }
 
-// ── 筛选与应用 ──
 async function _applyGuideFilters(force = false) {
     const container = document.getElementById('guideGrid');
-    const campus = _resolveCampus();
+    const cacheKey = _getCacheKey();
 
     if (force) {
-        const c = _ensureCampusCache(campus);
+        const c = _ensureCache(cacheKey);
         c.gen += 1;
         c.cats = {};
         c._inflight = {};
@@ -330,14 +394,14 @@ async function _applyGuideFilters(force = false) {
         _setPrefetchHint(false);
     }
 
-    const cached = _getDisplayItems(campus, currentGuideCat);
+    const cached = _getDisplayItems(cacheKey, currentGuideCat);
     if (!force && cached !== null) {
-        renderGuideGrid(cached, { campus, cat: currentGuideCat });
-        _kickPrefetch(campus);
+        renderGuideGrid(cached, { cacheKey, cat: currentGuideCat });
+        _kickPrefetch(cacheKey);
         return;
     }
 
-    const cache = _ensureCampusCache(campus);
+    const cache = _ensureCache(cacheKey);
     const gen = cache.gen;
     const needed = (currentGuideCat === 'all' ? _getPriorityCategories() : [currentGuideCat])
         .filter(cat => cache.cats[cat] === undefined);
@@ -346,21 +410,20 @@ async function _applyGuideFilters(force = false) {
         if (container && cached === null) {
             container.innerHTML = '<div class="guide-loading">加载中...</div>';
         }
-        await Promise.all(needed.map(cat => _loadCategory(campus, cat, gen)));
+        await Promise.all(needed.map(cat => _loadCategory(cacheKey, cat, gen)));
     }
 
-    const items = _getDisplayItems(campus, currentGuideCat);
+    const items = _getDisplayItems(cacheKey, currentGuideCat);
     if (items !== null) {
-        renderGuideGrid(items, { campus, cat: currentGuideCat });
+        renderGuideGrid(items, { cacheKey, cat: currentGuideCat });
     } else if (container) {
         _lastRenderKey = '';
         container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
     }
 
-    _kickPrefetch(campus);
+    _kickPrefetch(cacheKey);
 }
 
-// 刷新数据（清除缓存 + 随机排序）
 export async function refreshGuideData() {
     if (_isRefreshing) {
         showToast('刷新中，请稍候...');
@@ -410,19 +473,26 @@ function _filterGuideCampus(campus) {
     _applyGuideFilters();
 }
 
-// ── 详情弹窗 ──
 function openGuideDetail(item) {
     const modal = document.getElementById('guideDetailModal');
     if (!modal) return;
     document.getElementById('guideDetailImg').src = item.image || '';
     document.getElementById('guideDetailName').textContent = item.name;
-    document.getElementById('guideDetailRating').innerHTML = item.rating ? `<i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}` : '';
+    document.getElementById('guideDetailRating').innerHTML = item.rating
+        ? `<i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}`
+        : '';
     document.getElementById('guideDetailPrice').textContent = item.price || '';
-    document.getElementById('guideDetailPrice').style.cssText = item.price ? 'font-weight:700;color:var(--danger);' : '';
+    document.getElementById('guideDetailPrice').style.cssText = item.price
+        ? 'font-weight:700;color:var(--danger);'
+        : '';
     document.getElementById('guideDetailType').textContent = item.type || '';
-    document.getElementById('guideDetailType').style.cssText = item.type ? 'padding:3px 10px;border-radius:10px;font-size:0.75rem;background:var(--bg-tertiary);color:var(--text-secondary);' : '';
+    document.getElementById('guideDetailType').style.cssText = item.type
+        ? 'padding:3px 10px;border-radius:10px;font-size:0.75rem;background:var(--bg-tertiary);color:var(--text-secondary);'
+        : '';
     document.getElementById('guideDetailDesc').textContent = item.desc || '';
-    document.getElementById('guideDetailAddr').innerHTML = item.address ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}` : '';
+    document.getElementById('guideDetailAddr').innerHTML = item.address
+        ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}`
+        : '';
     modal.style.display = 'flex';
 }
 
@@ -438,15 +508,13 @@ function initGuideModals() {
     });
 }
 
-// ── 筛选栏初始化 ──
 function initGuideFilter() {
     const filterBar = document.getElementById('guideFilter');
     if (!filterBar || filterBar.dataset.ready) return;
     filterBar.dataset.ready = '1';
     filterBar.querySelectorAll('.guide-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            const cat = chip.getAttribute('data-guide-cat');
-            filterGuideItems(cat);
+            filterGuideItems(chip.getAttribute('data-guide-cat'));
         });
     });
 }
@@ -458,7 +526,7 @@ function initGuideCampusFilter() {
 
     const user = getUser();
     const userCampus = user?.campus || '';
-    if (userCampus && ['鼓楼', '仙林', '浦口', '苏州'].includes(userCampus)) {
+    if (userCampus && ALL_CAMPUSES.includes(userCampus)) {
         currentGuideCampus = userCampus;
         document.querySelectorAll('#guideCampusFilter .guide-chip').forEach(chip => {
             chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === userCampus);
@@ -467,8 +535,7 @@ function initGuideCampusFilter() {
 
     filterBar.querySelectorAll('.guide-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            const campus = chip.getAttribute('data-guide-campus');
-            _filterGuideCampus(campus);
+            _filterGuideCampus(chip.getAttribute('data-guide-campus'));
         });
     });
 }
@@ -483,19 +550,24 @@ function bindRefreshButton() {
     });
 }
 
-// ── 入口 ──
 export async function loadGuideData() {
     initGuideModals();
     initGuideFilter();
     initGuideCampusFilter();
     bindRefreshButton();
-    _applyGuideFilters();
+    try {
+        await _loadGuideConfig();
+        await _applyGuideFilters();
+    } catch (err) {
+        console.error('吃喝玩乐配置加载失败:', err);
+        showToast('加载失败，请稍后重试');
+    }
 }
 
 export function initGuidePage() {
     const container = document.getElementById('guideGrid');
-    const campus = _resolveCampus();
-    const hasData = _getDisplayItems(campus, currentGuideCat);
+    const cacheKey = _getCacheKey();
+    const hasData = _getDisplayItems(cacheKey, currentGuideCat);
     if (container && !container.querySelector('.guide-card') && hasData === null) {
         container.innerHTML = '<div class="guide-loading">加载精彩推荐中...</div>';
     }
