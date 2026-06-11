@@ -10,6 +10,7 @@ from app.auth_utils import create_access_token, hash_token, jwt_required, revoke
 from app.errors import error_response
 from app.logging_utils import log_event
 from app.mail_utils import send_email_code, send_password_reset_email, send_verification_email
+from app.models import EmailVerificationCode, EmailVerificationToken, PasswordResetToken, User
 from app.services.social import user_avatar_url, user_cover_url
 from app.rate_limit import limiter
 from app.validators import clean_string, get_json_body
