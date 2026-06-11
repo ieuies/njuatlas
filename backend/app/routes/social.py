@@ -16,6 +16,8 @@ from app.services.social import (
     are_friends,
     clear_friend_request_notifications,
     conversation_summaries,
+    dm_tail_messages,
+    dm_thread_message_count,
     count_friends,
     count_likes_received,
     count_user_posts,
@@ -360,17 +362,12 @@ def get_messages(peer_id):
     ).update({"is_read": True})
 
     if tail:
-        rows = (
-            base_q.order_by(DirectMessage.created_at.desc())
-            .limit(page_size)
-            .all()
-        )
-        rows = list(reversed(rows))
-        total = base_q.count()
+        rows = dm_tail_messages(g.current_user_id, peer_id, page_size)
+        total = dm_thread_message_count(g.current_user_id, peer_id)
         page = max(1, (total + page_size - 1) // page_size) if total else 1
     else:
         page = max(1, int(request.args.get("page", 1)))
-        total = base_q.count()
+        total = dm_thread_message_count(g.current_user_id, peer_id)
         rows = (
             base_q.order_by(DirectMessage.created_at.asc())
             .offset((page - 1) * page_size)

@@ -375,6 +375,7 @@ class Friendship(db.Model):
         db.UniqueConstraint("requester_id", "addressee_id", name="_friendship_pair_uc"),
         db.Index("ix_friendships_status_requester", "status", "requester_id"),
         db.Index("ix_friendships_status_addressee", "status", "addressee_id"),
+        db.Index("ix_friendships_addressee_status", "addressee_id", "status"),
     )
 
 
@@ -395,6 +396,8 @@ class DirectMessage(db.Model):
     __table_args__ = (
         db.Index("ix_dm_receiver_read", "receiver_id", "is_read"),
         db.Index("ix_dm_thread", "sender_id", "receiver_id", "created_at"),
+        db.Index("ix_dm_thread_rev", "receiver_id", "sender_id", "created_at"),
+        db.Index("ix_dm_receiver_unread_sender", "receiver_id", "is_read", "sender_id"),
     )
 
 
@@ -416,4 +419,5 @@ class Notification(db.Model):
 
     __table_args__ = (
         db.Index("ix_notifications_user_read", "user_id", "is_read"),
+        db.Index("ix_notifications_user_read_type", "user_id", "is_read", "type"),
     )

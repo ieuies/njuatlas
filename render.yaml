@@ -38,7 +38,7 @@ services:
       - key: JWT_EXPIRATION_SECONDS
         value: "86400"
       - key: AMAP_CACHE_TTL_SECONDS
-        value: "300"
+        value: "900"
       - key: AMAP_CACHE_MAX_ITEMS
         value: "256"
       - key: AMAP_REQUEST_TIMEOUT_SECONDS

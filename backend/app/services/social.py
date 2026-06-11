@@ -284,36 +284,89 @@ def unread_counts(user_id):
     }
 
 
-def conversation_summaries(user_id):
-    """按对方用户聚合最近一条私信（固定次数 SQL，不随历史消息总量增长）。"""
-    peer_col = case(
+def _dm_peer_column(user_id):
+    return case(
         (DirectMessage.sender_id == user_id, DirectMessage.receiver_id),
         else_=DirectMessage.sender_id,
     )
 
-    ranked_subq = (
-        db.session.query(
-            DirectMessage.content.label("content"),
-            DirectMessage.created_at.label("created_at"),
-            DirectMessage.sender_id.label("sender_id"),
-            DirectMessage.receiver_id.label("receiver_id"),
-            peer_col.label("peer_id"),
-            func.row_number()
-            .over(partition_by=peer_col, order_by=DirectMessage.created_at.desc())
-            .label("rn"),
+
+def _dm_thread_filter(user_id):
+    return or_(
+        DirectMessage.sender_id == user_id,
+        DirectMessage.receiver_id == user_id,
+    )
+
+
+def dm_tail_messages(current_user_id, peer_id, page_size):
+    """取会话最近 N 条：双向各取 N 条再合并，走 ix_dm_thread / ix_dm_thread_rev。"""
+    forward = (
+        DirectMessage.query.filter(
+            DirectMessage.sender_id == current_user_id,
+            DirectMessage.receiver_id == peer_id,
         )
+        .order_by(DirectMessage.created_at.desc())
+        .limit(page_size)
+        .all()
+    )
+    backward = (
+        DirectMessage.query.filter(
+            DirectMessage.sender_id == peer_id,
+            DirectMessage.receiver_id == current_user_id,
+        )
+        .order_by(DirectMessage.created_at.desc())
+        .limit(page_size)
+        .all()
+    )
+    newest = sorted(forward + backward, key=lambda m: m.created_at, reverse=True)[:page_size]
+    return list(reversed(newest))
+
+
+def dm_thread_message_count(current_user_id, peer_id):
+    """双向分别 COUNT，利用 ix_dm_thread / ix_dm_thread_rev，避免 OR 全表扫。"""
+    forward = (
+        db.session.query(func.count(DirectMessage.id))
         .filter(
-            or_(
-                DirectMessage.sender_id == user_id,
-                DirectMessage.receiver_id == user_id,
-            )
+            DirectMessage.sender_id == current_user_id,
+            DirectMessage.receiver_id == peer_id,
         )
-        .subquery()
+        .scalar()
+        or 0
+    )
+    backward = (
+        db.session.query(func.count(DirectMessage.id))
+        .filter(
+            DirectMessage.sender_id == peer_id,
+            DirectMessage.receiver_id == current_user_id,
+        )
+        .scalar()
+        or 0
+    )
+    return int(forward) + int(backward)
+
+
+def conversation_summaries(user_id):
+    """按对方用户聚合最近一条私信（GROUP BY + max(id)，避免窗口函数全表排序）。"""
+    peer_col = _dm_peer_column(user_id)
+    thread_filter = _dm_thread_filter(user_id)
+
+    latest_subq = (
+        db.session.query(
+            peer_col.label("peer_id"),
+            func.max(DirectMessage.id).label("max_id"),
+        )
+        .filter(thread_filter)
+        .group_by(peer_col)
+        .subquery("dm_latest")
     )
 
     latest_rows = (
-        db.session.query(ranked_subq)
-        .filter(ranked_subq.c.rn == 1)
+        db.session.query(
+            DirectMessage.content,
+            DirectMessage.created_at,
+            latest_subq.c.peer_id,
+        )
+        .join(DirectMessage, DirectMessage.id == latest_subq.c.max_id)
         .all()
     )
 
