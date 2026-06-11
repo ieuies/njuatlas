@@ -250,6 +250,7 @@ function _mapCachedToDetailFormat(cached) {
 }
 
 export async function openPostDetail(postId) {
+    initPostDetailModal();
     const modal = document.getElementById('postDetailModal');
     if (!modal) return;
 

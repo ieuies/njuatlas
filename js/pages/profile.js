@@ -4,10 +4,9 @@
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
-import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser } from '../utils.js';
+import { showToast, escapeHtml, formatDate, renderAvatarInto, avatarStorageKey, avatarHtmlForUser, resolveApiAssetUrl } from '../utils.js';
 import { t } from '../i18n.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
-import { API_BASE } from '../config.js';
 
 let currentProfileTab = 'posts';
 let _profileBioCache = null;
@@ -46,13 +45,13 @@ function ensureCropperLoaded() {
     return _cropperLoadPromise;
 }
 
-// 封面预设图（用户首次进入时随机分配一张）
-const COVER_PRESETS = [
-    'https://picsum.photos/id/104/1500/500',
-    'https://picsum.photos/id/15/1500/500',
-    'https://picsum.photos/id/96/1500/500',
-    'https://picsum.photos/id/42/1500/500',
-    'https://picsum.photos/id/29/1500/500',
+// 封面默认背景（纯 CSS 渐变，不依赖外网图床）
+const COVER_GRADIENTS = [
+    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    'linear-gradient(135deg, #6B21A5 0%, #EC4899 100%)',
+    'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+    'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)',
+    'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
 ];
 
 // 获取当前用户的封面存储 Key（用户隔离）
@@ -151,49 +150,145 @@ let cropper = null;
 
 function _fallbackCoverByUserId(userId) {
     const n = Number(userId) || 0;
-    return COVER_PRESETS[Math.abs(n) % COVER_PRESETS.length];
+    return COVER_GRADIENTS[Math.abs(n) % COVER_GRADIENTS.length];
 }
 
-function resolveCoverUrl(raw) {
+function _isCoverGradient(value) {
+    return typeof value === 'string' && value.includes('gradient');
+}
+
+function _localCoverForUser(userId) {
+    const me = getUser();
+    if (!me || userId == null || String(me.id) !== String(userId)) return null;
+    return _readLocalCoverDataUrl(getCoverStorageKey());
+}
+
+function _ensureCoverImg(coverDiv) {
+    let img = coverDiv.querySelector('.profile-cover-img');
+    if (!img) {
+        img = document.createElement('img');
+        img.className = 'profile-cover-img';
+        img.alt = '';
+        coverDiv.insertBefore(img, coverDiv.firstChild);
+    }
+    return img;
+}
+
+function _applyCoverGradient(coverDiv, gradient) {
+    const img = coverDiv.querySelector('.profile-cover-img');
+    if (img) {
+        img.onerror = null;
+        img.onload = null;
+        img.removeAttribute('src');
+        img.style.display = 'none';
+    }
+    coverDiv.style.backgroundImage = gradient;
+    coverDiv.style.backgroundSize = 'cover';
+    coverDiv.style.backgroundPosition = 'center';
+    coverDiv.dataset.coverSrc = '';
+}
+
+function resolveCoverUrl(raw, { cacheBust = false } = {}) {
     if (!raw || typeof raw !== 'string') return '';
-    if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
-    if (/^https?:\/\//i.test(raw)) return raw;
-    const base = API_BASE.replace(/\/api$/, '');
-    if (raw.startsWith('/')) return `${base}${raw}`;
-    return `${base}/${raw}`;
+    if (_isCoverGradient(raw)) return raw;
+    return resolveApiAssetUrl(raw, { cacheBust });
 }
 
-function setProfileCover(coverUrl, fallback = null) {
+function _legacyCoverCandidates(userId) {
+    if (userId == null) return [];
+    const id = Number(userId);
+    if (!Number.isFinite(id) || id <= 0) return [];
+    return ['jpg', 'jpeg', 'png', 'webp'].map(
+        (ext) => resolveApiAssetUrl(`/api/social/covers/user_${id}.${ext}`),
+    );
+}
+
+function _buildCoverCandidates(coverUrl, userId, { cacheBust = false } = {}) {
+    const candidates = [];
+    const add = (url) => {
+        if (!url || _isCoverGradient(url)) return;
+        if (!candidates.includes(url)) candidates.push(url);
+    };
+
+    const local = _localCoverForUser(userId);
+    if (local?.startsWith('data:')) add(local);
+
+    const primary = resolveCoverUrl(coverUrl, { cacheBust });
+    add(primary);
+
+    for (const legacy of _legacyCoverCandidates(userId)) add(legacy);
+
+    if (local && !local.startsWith('data:')) add(local);
+
+    return candidates;
+}
+
+function setProfileCover(coverUrl, fallback = null, { userId = null, cacheBust = false } = {}) {
     const coverDiv = document.getElementById('profileCover');
     if (!coverDiv) return;
-    const finalUrl = resolveCoverUrl(coverUrl) || fallback || COVER_PRESETS[0];
-    coverDiv.style.backgroundImage = `url('${finalUrl}')`;
-    coverDiv.dataset.coverSrc = finalUrl;
+    const uid = userId ?? getUser()?.id;
+    const gradientFallback = fallback || _fallbackCoverByUserId(uid);
+    const candidates = _buildCoverCandidates(coverUrl, uid, {
+        cacheBust: cacheBust || Boolean(coverUrl && String(coverUrl).includes('/users/')),
+    });
+
+    if (!candidates.length) {
+        _applyCoverGradient(coverDiv, gradientFallback);
+        return;
+    }
+
+    const img = _ensureCoverImg(coverDiv);
+    coverDiv.style.backgroundImage = 'none';
+
+    let attempt = 0;
+    img.onload = () => {
+        img.style.display = 'block';
+        coverDiv.dataset.coverSrc = img.currentSrc || img.src;
+    };
+    img.onerror = () => {
+        attempt += 1;
+        if (attempt < candidates.length) {
+            img.src = candidates[attempt];
+        } else {
+            _applyCoverGradient(coverDiv, gradientFallback);
+        }
+    };
+
+    attempt = 0;
+    img.src = candidates[0];
+}
+
+function _readLocalCoverDataUrl(storageKey) {
+    if (!storageKey) return null;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    if (_isCoverGradient(raw) || /^https?:\/\//i.test(raw)) {
+        localStorage.removeItem(storageKey);
+        return null;
+    }
+    return raw.startsWith('data:') ? raw : null;
 }
 
 function loadProfileCover(targetUser = null) {
     const user = targetUser || getUser();
     if (!user) return;
     const fallback = _fallbackCoverByUserId(user.id);
+    const opts = { userId: user.id };
+    const isSelf = !targetUser || (getUser() && String(getUser().id) === String(user.id));
+    const storageKey = isSelf ? getCoverStorageKey() : null;
+    const localCover = _readLocalCoverDataUrl(storageKey);
 
-    // 优先使用服务端封面，保证多端一致
     if (user.cover_url) {
-        setProfileCover(user.cover_url, fallback);
+        setProfileCover(user.cover_url, fallback, opts);
         return;
     }
 
-    // 本地兼容：历史仅存 localStorage 的封面
-    const storageKey = targetUser ? null : getCoverStorageKey();
-    if (!storageKey) {
-        setProfileCover('', fallback);
+    if (localCover?.startsWith('data:')) {
+        setProfileCover(localCover, fallback, opts);
         return;
     }
-    let coverUrl = localStorage.getItem(storageKey);
-    if (!coverUrl) {
-        coverUrl = fallback;
-        localStorage.setItem(storageKey, coverUrl);
-    }
-    setProfileCover(coverUrl, fallback);
+
+    setProfileCover('', fallback, opts);
 }
 
 async function saveCoverFromCropped(canvas, originalDataUrl) {
@@ -206,20 +301,19 @@ async function saveCoverFromCropped(canvas, originalDataUrl) {
     if (origKey && originalDataUrl) {
         safeSetItem(origKey, await downscaleDataUrl(originalDataUrl, 1920, 0.86));
     }
+    if (storageKey) localStorage.setItem(storageKey, base64);
+    setProfileCover(base64, fallback, { userId: user.id });
     try {
         const res = await uploadCover(base64);
         if (res?.cover_url) {
-            updateUserFromLogin({ ...user, cover_url: res.cover_url });
-            setProfileCover(res.cover_url, fallback);
-            if (storageKey) localStorage.setItem(storageKey, base64);
-            showToast(t('profile.coverSynced'));
+            updateUserFromLogin({ ...getUser(), cover_url: res.cover_url });
+            setProfileCover(res.cover_url, fallback, { userId: user.id, cacheBust: true });
             return;
         }
         throw new Error('服务器未返回封面地址');
     } catch (e) {
-        console.warn('封面上传服务端失败，回退本地存储:', e?.message);
-        if (storageKey) localStorage.setItem(storageKey, base64);
-        setProfileCover(base64, fallback);
+        console.warn('封面上传服务端失败，已保存本地:', e?.message);
+        updateUserFromLogin({ ...getUser(), cover_url: '' });
         showToast(t('profile.coverLocalOnly'));
     }
 }
@@ -326,27 +420,30 @@ function openCropModal(file, mode = 'cover') {
         };
         reader.readAsDataURL(file);
 
-        const onConfirm = () => {
-            if (cropper) {
-                const canvas = cropper.getCroppedCanvas({
-                    width: preset.exportWidth,
-                    height: preset.exportHeight,
-                    imageSmoothingEnabled: true,
-                    imageSmoothingQuality: 'high',
-                });
-                if (canvas) {
-                    Promise.resolve((CROP_SAVERS[mode] || saveCoverFromCropped)(canvas, originalDataUrl))
-                        .then(() => {
-                            showToast(preset.successMsg);
-                            resolve();
-                        })
-                        .catch(reject);
-                } else {
-                    reject(new Error('裁剪失败'));
-                }
+        const onConfirm = async () => {
+            if (!cropper) return;
+            const canvas = cropper.getCroppedCanvas({
+                width: preset.exportWidth,
+                height: preset.exportHeight,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            });
+            if (!canvas) {
+                cleanup();
+                modal.style.display = 'none';
+                reject(new Error('裁剪失败'));
+                return;
             }
-            cleanup();
-            modal.style.display = 'none';
+            try {
+                await (CROP_SAVERS[mode] || saveCoverFromCropped)(canvas, originalDataUrl);
+                showToast(preset.successMsg);
+                resolve();
+            } catch (err) {
+                reject(err);
+            } finally {
+                cleanup();
+                modal.style.display = 'none';
+            }
         };
 
         const cleanup = () => {
@@ -376,7 +473,8 @@ function openCropModal(file, mode = 'cover') {
 function initCoverEditor() {
     const coverEditBtn = document.getElementById('coverEditBtn');
     const coverFileInput = document.getElementById('coverFileInput');
-    if (!coverEditBtn || !coverFileInput) return;
+    if (!coverEditBtn || !coverFileInput || coverFileInput.dataset.bound === 'true') return;
+    coverFileInput.dataset.bound = 'true';
 
     coverEditBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -397,7 +495,7 @@ function initCoverEditor() {
             return;
         }
         try {
-            await openCropModal(file);
+            await openCropModal(file, 'cover');
         } catch (err) {
             if (err.message !== '用户取消裁剪') {
                 showToast(err.message || '裁剪失败，请重试');

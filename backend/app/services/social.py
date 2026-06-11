@@ -1,5 +1,6 @@
 """社交层业务逻辑：好友、私信、通知、公开用户资料。"""
 import json
+import re
 from sqlalchemy import and_, case, func, or_
 
 from app import db
@@ -17,21 +18,36 @@ def _dt(value):
     return value.isoformat() if value else None
 
 
-def user_avatar_url(user):
-    """公开头像 URL（按用户 ID，img 标签无需 JWT）。"""
+def user_cover_url(user):
+    """公开封面 URL：有 cover_data 时返回 canonical；legacy 磁盘路径保留；无数据时不返回空壳 URL。"""
     if not user:
         return ""
-    if user.avatar_data or user.avatar_url:
-        return f"/api/social/users/{user.id}/avatar"
+    if user.cover_data:
+        return f"/api/social/users/{user.id}/cover"
+    if user.cover_url:
+        url = (user.cover_url or "").strip()
+        # DB 里留了 canonical 路径但无二进制 → 视为无效，避免前端永久 404
+        if re.search(r"/users/\d+/cover/?$", url):
+            return ""
+        if url.startswith("/social/"):
+            return f"/api{url}"
+        return url
     return ""
 
 
-def user_cover_url(user):
-    """公开封面 URL（按用户 ID）。"""
+def user_avatar_url(user):
+    """公开头像 URL：有 avatar_data 时返回 canonical；legacy 路径保留。"""
     if not user:
         return ""
-    if user.cover_data or user.cover_url:
-        return f"/api/social/users/{user.id}/cover"
+    if user.avatar_data:
+        return f"/api/social/users/{user.id}/avatar"
+    if user.avatar_url:
+        url = (user.avatar_url or "").strip()
+        if re.search(r"/users/\d+/avatar/?$", url):
+            return ""
+        if url.startswith("/social/"):
+            return f"/api{url}"
+        return url
     return ""
 
 

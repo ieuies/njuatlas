@@ -653,7 +653,7 @@ def upload_avatar():
 
     user.avatar_data = binary
     user.avatar_mime = mime
-    user.avatar_url = user_avatar_url(user) or f"/api/social/users/{g.current_user_id}/avatar"
+    user.avatar_url = f"/api/social/users/{g.current_user_id}/avatar"
 
     filepath = os.path.join(_avatar_dir(), filename)
     try:
@@ -692,7 +692,7 @@ def upload_cover():
 
     user.cover_data = binary
     user.cover_mime = mime
-    user.cover_url = user_cover_url(user) or f"/api/social/users/{g.current_user_id}/cover"
+    user.cover_url = f"/api/social/users/{g.current_user_id}/cover"
 
     filepath = os.path.join(_cover_dir(), filename)
     try:

@@ -317,31 +317,55 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
 }
 .close-btn:hover { background: var(--danger); color: white; }
 
-/* ========== Toast 提示 ========== */
-.toast {
+/* ========== Toast 提示（多条自上而下瀑布排列） ========== */
+.toast-container {
     position: fixed;
-    bottom: 30px;
+    top: calc(var(--topbar-height) + 12px + env(safe-area-inset-top, 0px));
     left: 50%;
     transform: translateX(-50%);
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;
+    width: min(92vw, 420px);
+    max-height: calc(100vh - var(--topbar-height) - 24px - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.toast {
+    position: relative;
+    width: 100%;
     background: var(--btn-primary-bg);
     color: var(--btn-primary-fg);
     padding: 10px 24px;
     border-radius: var(--btn-radius);
-    z-index: var(--z-toast);
     font-size: 0.85rem;
     font-weight: 500;
     box-shadow: var(--shadow-lg);
     pointer-events: none;
-    max-width: min(92vw, 420px);
     text-align: center;
     line-height: 1.4;
+    word-break: break-word;
+    flex-shrink: 0;
+    animation: toastIn 0.22s ease;
+}
+.toast-leaving {
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+@keyframes toastIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 768px) {
+    .toast-container {
+        width: calc(100vw - 28px);
+    }
     .toast {
-        /* 底部 Tab 栏 66px + 间距，避免被遮挡（z-index 亦高于 Tab 栏） */
-        bottom: calc(var(--atlas-bottombar) + 14px + env(safe-area-inset-bottom, 0px));
-        max-width: calc(100vw - 28px);
         padding: 10px 18px;
         font-size: 0.82rem;
     }

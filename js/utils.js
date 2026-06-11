@@ -8,12 +8,40 @@ export function getAppScroller() {
     return document.getElementById('contentArea') || document.documentElement;
 }
 
+const MAX_TOASTS = 6;
+
+function getToastContainer() {
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'false');
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
 export function showToast(msg, duration = 2500) {
+    const container = getToastContainer();
+    while (container.children.length >= MAX_TOASTS) {
+        container.firstElementChild?.remove();
+    }
+
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.innerText = msg;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), duration);
+    container.appendChild(toast);
+
+    const remove = () => {
+        if (!toast.isConnected) return;
+        toast.classList.add('toast-leaving');
+        const done = () => toast.remove();
+        toast.addEventListener('transitionend', done, { once: true });
+        setTimeout(done, 320);
+    };
+    setTimeout(remove, duration);
 }
 
 export function escapeHtml(str) {
@@ -118,11 +146,41 @@ export function formatTimeBrief(iso) {
 // ============================================================
 // 用户头像：优先服务端 avatar_url，本人可回退 localStorage 裁剪图
 // ============================================================
+// ============================================================
+// API 静态资源 URL（头像、封面等）：统一补全 /api 前缀与域名
+// ============================================================
+export function resolveApiAssetUrl(raw, { cacheBust = false } = {}) {
+    if (!raw || typeof raw !== 'string') return '';
+    if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
+
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const u = new URL(raw);
+            if (u.pathname.startsWith('/social/') && !u.pathname.startsWith('/api/')) {
+                u.pathname = `/api${u.pathname}`;
+            }
+            let out = u.toString();
+            if (cacheBust) out += `${out.includes('?') ? '&' : '?'}_=${Date.now()}`;
+            return out;
+        } catch {
+            if (cacheBust) return `${raw}${raw.includes('?') ? '&' : '?'}_=${Date.now()}`;
+            return raw;
+        }
+    }
+
+    let path = raw.startsWith('/') ? raw : `/${raw}`;
+    if (path.startsWith('/social/') && !path.startsWith('/api/')) {
+        path = `/api${path}`;
+    }
+    const base = API_BASE.replace(/\/api\/?$/, '');
+    const url = `${base}${path}`;
+    if (cacheBust) return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
+    return url;
+}
+
 export function resolveAvatarUrl(url) {
     if (!url) return null;
-    if (url.startsWith('http') || url.startsWith('data:')) return url;
-    const base = API_BASE.replace(/\/api$/, '');
-    return `${base}${url.startsWith('/') ? url : `/${url}`}`;
+    return resolveApiAssetUrl(url) || null;
 }
 
 function getCurrentUserId() {

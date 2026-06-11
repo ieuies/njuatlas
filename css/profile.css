@@ -21,9 +21,21 @@
     background-position: center;
     background-repeat: no-repeat;
     background-color: var(--bg-tertiary);
-    transition: background-image 0.2s;
+    transition: background-color 0.2s;
     border-radius: calc(var(--btn-radius) - 1px) calc(var(--btn-radius) - 1px) 0 0;
     cursor: pointer;
+    overflow: hidden;
+}
+.profile-cover-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    pointer-events: none;
+    z-index: 0;
 }
 .cover-edit-btn {
     position: absolute;
