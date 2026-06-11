@@ -66,6 +66,7 @@ def create_app():
         })
 
     @app.route("/health")
+    @app.route("/api/health")
     def health():
         return jsonify({
             "status": "ok",
