@@ -54,6 +54,7 @@ const chatState = {
     messages: [],
     page: 1,
     total: 0,
+    hasMoreOlder: false,
     loadingMore: false,
     myBubbleStyle: null,
     peerBubbleStyle: null,
@@ -309,7 +310,7 @@ function paintChatMessages({ scrollToBottom = true } = {}) {
 
     const frag = document.createDocumentFragment();
 
-    if (chatState.page > 1) {
+    if (chatState.hasMoreOlder) {
         const hint = document.createElement('div');
         hint.className = 'msg-load-hint';
         hint.id = 'msgLoadMoreHint';
@@ -378,7 +379,7 @@ function bindChatScrollLoad() {
     body.dataset.scrollBound = '1';
 
     body.addEventListener('scroll', () => {
-        if (chatState.loadingMore || chatState.page <= 1) return;
+        if (chatState.loadingMore || !chatState.hasMoreOlder) return;
         if (body.scrollTop > 80) return;
         loadOlderMessages();
     });
@@ -510,11 +511,10 @@ function bindVisibilitySync() {
 
 async function fetchChatThread(peerId) {
     const data = await getDmMessages(peerId, { tail: true, page_size: CHAT_PAGE_SIZE });
-    const total = data.total || 0;
     const peer = data.peer || { id: peerId, username: t('messages.user') };
     const messages = data.items || [];
-    const page = data.page || Math.max(1, Math.ceil(total / CHAT_PAGE_SIZE));
-    return { peer, messages, page, total };
+    const hasMoreOlder = Boolean(data.has_more);
+    return { peer, messages, hasMoreOlder };
 }
 
 async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
@@ -537,6 +537,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     chatState.messages = [];
     chatState.page = 1;
     chatState.total = 0;
+    chatState.hasMoreOlder = false;
 
     const body = document.getElementById('msgChatBody');
     if (body) body.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
@@ -546,11 +547,12 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
             || _pendingPeerHint
             || tabCache.chats.items?.find((c) => c.peer_id === peerId)?.peer;
         _pendingPeerHint = null;
-        const { peer, messages, page, total } = await fetchChatThread(peerId);
+        const { peer, messages, hasMoreOlder } = await fetchChatThread(peerId);
         chatState.peer = cachedPeer || peer;
         chatState.messages = messages;
-        chatState.page = page;
-        chatState.total = total;
+        chatState.hasMoreOlder = hasMoreOlder;
+        chatState.page = hasMoreOlder ? 2 : 1;
+        chatState.total = messages.length;
         syncBubbleStyles();
         updateChatHeader();
         paintChatMessages({ scrollToBottom: true });
@@ -565,21 +567,32 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
 }
 
 async function loadOlderMessages() {
-    if (chatState.loadingMore || chatState.page <= 1 || !chatState.peerId) return;
+    if (chatState.loadingMore || !chatState.hasMoreOlder || !chatState.peerId) return;
+    const oldest = chatState.messages[0];
+    if (!oldest?.id) return;
+
     chatState.loadingMore = true;
     const body = document.getElementById('msgChatBody');
     const prevHeight = body?.scrollHeight || 0;
 
     try {
-        const prevPage = chatState.page - 1;
-        const data = await getDmMessages(chatState.peerId, { page: prevPage, page_size: CHAT_PAGE_SIZE });
+        const data = await getDmMessages(chatState.peerId, {
+            before_id: oldest.id,
+            page_size: CHAT_PAGE_SIZE,
+        });
         const older = data.items || [];
         if (older.length) {
-            chatState.messages = [...older, ...chatState.messages];
-            chatState.page = prevPage;
-            paintChatMessages({ scrollToBottom: false });
-            if (body) body.scrollTop = body.scrollHeight - prevHeight;
+            const existingIds = new Set(chatState.messages.map((m) => m.id));
+            const uniqueOlder = older.filter((m) => m.id && !existingIds.has(m.id));
+            if (uniqueOlder.length) {
+                chatState.messages = [...uniqueOlder, ...chatState.messages];
+                paintChatMessages({ scrollToBottom: false });
+                if (body) body.scrollTop = body.scrollHeight - prevHeight;
+            }
         }
+        chatState.hasMoreOlder = Boolean(data.has_more);
+        if (chatState.hasMoreOlder) chatState.page += 1;
+        else chatState.page = 1;
     } catch { /* 静默 */ }
     chatState.loadingMore = false;
 }

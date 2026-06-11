@@ -294,12 +294,14 @@ export async function listDmConversations() {
 }
 export async function getDmMessages(
     peerId,
-    { page = 1, page_size = 50, tail = false, after_id = null, wait = null } = {},
+    { page = 1, page_size = 50, tail = false, before_id = null, after_id = null, wait = null } = {},
     silent = false,
     timeoutMs = DEFAULT_TIMEOUT_MS,
 ) {
-    let url = `/social/messages/${peerId}?page=${page}&page_size=${page_size}`;
+    let url = `/social/messages/${peerId}?page_size=${page_size}`;
     if (tail) url += '&tail=1';
+    else if (before_id != null && before_id > 0) url += `&before_id=${before_id}`;
+    else url += `&page=${page}`;
     if (after_id != null && after_id >= 0) url += `&after_id=${after_id}`;
     if (wait != null && wait > 0) url += `&wait=${wait}`;
     return request(url, 'GET', null, true, timeoutMs, silent);

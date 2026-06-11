@@ -298,6 +298,26 @@ def _dm_thread_filter(user_id):
     )
 
 
+def dm_messages_before(current_user_id, peer_id, before_id, page_size):
+    """取 before_id 之前（更旧）的 N 条消息，按时间正序返回；多取 1 条用于 has_more。"""
+    thread = and_(
+        or_(
+            and_(DirectMessage.sender_id == current_user_id, DirectMessage.receiver_id == peer_id),
+            and_(DirectMessage.sender_id == peer_id, DirectMessage.receiver_id == current_user_id),
+        ),
+        DirectMessage.id < before_id,
+    )
+    rows_desc = (
+        DirectMessage.query.filter(thread)
+        .order_by(DirectMessage.id.desc())
+        .limit(page_size + 1)
+        .all()
+    )
+    has_more = len(rows_desc) > page_size
+    chunk = rows_desc[:page_size]
+    return list(reversed(chunk)), has_more
+
+
 def dm_tail_messages(current_user_id, peer_id, page_size):
     """取会话最近 N 条：双向各取 N 条再合并，走 ix_dm_thread / ix_dm_thread_rev。"""
     forward = (
