@@ -846,11 +846,58 @@ def chat_recommend():
                 like_conditions.append(Place.category.ilike(pattern))
             local_query = local_query.filter(or_(*like_conditions))
 
+        def _bbox_for_radius(lng, lat, radius_m):
+            from math import cos, radians
+            lat_delta = radius_m / 111_320.0
+            lng_delta = radius_m / (111_320.0 * max(cos(radians(lat)), 0.2))
+            return lng - lng_delta, lng + lng_delta, lat - lat_delta, lat + lat_delta
+
+        def _places_in_bbox(min_lng, max_lng, min_lat, max_lat, limit=400):
+            bind = db.session.get_bind()
+            dialect = bind.dialect.name if bind else "sqlite"
+            params = {
+                "min_lng": min_lng,
+                "max_lng": max_lng,
+                "min_lat": min_lat,
+                "max_lat": max_lat,
+                "limit": limit,
+            }
+            if dialect == "sqlite":
+                sql = """
+                    SELECT id FROM places
+                    WHERE location IS NOT NULL
+                    AND CAST(substr(location, 1, instr(location, ',') - 1) AS REAL)
+                        BETWEEN :min_lng AND :max_lng
+                    AND CAST(substr(location, instr(location, ',') + 1) AS REAL)
+                        BETWEEN :min_lat AND :max_lat
+                    LIMIT :limit
+                """
+            elif dialect.startswith("postgres"):
+                sql = """
+                    SELECT id FROM places
+                    WHERE location IS NOT NULL
+                    AND CAST(split_part(location, ',', 1) AS double precision)
+                        BETWEEN :min_lng AND :max_lng
+                    AND CAST(split_part(location, ',', 2) AS double precision)
+                        BETWEEN :min_lat AND :max_lat
+                    LIMIT :limit
+                """
+            else:
+                return Place.query.filter(Place.location.isnot(None)).limit(limit).all()
+            from sqlalchemy import text
+            ids = [row[0] for row in db.session.execute(text(sql), params).fetchall()]
+            if not ids:
+                return []
+            return Place.query.filter(Place.id.in_(ids)).all()
+
         local_places = []
         seen_local_ids = set()
         if rank_lng is not None:
+            min_lng, max_lng, min_lat, max_lat = _bbox_for_radius(
+                rank_lng, rank_lat, MAX_DISTANCE_M
+            )
             geo_hits = []
-            for place in Place.query.filter(Place.location.isnot(None)).all():
+            for place in _places_in_bbox(min_lng, max_lng, min_lat, max_lat):
                 if not _is_food_category(place.category):
                     continue
                 dist_m = _distance_from(rank_lng, rank_lat, place.location)

@@ -1,12 +1,16 @@
 from flask import Blueprint, current_app, g, jsonify, request
 import re
 
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
+
 from app import db
 from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.logging_utils import log_event
 from app.models import ConversationMessage, Favorite, Like, PostFavorite, Review
 from app.rate_limit import limiter
+from app.services.social import count_friends, count_likes_received, count_user_posts
 from app.validators import clean_string, get_json_body
 
 
@@ -56,12 +60,14 @@ def _post_payload(post):
 def my_favorites():
     place_rows = (
         Favorite.query
+        .options(joinedload(Favorite.place))
         .filter_by(user_id=g.current_user_id)
         .order_by(Favorite.created_at.desc())
         .all()
     )
     post_rows = (
         PostFavorite.query
+        .options(joinedload(PostFavorite.post))
         .filter_by(user_id=g.current_user_id)
         .order_by(PostFavorite.created_at.desc())
         .all()
@@ -95,6 +101,7 @@ def my_favorites():
 def my_likes():
     rows = (
         Like.query
+        .options(joinedload(Like.place))
         .filter_by(user_id=g.current_user_id)
         .order_by(Like.created_at.desc())
         .all()
@@ -117,6 +124,7 @@ def my_likes():
 def my_reviews():
     rows = (
         Review.query
+        .options(joinedload(Review.place))
         .filter_by(user_id=g.current_user_id)
         .order_by(Review.created_at.desc())
         .all()
@@ -139,32 +147,46 @@ def my_reviews():
 @jwt_required
 @limiter.limit("60 per minute")
 def my_conversations():
-    messages = (
-        ConversationMessage.query
-        .filter_by(user_id=g.current_user_id)
-        .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+    ranked = (
+        db.session.query(
+            ConversationMessage.session_id.label("session_id"),
+            ConversationMessage.content.label("last_message"),
+            ConversationMessage.role.label("last_role"),
+            ConversationMessage.created_at.label("last_at"),
+            func.count(ConversationMessage.id)
+            .over(partition_by=ConversationMessage.session_id)
+            .label("message_count"),
+            func.row_number()
+            .over(
+                partition_by=ConversationMessage.session_id,
+                order_by=(
+                    ConversationMessage.created_at.desc(),
+                    ConversationMessage.id.desc(),
+                ),
+            )
+            .label("rn"),
+        )
+        .filter(ConversationMessage.user_id == g.current_user_id)
+        .subquery()
+    )
+    rows = (
+        db.session.query(ranked)
+        .filter(ranked.c.rn == 1)
+        .order_by(ranked.c.last_at.desc())
         .all()
     )
-
-    sessions = {}
-    for message in messages:
-        session = sessions.setdefault(
-            message.session_id,
+    return jsonify({
+        "items": [
             {
-                "session_id": message.session_id,
-                "last_message": None,
-                "last_role": None,
-                "last_at": None,
-                "message_count": 0,
-            },
-        )
-        session["message_count"] += 1
-        if session["last_at"] is None:
-            session["last_message"] = message.content
-            session["last_role"] = message.role
-            session["last_at"] = _dt(message.created_at)
-
-    return jsonify({"items": list(sessions.values())})
+                "session_id": row.session_id,
+                "last_message": row.last_message,
+                "last_role": row.last_role,
+                "last_at": _dt(row.last_at),
+                "message_count": row.message_count,
+            }
+            for row in rows
+        ]
+    })
 
 
 def _profile_payload(user):
@@ -197,7 +219,12 @@ def _profile_payload(user):
 @limiter.limit("60 per minute")
 def get_profile():
     """获取当前登录用户的个人资料。"""
-    return jsonify(_profile_payload(g.current_user))
+    user_id = g.current_user_id
+    data = _profile_payload(g.current_user)
+    data["post_count"] = count_user_posts(user_id)
+    data["friend_count"] = count_friends(user_id)
+    data["like_received_count"] = count_likes_received(user_id)
+    return jsonify(data)
 
 
 @profile_bp.route("/profile", methods=["PUT"])

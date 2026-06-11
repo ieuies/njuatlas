@@ -28,6 +28,7 @@ from app.services.social import (
     notification_payload,
     should_show_notification,
     public_user_brief,
+    unread_counts as fetch_unread_counts,
     unread_dm_count,
     unread_notification_count,
 )
@@ -360,10 +361,11 @@ def list_notifications():
 @jwt_required
 @limiter.limit("120 per minute")
 def unread_counts():
+    notifications, messages = fetch_unread_counts(g.current_user_id)
     return jsonify({
-        "notifications": unread_notification_count(g.current_user_id),
-        "messages": unread_dm_count(g.current_user_id),
-        "total": unread_notification_count(g.current_user_id) + unread_dm_count(g.current_user_id),
+        "notifications": notifications,
+        "messages": messages,
+        "total": notifications + messages,
     })
 
 

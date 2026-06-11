@@ -219,6 +219,27 @@ def unread_dm_count(user_id):
     return DirectMessage.query.filter_by(receiver_id=user_id, is_read=False).count()
 
 
+def unread_counts(user_id):
+    """一次往返返回通知与私信未读数。"""
+    from sqlalchemy import text
+
+    row = db.session.execute(
+        text("""
+            SELECT
+                (SELECT COUNT(*) FROM notifications
+                 WHERE user_id = :uid AND NOT is_read) AS notifications,
+                (SELECT COUNT(*) FROM direct_messages
+                 WHERE receiver_id = :uid AND NOT is_read) AS messages
+        """),
+        {"uid": user_id},
+    ).first()
+    if not row:
+        return 0, 0
+    notifications = int(row[0] or 0)
+    messages = int(row[1] or 0)
+    return notifications, messages
+
+
 def conversation_summaries(user_id):
     """按对方用户聚合最近一条私信（固定次数 SQL，不随历史消息总量增长）。"""
     peer_col = case(
