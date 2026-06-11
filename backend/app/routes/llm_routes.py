@@ -3,6 +3,7 @@ import re
 
 from flask import Blueprint, Response, current_app, g, jsonify, request, stream_with_context
 from sqlalchemy import or_
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.auth_utils import jwt_required
@@ -193,6 +194,10 @@ def _sanitize_candidate_for_api(item):
     return one
 
 
+def _public_candidates(items):
+    return [_sanitize_candidate_for_api(item) for item in (items or [])]
+
+
 def _sse_event(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
@@ -251,7 +256,11 @@ def _emit_chat_recommend_response(
                     user_id=user_id,
                     error=str(exc),
                 )
-                yield _sse_event("error", {"message": "AI 回复失败"})
+                if isinstance(exc, SQLAlchemyError):
+                    message = "数据库操作失败。"
+                else:
+                    message = "AI 回复失败"
+                yield _sse_event("error", {"message": message})
             return
 
         text = reply or ""
@@ -1008,9 +1017,6 @@ def chat_recommend():
                 relaxed_candidates = [c for c in worth_filtered if c.get("match_level") == "relaxed"]
 
         candidates = (strict_candidates + relaxed_candidates)[:5]
-
-        def _public_candidates(items):
-            return [_sanitize_candidate_for_api(item) for item in items]
 
         if candidates:
             if has_strict_constraint:

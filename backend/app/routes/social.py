@@ -21,6 +21,8 @@ from app.services.social import (
     count_user_posts,
     create_notification,
     friendship_status_for,
+    friendship_status_map,
+    friendship_statuses_by_ids,
     get_friendship_between,
     list_friend_ids,
     notification_payload,
@@ -67,21 +69,14 @@ def search_users():
         .limit(20)
         .all()
     )
+    candidate_ids = [u.id for u in rows]
+    relation_map = friendship_status_map(g.current_user_id, candidate_ids)
     items = []
     for u in rows:
         brief = public_user_brief(u)
-        relation = get_friendship_between(g.current_user_id, u.id)
-        status = "none"
-        if relation:
-            if relation.status == "accepted":
-                status = "friends"
-            elif relation.status == "pending":
-                status = (
-                    "pending_sent"
-                    if relation.requester_id == g.current_user_id
-                    else "pending_received"
-                )
-                brief["friendship_request_id"] = relation.id
+        status, relation = relation_map.get(u.id, ("none", None))
+        if relation and relation.status == "pending":
+            brief["friendship_request_id"] = relation.id
         brief["friendship_status"] = status
         items.append(brief)
     return jsonify({"items": items})
@@ -287,7 +282,9 @@ def get_messages(peer_id):
         sender_id=peer_id, receiver_id=g.current_user_id, is_read=False
     ).update({"is_read": True})
     db.session.commit()
+    peer_user = User.query.get(peer_id)
     return jsonify({
+        "peer": public_user_brief(peer_user) if peer_user else {"id": peer_id, "username": "用户"},
         "items": [
             {
                 "id": m.id,
@@ -346,9 +343,13 @@ def list_notifications():
     )
     total = q.count()
     rows = q.offset((page - 1) * page_size).limit(page_size).all()
-    visible = [n for n in rows if should_show_notification(n)]
+    friendship_ids = [
+        n.friendship_id for n in rows if n.type == "friend_request" and n.friendship_id
+    ]
+    friendship_status_cache = friendship_statuses_by_ids(friendship_ids)
+    visible = [n for n in rows if should_show_notification(n, friendship_status_cache)]
     return jsonify({
-        "items": [notification_payload(n) for n in visible],
+        "items": [notification_payload(n, friendship_status_cache) for n in visible],
         "page": page,
         "page_size": page_size,
         "total": total,

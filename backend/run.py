@@ -18,4 +18,4 @@ if __name__ == "__main__":
         # before Gunicorn so schema changes are explicit and repeatable.
         initialize_database()
         print("Database tables are ready.")
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5000)

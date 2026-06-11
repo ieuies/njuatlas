@@ -369,6 +369,8 @@ class Friendship(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("requester_id", "addressee_id", name="_friendship_pair_uc"),
+        db.Index("ix_friendships_status_requester", "status", "requester_id"),
+        db.Index("ix_friendships_status_addressee", "status", "addressee_id"),
     )
 
 
@@ -386,6 +388,11 @@ class DirectMessage(db.Model):
     sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
     receiver = db.relationship("User", foreign_keys=[receiver_id], lazy="joined")
 
+    __table_args__ = (
+        db.Index("ix_dm_receiver_read", "receiver_id", "is_read"),
+        db.Index("ix_dm_thread", "sender_id", "receiver_id", "created_at"),
+    )
+
 
 class Notification(db.Model):
     """互动通知：赞、评论、好友请求、好友接受等。"""
@@ -402,3 +409,7 @@ class Notification(db.Model):
 
     actor = db.relationship("User", foreign_keys=[actor_id], lazy="joined")
     post = db.relationship("EventPost", lazy="joined")
+
+    __table_args__ = (
+        db.Index("ix_notifications_user_read", "user_id", "is_read"),
+    )

@@ -1,6 +1,6 @@
 """社交层业务逻辑：好友、私信、通知、公开用户资料。"""
 import json
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 
 from app import db
 from app.models import (
@@ -73,6 +73,40 @@ def get_friendship_between(user_a, user_b):
     ).first()
 
 
+def friendship_status_map(viewer_id, target_ids):
+    """批量查询 viewer 与多个 target 的好友关系。返回 target_id -> (status, row|None)。"""
+    if not target_ids:
+        return {}
+    unique_ids = list(set(target_ids))
+    rows = Friendship.query.filter(
+        or_(
+            and_(Friendship.requester_id == viewer_id, Friendship.addressee_id.in_(unique_ids)),
+            and_(Friendship.addressee_id == viewer_id, Friendship.requester_id.in_(unique_ids)),
+        )
+    ).all()
+    result = {}
+    for row in rows:
+        other_id = row.addressee_id if row.requester_id == viewer_id else row.requester_id
+        if other_id not in unique_ids:
+            continue
+        if row.status == "accepted":
+            result[other_id] = ("friends", row)
+        elif row.status == "pending":
+            status = "pending_sent" if row.requester_id == viewer_id else "pending_received"
+            result[other_id] = (status, row)
+        else:
+            result[other_id] = ("none", row)
+    return result
+
+
+def friendship_statuses_by_ids(friendship_ids):
+    """批量返回 friendship_id -> status。"""
+    if not friendship_ids:
+        return {}
+    rows = Friendship.query.filter(Friendship.id.in_(friendship_ids)).all()
+    return {row.id: row.status for row in rows}
+
+
 def are_friends(user_a, user_b):
     row = get_friendship_between(user_a, user_b)
     return row is not None and row.status == "accepted"
@@ -143,15 +177,20 @@ def friend_request_notification_status(friendship_id):
     return row.status
 
 
-def should_show_notification(note):
+def should_show_notification(note, friendship_status_cache=None):
     """已处理的好友请求通知不再出现在互动列表。"""
     if note.type != "friend_request" or not note.friendship_id:
         return True
-    status = friend_request_notification_status(note.friendship_id)
+    if friendship_status_cache is not None:
+        status = friendship_status_cache.get(note.friendship_id)
+        if status is None:
+            status = "gone"
+    else:
+        status = friend_request_notification_status(note.friendship_id)
     return status == "pending"
 
 
-def notification_payload(note):
+def notification_payload(note, friendship_status_cache=None):
     actor = note.actor
     data = {
         "id": note.id,
@@ -165,7 +204,10 @@ def notification_payload(note):
     if note.post:
         data["post_title"] = note.post.title
     if note.type == "friend_request" and note.friendship_id:
-        data["friendship_status"] = friend_request_notification_status(note.friendship_id)
+        if friendship_status_cache is not None:
+            data["friendship_status"] = friendship_status_cache.get(note.friendship_id, "gone")
+        else:
+            data["friendship_status"] = friend_request_notification_status(note.friendship_id)
     return data
 
 
@@ -178,28 +220,66 @@ def unread_dm_count(user_id):
 
 
 def conversation_summaries(user_id):
-    """按对方用户聚合最近一条私信。"""
-    msgs = (
-        DirectMessage.query.filter(
-            or_(DirectMessage.sender_id == user_id, DirectMessage.receiver_id == user_id)
+    """按对方用户聚合最近一条私信（固定次数 SQL，不随历史消息总量增长）。"""
+    peer_col = case(
+        (DirectMessage.sender_id == user_id, DirectMessage.receiver_id),
+        else_=DirectMessage.sender_id,
+    )
+
+    ranked_subq = (
+        db.session.query(
+            DirectMessage.content.label("content"),
+            DirectMessage.created_at.label("created_at"),
+            DirectMessage.sender_id.label("sender_id"),
+            DirectMessage.receiver_id.label("receiver_id"),
+            peer_col.label("peer_id"),
+            func.row_number()
+            .over(partition_by=peer_col, order_by=DirectMessage.created_at.desc())
+            .label("rn"),
         )
-        .order_by(DirectMessage.created_at.desc())
+        .filter(
+            or_(
+                DirectMessage.sender_id == user_id,
+                DirectMessage.receiver_id == user_id,
+            )
+        )
+        .subquery()
+    )
+
+    latest_rows = (
+        db.session.query(ranked_subq)
+        .filter(ranked_subq.c.rn == 1)
         .all()
     )
-    seen = {}
-    for msg in msgs:
-        peer_id = msg.receiver_id if msg.sender_id == user_id else msg.sender_id
-        if peer_id in seen:
+
+    unread_rows = (
+        db.session.query(
+            DirectMessage.sender_id,
+            func.count(DirectMessage.id),
+        )
+        .filter_by(receiver_id=user_id, is_read=False)
+        .group_by(DirectMessage.sender_id)
+        .all()
+    )
+    unread_map = {sender_id: count for sender_id, count in unread_rows}
+
+    friend_ids = set(list_friend_ids(user_id))
+    peer_ids = {row.peer_id for row in latest_rows if row.peer_id in friend_ids}
+    users = User.query.filter(User.id.in_(peer_ids)).all() if peer_ids else []
+    user_map = {u.id: u for u in users}
+
+    summaries = []
+    for row in latest_rows:
+        if row.peer_id not in friend_ids:
             continue
-        peer = User.query.get(peer_id)
-        unread = DirectMessage.query.filter_by(
-            sender_id=peer_id, receiver_id=user_id, is_read=False
-        ).count()
-        seen[peer_id] = {
-            "peer_id": peer_id,
-            "peer": public_user_brief(peer) if peer else {"id": peer_id, "username": "用户"},
-            "last_message": msg.content,
-            "last_at": _dt(msg.created_at),
-            "unread_count": unread,
-        }
-    return list(seen.values())
+        peer = user_map.get(row.peer_id)
+        summaries.append({
+            "peer_id": row.peer_id,
+            "peer": public_user_brief(peer) if peer else {"id": row.peer_id, "username": "用户"},
+            "last_message": row.content,
+            "last_at": _dt(row.created_at),
+            "unread_count": unread_map.get(row.peer_id, 0),
+        })
+
+    summaries.sort(key=lambda item: item["last_at"] or "", reverse=True)
+    return summaries
