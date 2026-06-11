@@ -122,6 +122,24 @@
     -webkit-text-fill-color: currentColor;
     -webkit-text-stroke: 0;
 }
+.locale-toggle-btn {
+    height: 44px;
+    padding: 0 10px;
+    border: none;
+    border-radius: var(--btn-radius);
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    position: relative;
+    top: 2px;
+}
+.locale-toggle-btn:hover {
+    color: var(--btn-primary-bg);
+}
 .page-title {
     color: var(--atlas-muted);
     font-size: 0.92rem;
@@ -370,6 +388,12 @@
 }
 :root[data-theme="dark"] .theme-toggle-btn:hover {
     border-color: var(--btn-primary-bg);
+}
+:root[data-theme="dark"] .locale-toggle-btn {
+    color: var(--text-primary);
+}
+:root[data-theme="dark"] .locale-toggle-btn:hover {
+    color: var(--btn-primary-bg);
 }
 :root[data-theme="dark"] .page-title {
     color: var(--atlas-muted);

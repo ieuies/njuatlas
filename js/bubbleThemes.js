@@ -63,6 +63,8 @@ export function resolveBubbleTheme(styleId) {
 
 export function bubbleThemeCssVars(styleId) {
     const theme = resolveBubbleTheme(styleId);
+    const bg = theme.bg || 'transparent';
+    const isGradient = typeof bg === 'string' && /gradient/i.test(bg);
     return [
         `--bubble-color:${theme.color}`,
         `--bubble-border:${theme.border}`,
@@ -81,6 +83,7 @@ export function bubbleThemeCssVars(styleId) {
         `--bubble-nine-width:${theme.nineWidth || '1'}`,
         `--bubble-nine-outset:${theme.nineOutset || '0'}`,
         `--bubble-nine-repeat:${theme.nineRepeat || 'stretch'}`,
-        `--bubble-bg:${theme.bg || 'transparent'}`,
+        `--bubble-bg-color:${isGradient ? 'transparent' : bg}`,
+        `--bubble-bg-gradient:${isGradient ? bg : 'none'}`,
     ].join(';');
 }

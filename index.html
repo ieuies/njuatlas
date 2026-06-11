@@ -24,7 +24,13 @@
     <script> window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {}; </script>
     <!-- 首页分层入场：首屏绘制前标记，避免未动画层闪一下 -->
     <script>
-    (function () { document.documentElement.classList.add('home-intro-pending'); })();
+    (function () {
+        document.documentElement.classList.add('home-intro-pending');
+        try {
+            var l = localStorage.getItem('njuatlas-locale');
+            if (l === 'en') document.documentElement.lang = 'en';
+        } catch (e) {}
+    })();
     </script>
     <script type="text/javascript">
         window._AMapSecurityConfig = { securityJsCode: "367ebc1de103bfdca104452e48447318" };
@@ -41,8 +47,9 @@
         <!-- 顶部栏 -->
         <header class="top-bar">
             <div class="top-bar-left">
-                <button class="brand-mark" data-page="home" type="button" aria-label="NJUATLAS 首页"><span class="brand-logo" aria-hidden="true"></span></button>
-                <button class="theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="切换夜间模式"><i class="fas fa-moon"></i></button>
+                <button class="brand-mark" data-page="home" type="button" data-i18n-aria="brand.home" aria-label="NJUATLAS 首页"><span class="brand-logo" aria-hidden="true"></span></button>
+                <button class="locale-toggle-btn" id="localeToggleBtn" type="button" data-i18n-title="lang.label" title="语言">English</button>
+                <button class="theme-toggle-btn" id="themeToggleBtn" type="button" data-i18n-aria="theme.dark" aria-label="切换夜间模式"><i class="fas fa-moon"></i></button>
                 <span class="page-title" id="pageTitle">首页</span>
             </div>
             <div class="top-bar-right">
@@ -55,11 +62,11 @@
                     <button class="desktop-nav-item" data-page="profile" type="button">个人</button>
                 </nav>
                 <div id="navGuestTop" class="topbar-guest">
-                    <button id="showLoginBtn" class="login-round-btn">登录</button>
+                    <button id="showLoginBtn" class="login-round-btn" data-i18n="common.login">登录</button>
                 </div>
                 <div id="navUserTop" class="topbar-user" style="display:none;">
                     <span id="usernameSpan" class="topbar-username"></span>
-                    <button id="logoutBtn" class="logout-btn" title="退出登录"><i class="fas fa-right-from-bracket"></i></button>
+                    <button id="logoutBtn" class="logout-btn" data-i18n-title="common.logout" title="退出登录"><i class="fas fa-right-from-bracket"></i></button>
                 </div>
             </div>
         </header>
@@ -75,10 +82,10 @@
                         <div class="home-brand-inner">
                             <p class="home-brand-kicker">NANJING UNIVERSITY</p>
                             <h1 class="home-brand-title"><span class="home-brand-logo" role="img" aria-label="NJUATLAS"></span></h1>
-                            <p class="home-brand-sub">南大图谱 · 南朋友搭子平台</p>
+                            <p class="home-brand-sub" data-i18n="home.subtitle">南大图谱 · 南朋友搭子平台</p>
                             <div class="home-brand-actions">
-                                <button class="home-brand-btn primary" data-page="partner" type="button">开始找搭子</button>
-                                <button class="home-brand-btn secondary" data-page="guide" type="button">看看周边</button>
+                                <button class="home-brand-btn primary" data-page="partner" type="button" data-i18n="home.btnPartner">开始找搭子</button>
+                                <button class="home-brand-btn secondary" data-page="guide" type="button" data-i18n="home.btnGuide">看看周边</button>
                             </div>
                         </div>
                     </div>
@@ -87,10 +94,10 @@
                     </div>
                 </div>
                 <div class="home-features home-intro-layer">
-                    <div class="home-feat-card" data-page="partner"><span class="home-feat-num">01</span><h3>找搭子</h3><p>按分类浏览饭搭子、运动搭子、学习搭子、其他等，一键加入感兴趣的活动。</p></div>
-                    <div class="home-feat-card" data-page="guide"><span class="home-feat-num">02</span><h3>吃喝玩乐</h3><p>收录南大周边餐饮、娱乐、学习场所，支持分类筛选与 AI 推荐。</p></div>
-                    <div class="home-feat-card" data-page="profile"><span class="home-feat-num">03</span><h3>个人空间</h3><p>管理个人资料，查看发布的组局、评论、收藏与活动记录。</p></div>
-                    <div class="home-feat-card" data-page="fullMap"><span class="home-feat-num">04</span><h3>组局地图</h3><p>高德地图展示附近组局分布，点击标记查看详情并快速参与。</p></div>
+                    <div class="home-feat-card" data-page="partner"><span class="home-feat-num">01</span><h3 data-i18n="home.feat1Title">找搭子</h3><p data-i18n="home.feat1Desc">按分类浏览饭搭子、运动搭子、学习搭子等，一键加入感兴趣的活动。</p></div>
+                    <div class="home-feat-card" data-page="guide"><span class="home-feat-num">02</span><h3 data-i18n="home.feat2Title">吃喝玩乐</h3><p data-i18n="home.feat2Desc">收录南大周边餐饮、娱乐、学习场所，支持分类筛选与 AI 推荐。</p></div>
+                    <div class="home-feat-card" data-page="profile"><span class="home-feat-num">03</span><h3 data-i18n="home.feat3Title">个人空间</h3><p data-i18n="home.feat3Desc">管理个人资料，查看发布的组局、评论、收藏与活动记录。</p></div>
+                    <div class="home-feat-card" data-page="fullMap"><span class="home-feat-num">04</span><h3 data-i18n="home.feat4Title">组局地图</h3><p data-i18n="home.feat4Desc">高德地图展示附近组局分布，点击标记查看详情并快速参与。</p></div>
                 </div>
             </div>
 
@@ -99,15 +106,15 @@
                 <div class="ai-container">
                     <aside class="ai-sidebar" id="aiSidebar">
                         <div class="ai-sidebar-header">
-                            <button class="ai-new-chat-btn" id="aiNewChatBtn"><i class="fas fa-plus"></i> 新对话</button>
+                            <button class="ai-new-chat-btn" id="aiNewChatBtn"><i class="fas fa-plus"></i> <span data-i18n="ai.newChat">新对话</span></button>
                             <div class="ai-manage-row">
-                                <button class="ai-side-mini-btn" id="aiBatchToggleBtn" type="button"><i class="fas fa-list-check"></i> 批量管理</button>
-                                <button class="ai-side-mini-btn danger" id="aiBatchDeleteBtn" type="button" style="display:none;" disabled><i class="fas fa-trash-can"></i> 删除(0)</button>
-                                <button class="ai-side-mini-btn" id="aiBatchCancelBtn" type="button" style="display:none;">取消</button>
+                                <button class="ai-side-mini-btn" id="aiBatchToggleBtn" type="button"><i class="fas fa-list-check"></i> <span data-i18n="ai.batchManage">批量管理</span></button>
+                                <button class="ai-side-mini-btn danger" id="aiBatchDeleteBtn" type="button" style="display:none;" disabled><i class="fas fa-trash-can"></i> <span data-i18n="ai.batchDelete">删除</span>(0)</button>
+                                <button class="ai-side-mini-btn" id="aiBatchCancelBtn" type="button" style="display:none;" data-i18n="ai.batchCancel">取消</button>
                             </div>
                         </div>
                         <button class="ai-sidebar-toggle" id="aiSidebarToggle" aria-label="折叠侧栏"><i class="fas fa-chevron-left"></i></button>
-                        <div class="ai-conversation-list" id="aiConversationList"><div class="ai-conv-loading">加载历史对话...</div></div>
+                        <div class="ai-conversation-list" id="aiConversationList"><div class="ai-conv-loading" data-i18n="ai.loadingHistory">加载历史对话...</div></div>
                     </aside>
                     <div class="ai-chat-main">
                         <button class="ai-sidebar-expand" id="aiSidebarExpand" style="display: none;"><i class="fas fa-list"></i></button>
@@ -115,16 +122,16 @@
                             <div class="ai-chat-messages" id="chatMessages">
                                 <div class="ai-welcome" id="aiWelcome">
                                     <div class="ai-welcome-avatar"><img src="image/aihelper.png" alt="AI助手"></div>
-                                    <h3>你好，我是南大图谱 AI 助手</h3>
-                                    <p>可以问我南大周边吃喝玩乐的问题~</p>
-                                    <p class="ai-welcome-hint">试试点击下方推荐问题，或直接输入</p>
+                                    <h3 data-i18n="ai.welcomeTitle">你好，我是南大图谱 AI 助手</h3>
+                                    <p data-i18n="ai.welcomeDesc">可以问我南大周边吃喝玩乐的问题~</p>
+                                    <p class="ai-welcome-hint" data-i18n="ai.welcomeHint">试试点击下方推荐问题，或直接输入</p>
                                 </div>
                             </div>
                             <div class="ai-quick-row" id="quickQuestions"></div>
                             <div class="ai-input-row">
                                 <div class="ai-input-wrapper">
-                                    <input type="text" id="chatInput" placeholder="输入你的问题，如「南大附近有什么好吃的」" maxlength="500" autocomplete="off">
-                                    <button id="sendChatBtn" class="ai-send-btn" type="button" title="发送"><i class="fas fa-paper-plane"></i></button>
+                                    <input type="text" id="chatInput" data-i18n-placeholder="ai.inputPlaceholder" placeholder="输入你的问题，如「南大附近有什么好吃的」" maxlength="500" autocomplete="off">
+                                    <button id="sendChatBtn" class="ai-send-btn" type="button" data-i18n-title="ai.send" title="发送"><i class="fas fa-paper-plane"></i></button>
                                 </div>
                             </div>
                         </div>
@@ -137,8 +144,8 @@
                 <div class="partner-search-bar" id="partnerSearchBar">
                     <label class="partner-search-input-wrap" for="partnerSearchInput">
                         <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
-                        <input type="search" id="partnerSearchInput" placeholder="搜索搭子帖子：标题、地点、标签…" autocomplete="off" maxlength="50" enterkeyhint="search">
-                        <button type="button" class="partner-search-clear" id="partnerSearchClear" aria-label="清除搜索" hidden>
+                        <input type="search" id="partnerSearchInput" data-i18n-placeholder="partner.searchPlaceholder" placeholder="搜索搭子帖子：标题、地点、标签…" autocomplete="off" maxlength="50" enterkeyhint="search">
+                        <button type="button" class="partner-search-clear" id="partnerSearchClear" data-i18n-aria="partner.searchClear" aria-label="清除搜索" hidden>
                             <i class="fas fa-times" aria-hidden="true"></i>
                         </button>
                     </label>
@@ -155,36 +162,36 @@
                     <span data-category="摄影搭子" class="filter-chip"><i class="fas fa-camera" aria-hidden="true"></i> 摄影搭子</span>
                     <span data-category="其他" class="filter-chip"><i class="fas fa-ellipsis" aria-hidden="true"></i> 其他</span>
                 </div>
-                <button class="map-fab-mobile" id="mapFabMobile" title="查看地图"><i class="fas fa-map"></i></button>
+                <button class="map-fab-mobile" id="mapFabMobile" data-i18n-title="partner.viewMap" title="查看地图"><i class="fas fa-map"></i></button>
                 <div class="map-preview-card" id="mapPreviewCard">
                     <div class="map-preview-header">
-                        <span class="map-preview-title"><i class="fas fa-location-dot"></i> 附近组局</span>
-                        <button class="map-expand-btn" id="mapExpandBtn">全屏地图 <i class="fas fa-expand"></i></button>
+                        <span class="map-preview-title"><i class="fas fa-location-dot"></i> <span data-i18n="partner.nearbyMap">附近组局</span></span>
+                        <button class="map-expand-btn" id="mapExpandBtn"><span data-i18n="partner.fullMap">全屏地图</span> <i class="fas fa-expand"></i></button>
                     </div>
                     <div class="map-preview-body" id="mapPreviewBody">
                         <div class="map-container" id="previewMap"></div>
                     </div>
                     <div class="map-legend" id="mapLegend">
-                        <span class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> 饭搭子</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#10B981;"></span> 运动</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#7C3AED;"></span> 游戏</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#EC4899;"></span> 电影</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#3B82F6;"></span> 学习</span>
-                        <span class="legend-item"><span class="legend-dot" style="background:#6B7280;"></span> 其他</span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> <span data-i18n="partner.legend.food">饭搭子</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#10B981;"></span> <span data-i18n="partner.legend.sport">运动</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#7C3AED;"></span> <span data-i18n="partner.legend.game">游戏</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#EC4899;"></span> <span data-i18n="partner.legend.movie">电影</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#3B82F6;"></span> <span data-i18n="partner.legend.study">学习</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background:#6B7280;"></span> <span data-i18n="partner.legend.other">其他</span></span>
                     </div>
                 </div>
                 <div class="partner-waterfall" id="partnerWaterfall"></div>
-                <button class="fab-create-group" id="fabCreateGroup" title="发起组局"><i class="fas fa-plus"></i><span>发起组局</span></button>
+                <button class="fab-create-group" id="fabCreateGroup" data-i18n-title="partner.createGroup" title="发起组局"><i class="fas fa-plus"></i><span data-i18n="partner.createGroup">发起组局</span></button>
             </div>
 
             <!-- 指南页面 -->
             <div id="guidePage" class="page">
                 <div class="guide-header">
                     <div class="guide-header-left">
-                        <h2><i class="fas fa-compass"></i> 南大周边 · 吃喝玩乐</h2>
-                        <p class="guide-subtitle">发现校园附近的宝藏店铺与好去处</p>
+                        <h2><i class="fas fa-compass"></i> <span data-i18n="guide.title">南大周边 · 吃喝玩乐</span></h2>
+                        <p class="guide-subtitle" data-i18n="guide.subtitle">发现校园附近的宝藏店铺与好去处</p>
                     </div>
-                    <button class="guide-refresh-btn" id="refreshGuideBtn" title="刷新数据"><i class="fas fa-arrows-rotate"></i></button>
+                    <button class="guide-refresh-btn" id="refreshGuideBtn" data-i18n-title="guide.refresh" title="刷新数据"><i class="fas fa-arrows-rotate"></i></button>
                 </div>
                 <div class="guide-filter" id="guideCampusFilter">
                     <button data-guide-campus="all" class="guide-chip active">全部</button>
@@ -202,7 +209,7 @@
                     <button data-guide-cat="购物商圈" class="guide-chip"><i class="fas fa-store" aria-hidden="true"></i> 购物商圈</button>
                     <button data-guide-cat="景点公园" class="guide-chip"><i class="fas fa-tree" aria-hidden="true"></i> 景点公园</button>
                 </div>
-                <div id="guideGrid" class="guide-grid"><div class="guide-loading">加载精彩推荐中...</div></div>
+                <div id="guideGrid" class="guide-grid"><div class="guide-loading" data-i18n="guide.loading">加载精彩推荐中...</div></div>
             </div>
 
             <!-- 个人中心页面 -->
@@ -224,45 +231,45 @@
                             </div>
                             <div class="profile-header-info">
                                 <div class="profile-name-row">
-                                    <h2 id="profileUsername">个人中心</h2>
-                                    <button id="editProfileBtn" class="profile-edit-btn" type="button" title="编辑资料"><i class="fas fa-pen"></i> 编辑资料</button>
+                                    <h2 id="profileUsername" data-i18n="profile.center">个人中心</h2>
+                                    <button id="editProfileBtn" class="profile-edit-btn" type="button" data-i18n-title="profile.edit" title="编辑资料"><i class="fas fa-pen"></i> <span data-i18n="profile.edit">编辑资料</span></button>
                                 </div>
                                 <div class="profile-social-actions" id="profileSocialActions" style="display:none;"></div>
-                                <p class="profile-bio" id="profileBio">这个人很懒，什么都没写...</p>
+                                <p class="profile-bio" id="profileBio" data-i18n="profile.defaultBio">这个人很懒，什么都没写...</p>
                                 <div class="profile-tags-wrapper" id="profileTags"></div>
                                 <p class="profile-email-line" id="profileEmailLine"></p>
                                 <p class="profile-campus" id="profileCampus"></p>
                                 <div class="profile-status-row">
                                     <span id="profileEmailVerified" class="profile-status"></span>
-                                    <button id="sendVerifyEmailBtn" class="small-btn" style="display:none;">验证邮箱</button>
+                                    <button id="sendVerifyEmailBtn" class="small-btn" style="display:none;" data-i18n="profile.verifyEmail">验证邮箱</button>
                                 </div>
                             </div>
                         </div>
                         <div class="profile-stats-row" id="profileStatsRow">
                             <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看发布">
-                                <span class="profile-stat-num" id="postCount">0</span><span class="profile-stat-label">发布</span>
+                                <span class="profile-stat-num" id="postCount">0</span><span class="profile-stat-label" data-i18n="profile.statPosts">发布</span>
                             </button>
                             <button type="button" class="profile-stat-item profile-stat-friends" data-profile-tab="friends" aria-label="查看好友">
-                                <span class="profile-stat-num" id="friendCount">0</span><span class="profile-stat-label">好友</span>
+                                <span class="profile-stat-num" id="friendCount">0</span><span class="profile-stat-label" data-i18n="profile.statFriends">好友</span>
                             </button>
                             <button type="button" class="profile-stat-item" data-profile-tab="posts" aria-label="查看获赞">
-                                <span class="profile-stat-num" id="likeReceivedCount">0</span><span class="profile-stat-label">获赞</span>
+                                <span class="profile-stat-num" id="likeReceivedCount">0</span><span class="profile-stat-label" data-i18n="profile.statLikes">获赞</span>
                             </button>
                             <button type="button" class="profile-stat-item profile-stat-self" data-profile-tab="comments" aria-label="查看评论">
-                                <span class="profile-stat-num" id="commentMadeCount">0</span><span class="profile-stat-label">评论</span>
+                                <span class="profile-stat-num" id="commentMadeCount">0</span><span class="profile-stat-label" data-i18n="profile.statComments">评论</span>
                             </button>
                             <button type="button" class="profile-stat-item profile-stat-self" data-profile-tab="favorites" aria-label="查看收藏">
-                                <span class="profile-stat-num" id="favoriteCount2">0</span><span class="profile-stat-label">收藏</span>
+                                <span class="profile-stat-num" id="favoriteCount2">0</span><span class="profile-stat-label" data-i18n="profile.statFavorites">收藏</span>
                             </button>
                         </div>
                     </section>
                     <nav class="profile-tabs" id="profileTabs">
-                        <button class="profile-tab active" data-profile-tab="posts"><i class="fas fa-file-lines"></i> 我发布的</button>
-                        <button class="profile-tab" data-profile-tab="comments"><i class="fas fa-comment"></i> 我的评论</button>
-                        <button class="profile-tab" data-profile-tab="favorites"><i class="fas fa-heart"></i> 我的收藏</button>
-                        <button class="profile-tab" data-profile-tab="activities"><i class="fas fa-calendar"></i> 我的活动</button>
+                        <button class="profile-tab active" data-profile-tab="posts"><i class="fas fa-file-lines"></i> <span data-i18n="profile.tabPosts">我发布的</span></button>
+                        <button class="profile-tab" data-profile-tab="comments"><i class="fas fa-comment"></i> <span data-i18n="profile.tabComments">我的评论</span></button>
+                        <button class="profile-tab" data-profile-tab="favorites"><i class="fas fa-heart"></i> <span data-i18n="profile.tabFavorites">我的收藏</span></button>
+                        <button class="profile-tab" data-profile-tab="activities"><i class="fas fa-calendar"></i> <span data-i18n="profile.tabActivities">我的活动</span></button>
                     </nav>
-                    <div class="profile-tab-content" id="profileTabContent"><div class="profile-loading">加载中...</div></div>
+                    <div class="profile-tab-content" id="profileTabContent"><div class="profile-loading" data-i18n="common.loading">加载中...</div></div>
                 </div>
             </div>
 
@@ -270,13 +277,13 @@
             <div id="messagesPage" class="page">
                 <div class="msg-shell">
                     <div class="msg-head">
-                        <h2>消息</h2>
-                        <p>和好友私聊、管理你的好友关系</p>
+                        <h2 data-i18n="messages.title">消息</h2>
+                        <p data-i18n="messages.subtitle">和好友私聊、管理你的好友关系</p>
                     </div>
                     <div class="msg-tabs">
-                        <button class="msg-tab active" data-tab="chats" type="button"><i class="fas fa-comment-dots"></i> 私信</button>
-                        <button class="msg-tab" data-tab="friends" type="button"><i class="fas fa-user-group"></i> 好友</button>
-                        <button class="msg-tab" data-tab="interact" type="button"><i class="fas fa-bell"></i> 互动</button>
+                        <button class="msg-tab active" data-tab="chats" type="button"><i class="fas fa-comment-dots"></i> <span data-i18n="messages.tabChats">私信</span></button>
+                        <button class="msg-tab" data-tab="friends" type="button"><i class="fas fa-user-group"></i> <span data-i18n="messages.tabFriends">好友</span></button>
+                        <button class="msg-tab" data-tab="interact" type="button"><i class="fas fa-bell"></i> <span data-i18n="messages.tabInteract">互动</span></button>
                     </div>
                     <div id="msgChatsView" class="msg-view"></div>
                     <div id="msgFriendsView" class="msg-view" style="display:none;"></div>
@@ -286,8 +293,8 @@
 
             <!-- 各种模态框 -->
             <div id="guideDetailModal" class="modal"><div class="modal-card guide-detail-card"><button class="modal-close-btn" id="closeGuideDetailBtn"><i class="fas fa-times"></i></button><img id="guideDetailImg" class="guide-detail-img" src="" alt=""><h2 id="guideDetailName"></h2><div class="guide-detail-meta"><span id="guideDetailRating" class="guide-detail-rating"></span><span id="guideDetailPrice"></span><span id="guideDetailType"></span></div><p id="guideDetailDesc"></p><p id="guideDetailAddr" style="color:var(--text-tertiary);font-size:0.85rem;"></p></div></div>
-            <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-pen"></i> 编辑资料</h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg avatar-clickable" id="editAvatarPreview" title="点击更换头像"><i class="fas fa-user"></i></div><span class="avatar-hint">点击头像上传并裁剪（仅自己可见）</span></div><label>用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label>个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label>兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><label>所在校区</label><select id="editCampus"><option value="">不设置</option><option value="鼓楼">鼓楼</option><option value="仙林">仙林</option><option value="浦口">浦口</option><option value="苏州">苏州</option></select><hr style="margin:16px 0;border-color:var(--atlas-line);"><label>修改密码（留空则不修改）</label><input type="password" id="editOldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> 危险操作</p><p class="danger-zone-desc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> 注销账号</button></div></form></div></div>
-            <div id="fullMapPage" class="page"><div class="full-map-header"><button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> 返回</button><h2>附近组局地图</h2></div><div class="full-map-container" id="fullMapContainer"><div class="map-container" id="fullMap"></div></div></div>
+            <div id="editProfileModal" class="modal"><div class="modal-card"><button class="modal-close-btn" id="closeEditProfileBtn"><i class="fas fa-times"></i></button><h2><i class="fas fa-user-pen"></i> <span data-i18n="profile.editTitle">编辑资料</span></h2><form id="editProfileForm"><div class="avatar-edit-row"><div class="profile-avatar-lg avatar-clickable" id="editAvatarPreview" data-i18n-title="profile.avatarHint" title="点击头像上传并裁剪（仅自己可见）"><i class="fas fa-user"></i></div><span class="avatar-hint" data-i18n="profile.avatarHint">点击头像上传并裁剪（仅自己可见）</span></div><label data-i18n="profile.username">用户名</label><input type="text" id="editUsername" placeholder="输入用户名" maxlength="30"><label data-i18n="profile.bio">个人简介</label><textarea id="editBio" rows="3" placeholder="介绍一下自己吧..." maxlength="200"></textarea><label data-i18n="profile.tags">兴趣标签（用逗号分隔）</label><input type="text" id="editTags" placeholder="例如：美食, 运动, 电影" maxlength="100"><label data-i18n="profile.campus">所在校区</label><select id="editCampus"><option value="" data-i18n="profile.campusNone">不设置</option><option value="鼓楼">鼓楼</option><option value="仙林">仙林</option><option value="浦口">浦口</option><option value="苏州">苏州</option></select><hr style="margin:16px 0;border-color:var(--atlas-line);"><label data-i18n="profile.changePassword">修改密码（留空则不修改）</label><input type="password" id="editOldPassword" data-i18n-placeholder="profile.oldPassword" placeholder="当前密码" autocomplete="current-password"><input type="password" id="editNewPassword" data-i18n-placeholder="profile.newPassword" placeholder="新密码，至少 8 位" autocomplete="new-password" style="margin-bottom:16px;"><div class="modal-actions"><button type="submit" id="saveProfileBtn" class="primary-btn" data-i18n="common.save">保存</button><button type="button" id="cancelEditProfileBtn" class="secondary-btn" data-i18n="common.cancel">取消</button></div><hr style="margin:16px 0;border-color:var(--danger);"><div class="danger-zone"><p class="danger-zone-title"><i class="fas fa-exclamation-triangle"></i> <span data-i18n="profile.dangerTitle">危险操作</span></p><p class="danger-zone-desc" data-i18n="profile.dangerDesc">注销账号后，所有数据将被永久删除，无法恢复。</p><input type="password" id="deleteAccountPassword" data-i18n-placeholder="profile.deleteConfirmPwd" placeholder="输入密码以确认注销" autocomplete="current-password"><button type="button" id="deleteAccountBtn" class="danger-btn"><i class="fas fa-trash"></i> <span data-i18n="profile.deleteAccount">注销账号</span></button></div></form></div></div>
+            <div id="fullMapPage" class="page"><div class="full-map-header"><button class="back-btn" id="backFromMapBtn"><i class="fas fa-arrow-left"></i> <span data-i18n="map.back">返回</span></button><h2 data-i18n="map.title">附近组局地图</h2></div><div class="full-map-container" id="fullMapContainer"><div class="map-container" id="fullMap"></div></div></div>
             <div id="cropModal" class="modal" style="display: none;">
                 <div class="modal-card crop-modal-card">
                     <button class="modal-close-btn" id="closeCropModalBtn"><i class="fas fa-times"></i></button>
@@ -319,9 +326,37 @@
 <div id="authModal" class="modal">
     <div class="modal-card">
         <button class="modal-close-btn" id="closeAuthModalBtn"><i class="fas fa-times"></i></button>
-        <div id="loginForm"><h2><i class="fas fa-right-to-bracket"></i> 登录</h2><input type="email" id="loginEmail" placeholder="邮箱"><input type="password" id="loginPassword" placeholder="密码"><button id="doLoginBtn" class="primary-btn" style="width:100%;">登录</button><div class="switch-mode">还没有账号？ <a id="switchToRegister">立即注册</a></div><div class="switch-mode"><a id="forgotPasswordLink">忘记密码？</a></div></div>
-        <div id="registerForm" style="display:none;"><h2><i class="fas fa-user-plus"></i> 注册</h2><input type="text" id="regUsername" placeholder="用户名"><input type="email" id="regEmail" placeholder="邮箱"><div class="code-row"><input type="text" id="regCode" placeholder="邮箱验证码" maxlength="6"><button id="sendRegCodeBtn" class="secondary-btn" type="button">获取验证码</button></div><input type="password" id="regPassword" placeholder="密码 (至少8位)"><button id="doRegisterBtn" class="primary-btn" style="width:100%;">注册</button><div class="switch-mode">已有账号？ <a id="switchToLogin">去登录</a></div></div>
-        <div id="forgotForm" style="display:none;"><h2><i class="fas fa-key"></i> 找回密码</h2><input type="email" id="forgotEmail" placeholder="注册邮箱"><div class="code-row"><input type="text" id="forgotCode" placeholder="邮箱验证码" maxlength="6"><button id="sendForgotCodeBtn" class="secondary-btn" type="button">获取验证码</button></div><input type="password" id="forgotNewPassword" placeholder="新密码 (至少8位)"><button id="doForgotBtn" class="primary-btn" style="width:100%;">重置密码</button><div class="switch-mode"><a id="backToLogin">返回登录</a></div></div>
+        <div id="loginForm">
+            <h2><i class="fas fa-right-to-bracket"></i> <span data-i18n="auth.login">登录</span></h2>
+            <input type="email" id="loginEmail" data-i18n-placeholder="auth.email" placeholder="邮箱">
+            <input type="password" id="loginPassword" data-i18n-placeholder="auth.password" placeholder="密码">
+            <button id="doLoginBtn" class="primary-btn" style="width:100%;" data-i18n="auth.login">登录</button>
+            <div class="switch-mode"><span data-i18n="auth.noAccount">还没有账号？</span> <a id="switchToRegister" data-i18n="auth.registerNow">立即注册</a></div>
+            <div class="switch-mode"><a id="forgotPasswordLink" data-i18n="auth.forgotLink">忘记密码？</a></div>
+        </div>
+        <div id="registerForm" style="display:none;">
+            <h2><i class="fas fa-user-plus"></i> <span data-i18n="auth.register">注册</span></h2>
+            <input type="text" id="regUsername" data-i18n-placeholder="auth.username" placeholder="用户名">
+            <input type="email" id="regEmail" data-i18n-placeholder="auth.email" placeholder="邮箱">
+            <div class="code-row">
+                <input type="text" id="regCode" data-i18n-placeholder="auth.code" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendRegCodeBtn" class="secondary-btn" type="button" data-i18n="auth.getCode">获取验证码</button>
+            </div>
+            <input type="password" id="regPassword" data-i18n-placeholder="auth.passwordMin" placeholder="密码 (至少8位)">
+            <button id="doRegisterBtn" class="primary-btn" style="width:100%;" data-i18n="auth.register">注册</button>
+            <div class="switch-mode"><span data-i18n="auth.hasAccount">已有账号？</span> <a id="switchToLogin" data-i18n="auth.goLogin">去登录</a></div>
+        </div>
+        <div id="forgotForm" style="display:none;">
+            <h2><i class="fas fa-key"></i> <span data-i18n="auth.forgot">找回密码</span></h2>
+            <input type="email" id="forgotEmail" data-i18n-placeholder="auth.email" placeholder="邮箱">
+            <div class="code-row">
+                <input type="text" id="forgotCode" data-i18n-placeholder="auth.code" placeholder="邮箱验证码" maxlength="6">
+                <button id="sendForgotCodeBtn" class="secondary-btn" type="button" data-i18n="auth.getCode">获取验证码</button>
+            </div>
+            <input type="password" id="forgotNewPassword" data-i18n-placeholder="auth.newPasswordMin" placeholder="新密码 (至少8位)">
+            <button id="doForgotBtn" class="primary-btn" style="width:100%;" data-i18n="auth.resetPassword">重置密码</button>
+            <div class="switch-mode"><a id="backToLogin" data-i18n="auth.backLogin">返回登录</a></div>
+        </div>
     </div>
 </div>
 

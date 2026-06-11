@@ -14,6 +14,7 @@ from app.models import DirectMessage, Friendship, Notification, User
 from app.rate_limit import limiter
 from app.services.social import (
     are_friends,
+    clear_friend_request_notifications,
     conversation_summaries,
     count_friends,
     count_likes_received,
@@ -23,6 +24,7 @@ from app.services.social import (
     get_friendship_between,
     list_friend_ids,
     notification_payload,
+    should_show_notification,
     public_user_brief,
     unread_dm_count,
     unread_notification_count,
@@ -207,6 +209,7 @@ def accept_friend_request(request_id):
     if not row or row.addressee_id != g.current_user_id or row.status != "pending":
         return error_response("请求不存在或已处理", 404, code="request_not_found")
     row.status = "accepted"
+    clear_friend_request_notifications(row.id)
     create_notification(
         user_id=row.requester_id,
         actor_id=g.current_user_id,
@@ -225,6 +228,7 @@ def reject_friend_request(request_id):
     if not row or row.addressee_id != g.current_user_id or row.status != "pending":
         return error_response("请求不存在或已处理", 404, code="request_not_found")
     row.status = "rejected"
+    clear_friend_request_notifications(row.id)
     db.session.commit()
     return jsonify({"status": "rejected"})
 
@@ -237,6 +241,7 @@ def cancel_friend_request(request_id):
     if not row or row.requester_id != g.current_user_id or row.status != "pending":
         return error_response("请求不存在或已处理", 404, code="request_not_found")
     row.status = "cancelled"
+    clear_friend_request_notifications(row.id)
     db.session.commit()
     return jsonify({"status": "cancelled"})
 
@@ -341,8 +346,9 @@ def list_notifications():
     )
     total = q.count()
     rows = q.offset((page - 1) * page_size).limit(page_size).all()
+    visible = [n for n in rows if should_show_notification(n)]
     return jsonify({
-        "items": [notification_payload(n) for n in rows],
+        "items": [notification_payload(n) for n in visible],
         "page": page,
         "page_size": page_size,
         "total": total,

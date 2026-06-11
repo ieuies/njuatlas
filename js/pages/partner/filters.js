@@ -1,6 +1,7 @@
 import { escapeHtml } from '../../utils.js';
-import { categoryChipHtml, debounce } from './shared.js';
+import { categoryChipHtml, debounce, partnerStore } from './shared.js';
 import { switchCategory, switchSearch } from './list.js';
+import { t } from '../../i18n.js';
 
 // ============================================================
 // 分类筛选（固定分类，动态生成）
@@ -22,8 +23,12 @@ export function initFilters() {
     const container = document.getElementById('partnerFilter');
     if (!container) return;
 
-    container.innerHTML = FIXED_CATEGORIES.map((c, i) =>
-        `<span class="filter-chip${i === 0 ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${categoryChipHtml(c)}</span>`
+    const activeCategory = container.querySelector('.filter-chip.active')?.getAttribute('data-category')
+        || partnerStore.currentCategory
+        || 'all';
+
+    container.innerHTML = FIXED_CATEGORIES.map((c) =>
+        `<span class="filter-chip${c.category === activeCategory ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${categoryChipHtml(c)}</span>`
     ).join('');
 
     container.querySelectorAll('.filter-chip').forEach(chip => {
@@ -93,12 +98,12 @@ export function setupCategoryScrollArrows() {
     const leftArrow = document.createElement('button');
     leftArrow.className = 'scroll-arrow scroll-arrow-left';
     leftArrow.innerHTML = '<i class="fas fa-chevron-left"></i>';
-    leftArrow.setAttribute('aria-label', '向左滑动');
+    leftArrow.setAttribute('aria-label', t('filter.scrollLeft'));
 
     const rightArrow = document.createElement('button');
     rightArrow.className = 'scroll-arrow scroll-arrow-right';
     rightArrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
-    rightArrow.setAttribute('aria-label', '向右滑动');
+    rightArrow.setAttribute('aria-label', t('filter.scrollRight'));
 
     const scrollWrapper = document.createElement('div');
     scrollWrapper.className = 'filter-scroll-wrapper';

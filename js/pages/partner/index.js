@@ -116,4 +116,4 @@ window.checkOverflow = function () {
     });
 };
 
-export { openPostDetail };
+export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch };

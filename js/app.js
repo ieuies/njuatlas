@@ -3,6 +3,7 @@ import { showToast, renderAvatarInto } from './utils.js';
 import { getUnreadCounts } from './api.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
+import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
 
 const HOME_INTRO_FIRST_LAYER_MS = 950;
 /** 第三层 delay(240ms) + 动画(650ms) + 缓冲 */
@@ -66,15 +67,6 @@ window.openPostDetail = async (postId) => {
 };
 
 let currentPage = 'home';
-const pageTitles = {
-    home: '首页',
-    partner: '找搭子',
-    ai: 'AI助手',
-    guide: '吃喝玩乐',
-    profile: '个人',
-    messages: '消息',
-    fullMap: '组局地图',
-};
 
 const PAGE_STYLES = {
     guide: ['css/guide.css'],
@@ -163,7 +155,7 @@ async function switchPage(pageId) {
     }
 
     const titleEl = document.getElementById('pageTitle');
-    if (titleEl && pageTitles[pageId]) titleEl.innerText = pageTitles[pageId];
+    if (titleEl) titleEl.innerText = t(getPageTitleKey(pageId));
 
     currentPage = pageId;
 
@@ -340,6 +332,7 @@ function initThemeToggle() {
             themeButton.innerHTML = theme === 'dark'
                 ? '<i class="fas fa-sun" aria-hidden="true"></i>'
                 : '<i class="fas fa-moon" aria-hidden="true"></i>';
+            themeButton.setAttribute('aria-label', t(theme === 'dark' ? 'theme.light' : 'theme.dark'));
         }
         localStorage.setItem('njuatlas-theme', theme);
     };
@@ -685,7 +678,7 @@ function initFabButton() {
     fab?.addEventListener('click', () => {
         // 与发布搭子按钮相同逻辑
         if (!isLoggedIn()) {
-            showToast('请先登录后再发起组局');
+            showToast(t('toast.loginRequired'));
             const authModal = document.getElementById('authModal');
             if (authModal) authModal.style.display = 'flex';
             return;
@@ -705,6 +698,8 @@ function initMapExpand() {
 
 // ========== 初始化 ==========
 async function init() {
+    initLocale();
+    initLocaleToggle();
     seedLoadedStyles();
     updateNavBar();
 
@@ -734,8 +729,40 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     await doLogout();
     updateNavBar();
     switchPage('home');
-    showToast('已退出登录');
+    showToast(t('toast.loggedOut'));
 });
+
+function initLocaleRefresh() {
+    window.addEventListener('njuatlas:localechange', async () => {
+        showToast(t('toast.langChanged'));
+        const titleEl = document.getElementById('pageTitle');
+        if (titleEl && currentPage) titleEl.innerText = t(getPageTitleKey(currentPage));
+
+        document.querySelectorAll('.scroll-arrow-left').forEach((el) => {
+            el.setAttribute('aria-label', t('filter.scrollLeft'));
+        });
+        document.querySelectorAll('.scroll-arrow-right').forEach((el) => {
+            el.setAttribute('aria-label', t('filter.scrollRight'));
+        });
+
+        const themeButton = document.getElementById('themeToggleBtn');
+        if (themeButton) {
+            const theme = document.documentElement.getAttribute('data-theme') || 'light';
+            themeButton.setAttribute('aria-label', t(theme === 'dark' ? 'theme.light' : 'theme.dark'));
+        }
+
+        if (document.getElementById('partnerFilter')) {
+            const mod = await _loadPartner();
+            mod.initFilters?.();
+        }
+        if (_messagesPageInited) {
+            const mod = await _loadMessages();
+            await mod.refreshMessages();
+        }
+    });
+}
+
+initLocaleRefresh();
 
 document.getElementById('closeAuthModalBtn')?.addEventListener('click', () => {
     const authModal = document.getElementById('authModal');

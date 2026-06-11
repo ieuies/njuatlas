@@ -1,5 +1,6 @@
 import { formatDate, parseApiDate, beijingDateKey, BEIJING_TZ, escapeHtml, wgs84ToGcj02 } from '../../utils.js';
 import { getUser } from '../../auth.js';
+import { t, tPartnerCategory } from '../../i18n.js';
 
 export const PAGE_SIZE = 20;
 
@@ -72,7 +73,8 @@ export function typeLabel(post) {
 }
 export function categoryChipHtml(c) {
     const icon = c.icon ? `<i class="fas ${c.icon}" aria-hidden="true"></i> ` : '';
-    return `${icon}${escapeHtml(c.label)}`;
+    const label = c.category === 'all' ? t('cat.all') : tPartnerCategory(c.category);
+    return `${icon}${escapeHtml(label)}`;
 }
 
 export function isCurrentUserOwner(item) {

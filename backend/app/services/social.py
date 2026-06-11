@@ -123,6 +123,34 @@ def create_notification(*, user_id, actor_id, ntype, post_id=None, friendship_id
     return note
 
 
+def clear_friend_request_notifications(friendship_id):
+    """好友请求已处理/撤回时，移除对应的 friend_request 通知。"""
+    if not friendship_id:
+        return 0
+    return Notification.query.filter_by(
+        type="friend_request",
+        friendship_id=friendship_id,
+    ).delete(synchronize_session=False)
+
+
+def friend_request_notification_status(friendship_id):
+    """返回好友请求通知关联的关系状态；无记录时返回 None。"""
+    if not friendship_id:
+        return None
+    row = Friendship.query.get(friendship_id)
+    if not row:
+        return "gone"
+    return row.status
+
+
+def should_show_notification(note):
+    """已处理的好友请求通知不再出现在互动列表。"""
+    if note.type != "friend_request" or not note.friendship_id:
+        return True
+    status = friend_request_notification_status(note.friendship_id)
+    return status == "pending"
+
+
 def notification_payload(note):
     actor = note.actor
     data = {
@@ -136,6 +164,8 @@ def notification_payload(note):
     }
     if note.post:
         data["post_title"] = note.post.title
+    if note.type == "friend_request" and note.friendship_id:
+        data["friendship_status"] = friend_request_notification_status(note.friendship_id)
     return data
 
 

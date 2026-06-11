@@ -1,1 +1,1 @@
-export { initPartnerPage, loadPartnerData, openPostDetail } from './partner/index.js';
+export { initPartnerPage, loadPartnerData, openPostDetail, initFilters } from './partner/index.js';
