@@ -145,6 +145,50 @@ def _fetch_guide_category_in_context(app, campus, cat, cfg):
         return fetch_guide_category(campus, cat, cfg)
 
 
+@places_bp.route("/guide-category", methods=["GET"])
+@limiter.limit("60 per minute")
+def guide_category():
+    """单分类 POI（服务端聚合多校区 + AMap 缓存），供吃喝玩乐懒加载。"""
+    campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
+    category = clean_string(request.args.get("category"), "category", required=True, max_length=20)
+    random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
+
+    if category not in GUIDE_CATEGORY_CONFIG:
+        return error_response("无效的分类", 400, code="invalid_category")
+
+    cfg = GUIDE_CATEGORY_CONFIG[category]
+    if campus == "all":
+        campuses = list(GUIDE_CAMPUS_COORDS.keys())
+    elif campus in GUIDE_CAMPUS_COORDS:
+        campuses = [campus]
+    else:
+        campus = "鼓楼"
+        campuses = [campus]
+
+    raw = []
+    app = current_app._get_current_object()
+    max_workers = min(4, len(campuses))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [
+            pool.submit(_fetch_guide_category_in_context, app, c, category, cfg)
+            for c in campuses
+        ]
+        for future in as_completed(futures):
+            try:
+                raw.extend(future.result() or [])
+            except Exception as exc:
+                log_event(
+                    current_app.logger,
+                    "guide_category_campus_failed",
+                    level="warning",
+                    category=category,
+                    error=str(exc),
+                )
+
+    items = finalize_guide_items(raw, random_order=random_order)
+    return jsonify({"campus": campus, "category": category, "items": items})
+
+
 @places_bp.route("/guide-bundle", methods=["GET"])
 @limiter.limit("30 per minute")
 def guide_bundle():

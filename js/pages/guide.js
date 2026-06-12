@@ -24,13 +24,13 @@ let _prefetchPromise = null;
 const GUIDE_RENDER_BATCH = 6;
 const GUIDE_CACHE_TTL_MS = 5 * 60 * 1000;
 const GUIDE_PREFETCH_DELAY_MS = 4500;
-const GUIDE_CATEGORY_PREFETCH_GAP_MS = 900;
+const GUIDE_CATEGORY_PREFETCH_GAP_MS = 1500;
 const GUIDE_IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
 
 function _guideCardHtml(item, idx) {
     return `
         <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
-            <img class="guide-img" src="${item.image || GUIDE_IMG_PLACEHOLDER}" alt="${esc(item.name)}" loading="lazy" decoding="async" fetchpriority="low">
+            <img class="guide-img" src="${_secureImageUrl(item.image) || GUIDE_IMG_PLACEHOLDER}" alt="${esc(item.name)}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
@@ -214,95 +214,22 @@ function _getPriorityCategories() {
     return ['美食'];
 }
 
-function _poisToItems(pois, cat, campus) {
-    if (!Array.isArray(pois)) return [];
-    return pois.map(poi => {
-        const biz = poi.biz_ext || {};
-        const cost = biz.cost;
-        return {
-            poi_id: String(poi.id || '').trim(),
-            name: poi.name || '',
-            desc: poi.address || '',
-            image: poi.photos?.[0]?.url || '',
-            type: cat,
-            campus,
-            rating: biz.rating || '',
-            price: cost ? `¥${cost}/人` : '',
-            address: poi.address || '',
-            location: poi.location || '',
-            like_count: 0,
-            review_count: 0,
-        };
-    });
+function _secureImageUrl(url) {
+    if (!url) return '';
+    return String(url).replace(/^http:\/\//i, 'https://');
 }
 
-async function _searchPlacesQuiet(keyword, city, location, page, pageSize, radius, types, sortrule) {
-    let url = `${API_BASE}/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
-    if (city) url += `&city=${encodeURIComponent(city)}`;
-    if (location) url += `&location=${encodeURIComponent(location)}`;
-    if (radius) url += `&radius=${encodeURIComponent(radius)}`;
-    if (types) url += `&types=${encodeURIComponent(types)}`;
-    if (sortrule) url += `&sortrule=${encodeURIComponent(sortrule)}`;
+/** 单分类走服务端 guide-category，避免前端对 /places/search 并发打满后端 */
+async function _loadCategoryItemsForCacheKey(cacheKey, cat) {
+    const campus = cacheKey === 'all' ? 'all' : cacheKey;
+    let url = `${API_BASE}/places/guide-category?campus=${encodeURIComponent(campus)}&category=${encodeURIComponent(cat)}`;
+    if (_randomOrder) url += '&shuffle=1';
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
         throw new Error(data.message || `请求失败: ${res.status}`);
     }
-    return data;
-}
-
-async function _fetchCategoryItems(campus, cat) {
-    const cfg = _guideConfig.categories[cat];
-    const location = _getCampusLocation(campus);
-    const city = _searchCity(campus);
-    const maxPages = cfg.max_pages || 2;
-    const pageSize = _guideConfig.page_size;
-    const targetCount = maxPages * pageSize;
-    const maxAttempts = maxPages + 2;
-    const pois = [];
-    const seen = new Set();
-
-    for (let page = 1; page <= maxAttempts && pois.length < targetCount; page++) {
-        const r = await _searchPlacesQuiet(
-            cfg.keyword || '',
-            city,
-            location,
-            page,
-            pageSize,
-            _guideConfig.search_radius,
-            cfg.types,
-            _guideConfig.sortrule,
-        );
-        if (r.status !== '1' || !Array.isArray(r.pois) || r.pois.length === 0) break;
-        for (const poi of r.pois) {
-            if (_isExcludedGuideName(poi.name)) continue;
-            const poiId = String(poi.id || '').trim();
-            const key = poiId ? `poi:${poiId}` : `name:${poi.name || ''}|addr:${poi.address || ''}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            pois.push(poi);
-            if (pois.length >= targetCount) break;
-        }
-        if (page >= maxPages && pois.length >= pageSize) break;
-    }
-    return _sortGuideItems(_poisToItems(pois, cat, campus));
-}
-
-async function _loadCategoryItemsForCacheKey(cacheKey, cat) {
-    if (cacheKey === 'all') {
-        const parts = await Promise.all(
-            ALL_CAMPUSES.map(async (campus) => {
-                try {
-                    return await _fetchCategoryItems(campus, cat);
-                } catch (fetchErr) {
-                    console.warn(`高德搜索 ${cat}（${campus}）失败:`, fetchErr.message);
-                    return [];
-                }
-            }),
-        );
-        return _sortGuideItems(parts.flat());
-    }
-    return _fetchCategoryItems(cacheKey, cat);
+    return Array.isArray(data.items) ? data.items : [];
 }
 
 async function _loadCampusBundle(cacheKey, gen) {
@@ -600,7 +527,7 @@ function _filterGuideCampus(campus) {
 function openGuideDetail(item) {
     const modal = document.getElementById('guideDetailModal');
     if (!modal) return;
-    document.getElementById('guideDetailImg').src = item.image || '';
+    document.getElementById('guideDetailImg').src = _secureImageUrl(item.image) || GUIDE_IMG_PLACEHOLDER;
     document.getElementById('guideDetailName').textContent = item.name;
     document.getElementById('guideDetailRating').innerHTML = item.rating
         ? `<i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}`

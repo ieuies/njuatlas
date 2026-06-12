@@ -74,14 +74,24 @@ def filter_guide_items(items):
     return [item for item in items if not is_excluded_guide_poi_name(item.get("name"))]
 
 
+def _secure_image_url(url):
+    if not url:
+        return ""
+    url = str(url).strip()
+    if url.startswith("http://"):
+        return "https://" + url[len("http://"):]
+    return url
+
+
 def _poi_to_item(poi, cat, campus):
     biz = poi.get("biz_ext") or {}
     cost = biz.get("cost")
+    raw_image = (poi.get("photos") or [{}])[0].get("url", "") if poi.get("photos") else ""
     return {
         "poi_id": str(poi.get("id") or "").strip(),
         "name": poi.get("name") or "",
         "desc": poi.get("address") or "",
-        "image": (poi.get("photos") or [{}])[0].get("url", "") if poi.get("photos") else "",
+        "image": _secure_image_url(raw_image),
         "type": cat,
         "campus": campus,
         "rating": biz.get("rating", "") or "",
