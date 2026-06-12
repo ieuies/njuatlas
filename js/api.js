@@ -96,8 +96,8 @@ export async function deleteAccount(password) {
 }
 
 // ── 个人资料（阶段二新增） ──
-export async function getMyProfile() {
-    return request('/me/profile', 'GET');
+export async function getMyProfile(silent = false) {
+    return request('/me/profile', 'GET', null, true, DEFAULT_TIMEOUT_MS, silent);
 }
 export async function updateMyProfile({ username, bio, campus, tags, bubble_style } = {}) {
     return request('/me/profile', 'PUT', { username, bio, campus, tags, bubble_style });

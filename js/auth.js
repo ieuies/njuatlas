@@ -122,7 +122,7 @@ export async function syncUserMediaFromServer() {
     const user = getUser();
     if (!user) return null;
     try {
-        const profile = await getMyProfile();
+        const profile = await getMyProfile(true);
         const next = userFromAuthPayload(profile, user);
         const avatarChanged = (next.avatar_url || '') !== (user.avatar_url || '');
         persistUser(next);

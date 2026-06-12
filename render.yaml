@@ -19,7 +19,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     healthCheckPath: /api/health
-    startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --worker-class gthread --workers 2 --threads 8 --timeout 120 --preload
+    startCommand: flask db upgrade && gunicorn -c gunicorn.conf.py "app:create_app()"
     # 头像/封面写入此目录；无持久盘时每次部署会清空，导致 DB 里 URL 404
     disk:
       name: njuatlas-uploads

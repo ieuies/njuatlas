@@ -287,14 +287,14 @@ async function renderChats({ force = false } = {}) {
     }
 
     if (fresh) {
-        fetchConversations()
+        fetchConversations({ silent: true })
             .then((items) => { paintConvoList(items); updateTabBadges(); startRealtimeSync(); })
             .catch(() => {});
         return;
     }
 
     try {
-        const items = await fetchConversations();
+        const items = await fetchConversations({ silent: true });
         paintConvoList(items);
         updateTabBadges();
         startRealtimeSync();
@@ -425,6 +425,24 @@ let _eventSource = null;
 let _sseConnected = false;
 let _sseRetryTimer = null;
 let _sseRetryMs = SSE_RETRY_BASE_MS;
+let _backendRealtimeMode = null;
+let _streamStartTimer = null;
+
+async function ensureBackendRealtimeMode() {
+    if (_backendRealtimeMode !== null) return _backendRealtimeMode;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+        const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+        const data = await res.json();
+        _backendRealtimeMode = data.realtime === 'redis' ? 'redis' : 'memory';
+    } catch {
+        _backendRealtimeMode = 'memory';
+    } finally {
+        clearTimeout(timeoutId);
+    }
+    return _backendRealtimeMode;
+}
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -456,6 +474,10 @@ function stopPollingSync() {
 
 function stopMessageStream() {
     _sseConnected = false;
+    if (_streamStartTimer) {
+        clearTimeout(_streamStartTimer);
+        _streamStartTimer = null;
+    }
     if (_sseRetryTimer) {
         clearTimeout(_sseRetryTimer);
         _sseRetryTimer = null;
@@ -467,7 +489,7 @@ function stopMessageStream() {
 }
 
 function scheduleMessageStreamReconnect() {
-    if (_sseRetryTimer) return;
+    if (_backendRealtimeMode === 'memory' || _sseRetryTimer) return;
     _sseRetryTimer = setTimeout(() => {
         _sseRetryTimer = null;
         if (!document.getElementById('messagesPage')?.classList.contains('active-page') || !getUser()) return;
@@ -514,6 +536,7 @@ function handleStreamPayload(raw) {
 }
 
 function startMessageStream() {
+    if (_backendRealtimeMode === 'memory') return;
     const token = getAuthToken();
     if (!token || !getUser()) return;
     if (_eventSource) return;
@@ -585,8 +608,14 @@ function startRealtimeSync() {
         return;
     }
 
-    startMessageStream();
-    if (!_sseConnected) schedulePollingFallback();
+    clearTimeout(_streamStartTimer);
+    _streamStartTimer = setTimeout(async () => {
+        _streamStartTimer = null;
+        if (!document.getElementById('messagesPage')?.classList.contains('active-page') || document.hidden) return;
+        const mode = await ensureBackendRealtimeMode();
+        if (mode === 'redis') startMessageStream();
+        if (!_sseConnected) schedulePollingFallback();
+    }, 2000);
 }
 
 /** 将 SSE/轮询到的自己发出的消息与乐观气泡合并，避免重复显示 */
