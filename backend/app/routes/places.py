@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Blueprint, current_app, jsonify, request
 
 from app.errors import error_response
+from app.logging_utils import log_event
 from app.rate_limit import limiter
 from app.services.amap import geocode, regeocode, search_places
 from app.services.guide import (
@@ -169,7 +170,16 @@ def guide_bundle():
             for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
         ]
         for future in as_completed(futures):
-            items = future.result()
+            try:
+                items = future.result()
+            except Exception as exc:
+                log_event(
+                    current_app.logger,
+                    "guide_bundle_category_failed",
+                    level="warning",
+                    error=str(exc),
+                )
+                continue
             if items:
                 raw_by_cat[items[0]["type"]].extend(items)
 

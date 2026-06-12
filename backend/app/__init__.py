@@ -71,11 +71,16 @@ def create_app():
     @app.route("/health")
     @app.route("/api/health")
     def health():
-        return jsonify({
+        payload = {
             "status": "ok",
             "service": "njuatlas-backend",
             "dm_api": "tail-v2",
             "api_proxy": "same-origin-v1",
-        })
+            "guide_bundle": "app-context-v1",
+        }
+        git_commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT")
+        if git_commit:
+            payload["git_commit"] = git_commit[:12]
+        return jsonify(payload)
 
     return app
