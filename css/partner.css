@@ -11,54 +11,65 @@
     margin-bottom: 12px;
 }
 .partner-search-input-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    position: relative;
+    display: block;
     width: 100%;
     min-height: 44px;
-    padding: 0 14px;
     box-sizing: border-box;
     background: var(--atlas-card);
     border: 1px solid var(--atlas-line);
-    border-radius: 14px;
+    border-radius: 12px;
     box-shadow: var(--shadow-sm);
 }
 .partner-search-input-wrap > i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
     flex-shrink: 0;
     color: var(--text-tertiary);
     font-size: 0.88rem;
+    pointer-events: none;
+    z-index: 1;
 }
 .partner-search-input-wrap input {
-    flex: 1;
+    display: block;
+    width: 100%;
     min-width: 0;
+    box-sizing: border-box;
     border: none;
     background: transparent;
     color: var(--atlas-ink);
     font-size: 0.88rem;
+    line-height: 1.35;
     outline: none;
+    padding: 11px 40px 11px 38px;
+    -webkit-appearance: none;
+    appearance: none;
 }
 .partner-search-input-wrap input::placeholder {
     color: var(--text-tertiary);
 }
-.partner-search-input-wrap input::-webkit-search-cancel-button {
-    display: none;
-}
 .partner-search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: none;
-    border-radius: 50%;
-    background: rgba(107, 33, 165, 0.08);
-    color: var(--text-secondary);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-tertiary);
     cursor: pointer;
 }
 .partner-search-clear:hover {
-    background: rgba(107, 33, 165, 0.14);
+    background: rgba(107, 33, 165, 0.1);
     color: var(--btn-primary-bg);
 }
 .partner-search-clear[hidden] {
@@ -209,6 +220,28 @@
 
 /* 移动端隐藏箭头，纯手势滑动 */
 @media (max-width: 768px) {
+    .partner-search-bar {
+        margin-bottom: 8px;
+    }
+    .partner-search-input-wrap {
+        min-height: 42px;
+        border-radius: 10px;
+        box-shadow: none;
+        background: var(--bg-secondary);
+    }
+    .partner-search-input-wrap > i {
+        left: 12px;
+        font-size: 0.84rem;
+    }
+    .partner-search-input-wrap input {
+        font-size: 16px; /* 避免 iOS 输入时自动缩放 */
+        padding: 10px 36px 10px 34px;
+    }
+    .partner-search-clear {
+        right: 4px;
+        width: 32px;
+        height: 32px;
+    }
     .filter-slider-container {
         padding: 6px 12px;
         margin: 8px 0 0;

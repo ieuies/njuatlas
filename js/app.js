@@ -554,20 +554,48 @@ const LANDMARK_IMAGES = [
     'image/landmarks/F62CA83D2424AA058D1C72E8406CFC64.jpg',
 ];
 
-// ========== 移动端首页图片网格（6×7） ==========
+const MOBILE_GRID_COLS = 6;
+const MOBILE_GRID_ROWS = 5;
+const MOBILE_GRID_CELLS = MOBILE_GRID_COLS * MOBILE_GRID_ROWS;
+
+function shuffleArray(arr) {
+    const copy = arr.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+/** 网格配图：先洗牌再取用，格数不超过图库时不重复 */
+function buildGridImages(pool, count) {
+    if (!pool.length || count <= 0) return [];
+    const shuffled = shuffleArray(pool);
+    if (count <= shuffled.length) return shuffled.slice(0, count);
+
+    const cells = [];
+    let idx = 0;
+    while (cells.length < count) {
+        const next = shuffled[idx % shuffled.length];
+        if (cells.length && cells[cells.length - 1] === next && shuffled.length > 1) {
+            idx += 1;
+            continue;
+        }
+        cells.push(next);
+        idx += 1;
+    }
+    return cells;
+}
+
+// ========== 移动端首页图片网格（6×5） ==========
 function initMobileGrid() {
     const grid = document.getElementById('homeMobileGrid');
     if (!grid || grid.dataset.ready === 'true') return;
     grid.dataset.ready = 'true';
 
     const imgs = LANDMARK_IMAGES;
-    const mobile = isMobileViewport();
-    const cellCount = mobile ? 18 : 42;
-    const pickCount = mobile ? Math.min(6, imgs.length) : imgs.length;
-    const cells = [];
-    for (let i = 0; i < cellCount; i++) {
-        cells.push(imgs[Math.floor(Math.random() * pickCount)]);
-    }
+    const cellCount = Math.min(MOBILE_GRID_CELLS, imgs.length);
+    const cells = buildGridImages(imgs, cellCount);
 
     const frag = document.createDocumentFragment();
     cells.forEach(src => {

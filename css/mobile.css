@@ -44,11 +44,11 @@
         display: none !important;
     }
 
-    /* 轻量图片网格（18 格） */
+    /* 轻量图片网格（6×5，30 格不重复） */
     .home-mobile-grid {
-        grid-template-rows: repeat(3, 1fr);
-        height: 38vh;
-        min-height: 200px;
+        grid-template-rows: repeat(5, 1fr);
+        height: 42vh;
+        min-height: 240px;
     }
 
     /* 列表长内容：跳过屏外绘制 */
