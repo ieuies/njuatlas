@@ -49,6 +49,31 @@ def guide_config_payload():
     }
 
 
+GUIDE_EXCLUDED_NAME_KEYWORDS = (
+    "南京大学",
+    "南大",
+    "酒店",
+    "政府部门",
+    "商学院",
+)
+
+
+def _normalize_poi_name(name):
+    return (name or "").strip().replace("（", "(").replace("）", ")")
+
+
+def is_excluded_guide_poi_name(name):
+    """排除名称含指定关键词的 POI（仅看名称，不看地址）。"""
+    normalized = _normalize_poi_name(name)
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in GUIDE_EXCLUDED_NAME_KEYWORDS)
+
+
+def filter_guide_items(items):
+    return [item for item in items if not is_excluded_guide_poi_name(item.get("name"))]
+
+
 def _poi_to_item(poi, cat, campus):
     biz = poi.get("biz_ext") or {}
     cost = biz.get("cost")
@@ -71,8 +96,14 @@ def fetch_guide_category(campus, cat, cfg=None):
     cfg = cfg or GUIDE_CATEGORY_CONFIG[cat]
     location = GUIDE_CAMPUS_COORDS.get(campus, GUIDE_CAMPUS_COORDS["鼓楼"])
     city = guide_search_city(campus)
-    pois = []
-    for page in range(1, cfg["max_pages"] + 1):
+    max_pages = cfg.get("max_pages", 2)
+    target_count = max_pages * GUIDE_PAGE_SIZE
+    max_attempts = max_pages + 2
+
+    items = []
+    seen = set()
+    page = 1
+    while page <= max_attempts and len(items) < target_count:
         result = search_places(
             cfg["keyword"],
             city=city,
@@ -88,8 +119,21 @@ def fetch_guide_category(campus, cat, cfg=None):
         batch = result.get("pois") or []
         if not batch:
             break
-        pois.extend(batch)
-    return [_poi_to_item(poi, cat, campus) for poi in pois]
+        for poi in batch:
+            item = _poi_to_item(poi, cat, campus)
+            if is_excluded_guide_poi_name(item["name"]):
+                continue
+            key = _dedupe_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(item)
+            if len(items) >= target_count:
+                break
+        if page >= max_pages and len(items) >= GUIDE_PAGE_SIZE:
+            break
+        page += 1
+    return items
 
 
 def _dedupe_key(item):
@@ -213,7 +257,8 @@ def enrich_guide_items(items):
 
 
 def finalize_guide_items(items, random_order=False):
-    """去重 → 站内 enrichment → 统一排序。"""
+    """去重 → 过滤校名 POI → 站内 enrichment → 统一排序。"""
     items = dedupe_guide_items(items)
+    items = filter_guide_items(items)
     items = enrich_guide_items(items)
     return sort_guide_items(items, random_order=random_order)

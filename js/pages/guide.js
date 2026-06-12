@@ -107,6 +107,17 @@ function _dedupeKey(item) {
     return `name:${item.name || ''}|addr:${item.address || ''}`;
 }
 
+const GUIDE_EXCLUDED_NAME_KEYWORDS = ['南京大学', '南大', '酒店', '政府部门', '商学院'];
+
+function _isExcludedGuideName(name) {
+    const n = (name || '').trim().replace(/（/g, '(').replace(/）/g, ')');
+    return GUIDE_EXCLUDED_NAME_KEYWORDS.some(keyword => n.includes(keyword));
+}
+
+function _filterGuideItems(items) {
+    return (items || []).filter(item => !_isExcludedGuideName(item.name));
+}
+
 function _dedupeGuideItems(items) {
     const seen = new Set();
     return items.filter(item => {
@@ -118,7 +129,7 @@ function _dedupeGuideItems(items) {
 }
 
 function _sortGuideItems(items) {
-    const list = _dedupeGuideItems([...items]);
+    const list = _dedupeGuideItems(_filterGuideItems([...items]));
     if (_randomOrder) {
         for (let i = list.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -201,20 +212,34 @@ async function _fetchCategoryItems(campus, cat) {
     const location = _getCampusLocation(campus);
     const city = _searchCity(campus);
     const maxPages = cfg.max_pages || 2;
+    const pageSize = _guideConfig.page_size;
+    const targetCount = maxPages * pageSize;
+    const maxAttempts = maxPages + 2;
     const pois = [];
-    for (let page = 1; page <= maxPages; page++) {
+    const seen = new Set();
+
+    for (let page = 1; page <= maxAttempts && pois.length < targetCount; page++) {
         const r = await _searchPlacesQuiet(
             cfg.keyword || '',
             city,
             location,
             page,
-            _guideConfig.page_size,
+            pageSize,
             _guideConfig.search_radius,
             cfg.types,
             _guideConfig.sortrule,
         );
         if (r.status !== '1' || !Array.isArray(r.pois) || r.pois.length === 0) break;
-        pois.push(...r.pois);
+        for (const poi of r.pois) {
+            if (_isExcludedGuideName(poi.name)) continue;
+            const poiId = String(poi.id || '').trim();
+            const key = poiId ? `poi:${poiId}` : `name:${poi.name || ''}|addr:${poi.address || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            pois.push(poi);
+            if (pois.length >= targetCount) break;
+        }
+        if (page >= maxPages && pois.length >= pageSize) break;
     }
     return _sortGuideItems(_poisToItems(pois, cat, campus));
 }
