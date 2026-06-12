@@ -21,7 +21,9 @@ import {
     getUnreadCounts,
     invalidateUnreadCache,
     markDmThreadRead,
+    getAuthToken,
 } from '../api.js';
+import { API_BASE } from '../config.js';
 import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
 import { t } from '../i18n.js';
 import { DEFAULT_BUBBLE_STYLE, bubbleThemeCssVars, normalizeBubbleStyle } from '../bubbleThemes.js';
@@ -300,8 +302,9 @@ function bubbleRowHtml(m, { pending = false } = {}) {
     );
     const pendingCls = pending ? ' is-pending' : '';
     const tempAttr = m._tempId ? ` data-temp-id="${m._tempId}"` : '';
+    const idAttr = m.id ? ` data-msg-id="${m.id}"` : '';
     return `
-        <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}${pendingCls}"${tempAttr}>
+        <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}${pendingCls}"${tempAttr}${idAttr}>
             ${m.is_mine ? '' : avatarHtmlForUser(peer, 32)}
             <div class="msg-bubble" style="${style}">${escapeHtml(m.content)}</div>
         </div>`;
@@ -390,6 +393,8 @@ function bindChatScrollLoad() {
 
 const CHAT_POLL_MS = 4000;
 const CONVO_POLL_MS = 10000;
+const SSE_RETRY_BASE_MS = 2000;
+const SSE_RETRY_MAX_MS = 30000;
 
 let _convoSyncTimer = null;
 let _syncMode = null;
@@ -397,6 +402,10 @@ let _chatSyncActive = false;
 let _chatSyncAbort = null;
 let _convoSyncInFlight = false;
 let _visibilityBound = false;
+let _eventSource = null;
+let _sseConnected = false;
+let _sseRetryTimer = null;
+let _sseRetryMs = SSE_RETRY_BASE_MS;
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -415,34 +424,181 @@ function isChatNearBottom(body, threshold = 96) {
     return body.scrollHeight - body.scrollTop - body.clientHeight < threshold;
 }
 
-function stopRealtimeSync() {
+function stopPollingSync() {
     if (_convoSyncTimer) clearInterval(_convoSyncTimer);
     _convoSyncTimer = null;
     _syncMode = null;
     _chatSyncActive = false;
-    window._unreadPollingPaused = false;
     if (_chatSyncAbort) {
         _chatSyncAbort.abort();
         _chatSyncAbort = null;
     }
 }
 
-function startRealtimeSync() {
-    stopRealtimeSync();
-    if (!getUser()) return;
-    const onMessagesPage = document.getElementById('messagesPage')?.classList.contains('active-page');
-    if (!onMessagesPage || document.hidden) return;
+function stopMessageStream() {
+    _sseConnected = false;
+    if (_sseRetryTimer) {
+        clearTimeout(_sseRetryTimer);
+        _sseRetryTimer = null;
+    }
+    if (_eventSource) {
+        _eventSource.close();
+        _eventSource = null;
+    }
+}
 
-    if (openChatPeerId && chatState.peerId) {
+function scheduleMessageStreamReconnect() {
+    if (_sseRetryTimer) return;
+    _sseRetryTimer = setTimeout(() => {
+        _sseRetryTimer = null;
+        if (!document.getElementById('messagesPage')?.classList.contains('active-page') || !getUser()) return;
+        startMessageStream();
+    }, _sseRetryMs);
+}
+
+function handleStreamPayload(raw) {
+    let payload;
+    try {
+        payload = JSON.parse(raw);
+    } catch {
+        return;
+    }
+    if (payload.type === 'dm') {
+        const peerId = payload.data?.peer_id;
+        const message = payload.data?.message;
+        if (!peerId || !message?.id) return;
+        const inChat = openChatPeerId && Number(openChatPeerId) === Number(peerId);
+        if (inChat && Number(chatState.peerId) === Number(peerId)) {
+            applyIncomingChatMessages(peerId, { items: [message] });
+            if (!message.is_mine) {
+                markDmThreadRead(peerId)
+                    .then(() => {
+                        invalidateUnreadCache();
+                        refreshAllBadges(null, { force: true });
+                    })
+                    .catch(() => {});
+            }
+        } else {
+            invalidateCache('chats');
+            if (currentTab === 'chats' && !openChatPeerId) {
+                fetchConversations().then(paintConvoList).catch(() => {});
+            }
+        }
+        refreshAllBadges(null, { force: true });
+        return;
+    }
+    if (payload.type === 'unread') {
+        invalidateUnreadCache();
+        refreshAllBadges(null, { force: true });
+        if (currentTab === 'friends' && !openChatPeerId) {
+            renderFriends({ force: true }).catch(() => {});
+        }
+        if (currentTab === 'interact' && !openChatPeerId) {
+            renderInteract({ force: true }).catch(() => {});
+        }
+    }
+}
+
+function startMessageStream() {
+    const token = getAuthToken();
+    if (!token || !getUser()) return;
+    if (_eventSource) return;
+
+    const url = `${API_BASE}/social/events/stream?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    _eventSource = es;
+
+    const onConnected = () => {
+        _sseConnected = true;
+        _sseRetryMs = SSE_RETRY_BASE_MS;
+        window._unreadPollingPaused = true;
+    };
+
+    es.addEventListener('ready', onConnected);
+    es.addEventListener('message', (e) => {
+        if (e.data) handleStreamPayload(e.data);
+    });
+    es.onopen = onConnected;
+    es.onerror = () => {
+        const hadSse = _sseConnected;
+        stopMessageStream();
+        _sseRetryMs = Math.min(Math.round(_sseRetryMs * 1.5), SSE_RETRY_MAX_MS);
+        if (hadSse) startPollingSync();
+        scheduleMessageStreamReconnect();
+    };
+}
+
+function startPollingSync() {
+    window._unreadPollingPaused = true;
+    if (
+        openChatPeerId
+        && chatState.peerId
+        && Number(openChatPeerId) === Number(chatState.peerId)
+    ) {
         _syncMode = 'chat';
         _chatSyncActive = true;
-        window._unreadPollingPaused = true;
         void runChatSyncLoop();
-    } else if (currentTab === 'chats') {
+    } else if (currentTab === 'chats' && !openChatPeerId) {
         _syncMode = 'convo';
         void pollConvoOnce();
         _convoSyncTimer = setInterval(pollConvoOnce, CONVO_POLL_MS);
     }
+}
+
+function stopRealtimeSync() {
+    stopPollingSync();
+    stopMessageStream();
+    window._unreadPollingPaused = false;
+}
+
+function startRealtimeSync() {
+    stopPollingSync();
+    if (!getUser()) return;
+    const onMessagesPage = document.getElementById('messagesPage')?.classList.contains('active-page');
+    if (!onMessagesPage || document.hidden) {
+        stopMessageStream();
+        return;
+    }
+
+    startMessageStream();
+    // SSE 与轮询并行：进入聊天室后若 SSE 早已连接，仍要靠轮询拉取新消息
+    startPollingSync();
+}
+
+/** 将 SSE/轮询到的自己发出的消息与乐观气泡合并，避免重复显示 */
+function reconcileOwnOutgoingMessage(message, { tempId = null } = {}) {
+    if (!message?.id) return false;
+
+    const body = document.getElementById('msgChatBody');
+    if (!body) return false;
+
+    const existing = body.querySelector(`[data-msg-id="${message.id}"]`);
+    if (existing) {
+        if (tempId) body.querySelector(`[data-temp-id="${tempId}"]`)?.remove();
+        if (!chatState.messages.some((x) => x.id === message.id)) {
+            chatState.messages.push(message);
+        }
+        return true;
+    }
+
+    const pendingRow = tempId
+        ? body.querySelector(`[data-temp-id="${tempId}"]`)
+        : [...body.querySelectorAll('.msg-bubble-row.me.is-pending')].find((row) => {
+            const text = row.querySelector('.msg-bubble')?.textContent;
+            return text === message.content;
+        });
+
+    if (pendingRow) {
+        pendingRow.classList.remove('is-pending');
+        pendingRow.removeAttribute('data-temp-id');
+        pendingRow.setAttribute('data-msg-id', String(message.id));
+        if (!chatState.messages.some((x) => x.id === message.id)) {
+            chatState.messages.push(message);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 function applyIncomingChatMessages(peerId, data) {
@@ -455,6 +611,7 @@ function applyIncomingChatMessages(peerId, data) {
     if (!incoming.length) return;
 
     for (const m of incoming) {
+        if (m.is_mine && reconcileOwnOutgoingMessage(m)) continue;
         chatState.messages.push(m);
         appendChatBubble(m, { scroll: false });
         if (!m.is_mine) {
@@ -549,6 +706,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
 
     const body = document.getElementById('msgChatBody');
     if (body) body.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+    startRealtimeSync();
 
     try {
         const cachedPeer = peerHint
@@ -556,8 +714,15 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
             || tabCache.chats.items?.find((c) => c.peer_id === peerId)?.peer;
         _pendingPeerHint = null;
         const { peer, messages, hasMoreOlder } = await fetchChatThread(peerId);
+        const duringLoad = chatState.messages.filter((m) => m.id);
+        const fetchedIds = new Set(messages.map((m) => m.id));
+        const merged = [...messages];
+        for (const m of duringLoad) {
+            if (m.id && !fetchedIds.has(m.id)) merged.push(m);
+        }
+        merged.sort((a, b) => (a.id || 0) - (b.id || 0));
         chatState.peer = cachedPeer || peer;
-        chatState.messages = messages;
+        chatState.messages = merged;
         chatState.hasMoreOlder = hasMoreOlder;
         chatState.page = hasMoreOlder ? 2 : 1;
         chatState.total = messages.length;
@@ -686,18 +851,17 @@ function enqueueSendChatMessage(text) {
 async function sendChatMessageOnce(peerId, tempId, text) {
     try {
         const saved = await sendDmMessage(peerId, text);
-        const row = document.querySelector(`[data-temp-id="${tempId}"]`);
-        if (row) {
-            row.classList.remove('is-pending');
-            row.removeAttribute('data-temp-id');
-        }
-        chatState.messages.push({
+        const confirmed = {
             id: saved.id,
             sender_id: saved.sender_id,
             content: saved.content,
             is_mine: true,
             created_at: saved.created_at,
-        });
+        };
+        if (!reconcileOwnOutgoingMessage(confirmed, { tempId })) {
+            chatState.messages.push(confirmed);
+            appendChatBubble(confirmed);
+        }
         scheduleConvoListSync();
     } catch (err) {
         document.querySelector(`[data-temp-id="${tempId}"]`)?.remove();

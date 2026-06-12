@@ -34,4 +34,5 @@ tqdm==4.67.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==1.26.20
+redis==5.2.1
 Werkzeug==3.1.8

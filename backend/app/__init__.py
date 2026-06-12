@@ -58,6 +58,9 @@ def create_app():
     register_error_handlers(app)
     init_rate_limiter(app)
 
+    from app.realtime import hub as realtime_hub
+    realtime_hub.init_app(app)
+
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     @app.route("/")
@@ -71,12 +74,14 @@ def create_app():
     @app.route("/health")
     @app.route("/api/health")
     def health():
+        from app.realtime import hub as realtime_hub
         payload = {
             "status": "ok",
             "service": "njuatlas-backend",
             "dm_api": "tail-v2",
             "api_proxy": "same-origin-v1",
             "guide_bundle": "app-context-v1",
+            "realtime": realtime_hub.mode,
         }
         git_commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT")
         if git_commit:

@@ -146,6 +146,27 @@ def extract_bearer_token():
     return token.strip()
 
 
+def resolve_user_from_token(token):
+    """校验 JWT 并返回 User；供 SSE 等无法带 Authorization 头的场景使用。"""
+    from app.models import User
+
+    if not token:
+        return None, "missing_token"
+
+    payload, error = decode_access_token(token)
+    if error:
+        return None, error
+
+    exp_ts = int(payload.get("exp", 0))
+    if _is_jti_revoked(payload["jti"], exp_ts):
+        return None, "revoked_token"
+
+    user = _get_cached_user(payload["sub"], exp_ts)
+    if not user:
+        return None, "user_not_found"
+    return user, None
+
+
 def revoke_current_token():
     """Blacklist the current request token until its natural expiry."""
     if not getattr(g, "current_token_payload", None):

@@ -18,7 +18,8 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload
+    healthCheckPath: /api/health
+    startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --threads 8 --timeout 120 --preload
     # 头像/封面写入此目录；无持久盘时每次部署会清空，导致 DB 里 URL 404
     disk:
       name: njuatlas-uploads
@@ -54,7 +55,15 @@ services:
       - key: RATELIMIT_DEFAULT
         value: "200 per hour"
       - key: RATELIMIT_STORAGE_URI
-        value: "memory://"
+        fromService:
+          type: keyvalue
+          name: njuatlas-redis
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: njuatlas-redis
+          property: connectionString
       - key: FRONTEND_URL
         value: "https://njuatlas.cn"
       - key: EMAIL_VERIFICATION_TOKEN_SECONDS
@@ -71,3 +80,9 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+
+  - type: keyvalue
+    name: njuatlas-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []

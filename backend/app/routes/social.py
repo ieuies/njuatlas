@@ -7,10 +7,11 @@ from flask import Blueprint, current_app, g, jsonify, request, Response, send_fr
 from sqlalchemy import or_
 
 from app import db
-from app.auth_utils import jwt_required
+from app.auth_utils import jwt_required, resolve_user_from_token, extract_bearer_token
 from app.errors import error_response
 from app.models import DirectMessage, Friendship, Notification, User
 from app.rate_limit import limiter
+from app.realtime import hub as realtime_hub, publish_dm_event, publish_unread_refresh
 from app.services.social import (
     are_friends,
     clear_friend_request_notifications,
@@ -193,6 +194,7 @@ def send_friend_request():
             friendship_id=existing.id,
         )
         db.session.commit()
+        publish_unread_refresh(target_id)
         return jsonify({"id": existing.id, "status": "pending"})
 
     row = Friendship(
@@ -209,6 +211,8 @@ def send_friend_request():
         friendship_id=row.id,
     )
     db.session.commit()
+    publish_unread_refresh(target_id)
+    publish_unread_refresh(g.current_user_id)
     return jsonify({"id": row.id, "status": "pending"}), 201
 
 
@@ -228,6 +232,8 @@ def accept_friend_request(request_id):
         friendship_id=row.id,
     )
     db.session.commit()
+    publish_unread_refresh(row.requester_id)
+    publish_unread_refresh(row.addressee_id)
     return jsonify({"status": "accepted"})
 
 
@@ -241,6 +247,8 @@ def reject_friend_request(request_id):
     row.status = "rejected"
     clear_friend_request_notifications(row.id)
     db.session.commit()
+    publish_unread_refresh(row.requester_id)
+    publish_unread_refresh(row.addressee_id)
     return jsonify({"status": "rejected"})
 
 
@@ -270,6 +278,45 @@ def remove_friend(user_id):
 
 
 # ── 私信 ──────────────────────────────────────────────────────
+
+@social_bp.route("/events/stream", methods=["GET"])
+@limiter.exempt
+def events_stream():
+    token = request.args.get("token") or extract_bearer_token()
+    user, error = resolve_user_from_token(token)
+    if error:
+        return error_response(error, 401, code="invalid_token")
+
+    def generate():
+        yield from realtime_hub.stream(user.id)
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _notify_dm_message(msg, sender_id, receiver_id):
+    item_for_receiver = {
+        "id": msg.id,
+        "sender_id": msg.sender_id,
+        "receiver_id": msg.receiver_id,
+        "content": msg.content,
+        "created_at": _dt(msg.created_at),
+        "is_mine": False,
+    }
+    item_for_sender = {**item_for_receiver, "is_mine": True}
+    publish_dm_event(receiver_id, sender_id, item_for_receiver)
+    if receiver_id != sender_id:
+        publish_dm_event(sender_id, receiver_id, item_for_sender)
+    publish_unread_refresh(receiver_id)
+    publish_unread_refresh(sender_id)
+
 
 def _dm_item_dict(m, current_user_id):
     return {
@@ -389,6 +436,7 @@ def mark_dm_read(peer_id):
         return error_response("只能与好友私信", 403, code="not_friends")
     mark_dm_thread_read(g.current_user_id, peer_id)
     db.session.commit()
+    publish_unread_refresh(g.current_user_id)
     return jsonify({"ok": True})
 
 
@@ -409,6 +457,7 @@ def send_message(peer_id):
     )
     db.session.add(msg)
     db.session.commit()
+    _notify_dm_message(msg, g.current_user_id, peer_id)
     return jsonify({
         "id": msg.id,
         "sender_id": msg.sender_id,
@@ -476,6 +525,7 @@ def mark_notifications_read():
             {"is_read": True}, synchronize_session=False
         )
     db.session.commit()
+    publish_unread_refresh(g.current_user_id)
     return jsonify({"ok": True})
 
 
