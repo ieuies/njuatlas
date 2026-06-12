@@ -1,4 +1,4 @@
-import { API_BASE } from './config.js';
+import { API_BASE, IS_CROSS_ORIGIN_API } from './config.js';
 import { showToast } from './utils.js';
 
 let authToken = localStorage.getItem('access_token') || null;
@@ -66,6 +66,44 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
     }
 }
 
+/** 公开接口；仅在同域时附带 token，避免跨域 GET 触发 CORS 预检失败 */
+async function requestOptionalAuth(endpoint, method = 'GET', body = null, timeoutMs = DEFAULT_TIMEOUT_MS, silent = false) {
+    const url = `${API_BASE}${endpoint}`;
+    const headers = {};
+    if (body != null) headers['Content-Type'] = 'application/json';
+    if (authToken && !IS_CROSS_ORIGIN_API) headers['Authorization'] = `Bearer ${authToken}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const options = { method, headers, signal: controller.signal };
+    if (body) options.body = JSON.stringify(body);
+    try {
+        const res = await fetch(url, options);
+        clearTimeout(timeoutId);
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            throw new Error(`服务器返回异常 (${res.status})`);
+        }
+        if (!res.ok) {
+            if (res.status === 401 && authToken) {
+                authToken = null;
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('current_user');
+                throw new Error('UNAUTHORIZED');
+            }
+            throw new Error(data.message || `请求失败: ${res.status}`);
+        }
+        return data;
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') err = new Error('请求超时，请稍后重试');
+        if (err.message === 'UNAUTHORIZED') throw err;
+        if (!silent) showToast(err.message || '网络错误，请检查后端是否启动');
+        throw err;
+    }
+}
+
 // ── 用户认证 ──
 export async function register(username, email, password, code) {
     return request('/user/register', 'POST', { username, email, password, code }, false);
@@ -107,13 +145,543 @@ export async function updateMyProfile({ username, bio, campus, tags, bubble_styl
 export async function getGuideLeaderboard(campus, category, { shuffle = false } = {}) {
     let url = `/places/guide-leaderboard?campus=${encodeURIComponent(campus)}&category=${encodeURIComponent(category)}`;
     if (shuffle) url += '&shuffle=1';
+    // 已登录时带 token，刷新后仍能拿到 liked 状态（后端 CORS 已允许 Authorization）
+    if (authToken) {
+        return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
+    }
+    return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+}
+const GUIDE_EXCLUDED_NAME_KEYWORDS = ['南京大学', '南大', '酒店', '政府部门', '商学院'];
+const GUIDE_MAX_DISTANCE_M = 8000;
+/** 后端 /places/search 的 page_size 上限 */
+const GUIDE_SEARCH_PAGE_SIZE_MAX = 25;
+/** 校外分店后缀，如「李记吊笼牛肉汤(南京大学店)」不应被校园关键词误伤 */
+const GUIDE_CAMPUS_BRANCH_SUFFIX_RE = /\([^)]*(南京大学|南大)[^)]*店\)/;
+
+function _isExcludedGuideName(name) {
+    const normalized = String(name || '').replace(/（/g, '(').replace(/）/g, ')');
+    if (!normalized) return true;
+    for (const kw of GUIDE_EXCLUDED_NAME_KEYWORDS) {
+        if (!normalized.includes(kw)) continue;
+        if ((kw === '南京大学' || kw === '南大') && GUIDE_CAMPUS_BRANCH_SUFFIX_RE.test(normalized)) {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+
+function _isRecoverableGuideApiError(err) {
+    const msg = String(err?.message || '');
+    return (
+        msg.includes('404')
+        || msg.includes('不存在')
+        || /not found/i.test(msg)
+        || msg.includes('Failed to fetch')
+        || msg.includes('需要 place_id')
+        || msg.includes('缺少 place_id')
+        || err?.name === 'TypeError'
+    );
+}
+
+function _secureGuideImageUrl(url) {
+    if (!url) return '';
+    return String(url).replace(/^http:\/\//i, 'https://');
+}
+
+function _normalizePoiField(value) {
+    if (value == null || value === '') return '';
+    if (Array.isArray(value)) return value.map(_normalizePoiField).filter(Boolean).join('');
+    return String(value);
+}
+
+function _parseLocationPair(location) {
+    if (!location) return null;
+    const parts = String(location).split(',');
+    if (parts.length < 2) return null;
+    const lng = parseFloat(parts[0]);
+    const lat = parseFloat(parts[1]);
+    if (Number.isNaN(lng) || Number.isNaN(lat)) return null;
+    return { lng, lat };
+}
+
+function _distanceMeters(from, to) {
+    if (!from || !to) return null;
+    const rad = Math.PI / 180;
+    const dLat = (to.lat - from.lat) * rad;
+    const dLng = (to.lng - from.lng) * rad;
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(from.lat * rad) * Math.cos(to.lat * rad) * Math.sin(dLng / 2) ** 2;
+    return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function _poiToGuideItem(poi, category, campus, origin = null) {
+    const biz = poi.biz_ext || {};
+    const cost = biz.cost;
+    const rawImage = poi.photos?.[0]?.url || '';
+    let distance_m = null;
+    if (poi.distance != null && poi.distance !== '') {
+        const parsed = parseInt(poi.distance, 10);
+        if (!Number.isNaN(parsed) && parsed >= 0) distance_m = parsed;
+    }
+    const poiLoc = _parseLocationPair(poi.location);
+    if (distance_m == null && origin && poiLoc) {
+        distance_m = _distanceMeters(origin, poiLoc);
+    }
+    const address = _normalizePoiField(poi.address)
+        || _normalizePoiField(poi.addressname)
+        || [_normalizePoiField(poi.pname), _normalizePoiField(poi.cityname), _normalizePoiField(poi.adname)]
+            .filter(Boolean)
+            .join('');
+    return {
+        poi_id: String(poi.id || '').trim(),
+        name: _normalizePoiField(poi.name),
+        address,
+        desc: address,
+        image: _secureGuideImageUrl(rawImage),
+        type: category,
+        campus,
+        rating: _normalizePoiField(biz.rating),
+        price: cost ? `¥${_normalizePoiField(cost)}/人` : '',
+        location: _normalizePoiField(poi.location),
+        distance_m,
+        distance_label: distance_m != null ? `${distance_m}m` : '',
+        like_count: 0,
+        review_count: 0,
+        liked: false,
+    };
+}
+
+function _filterGuideSearchItems(items, { keywordMode = false } = {}) {
+    return items.filter((item) => {
+        if (_isExcludedGuideName(item.name)) return false;
+        if (item.distance_m != null && item.distance_m > GUIDE_MAX_DISTANCE_M) return false;
+        if (keywordMode && item.distance_m == null) return Boolean(item.name);
+        return Boolean(item.name);
+    });
+}
+
+function _tipToGuideItem(tip, category, campus, origin) {
+    const address = _normalizePoiField(tip.address) || _normalizePoiField(tip.district) || '';
+    const loc = _normalizePoiField(tip.location);
+    const poiLoc = _parseLocationPair(loc);
+    let distance_m = null;
+    if (origin && poiLoc) distance_m = _distanceMeters(origin, poiLoc);
+    return {
+        poi_id: '',
+        name: _normalizePoiField(tip.name),
+        address,
+        desc: address,
+        image: '',
+        type: category,
+        campus,
+        rating: '',
+        price: '',
+        location: loc,
+        distance_m,
+        distance_label: distance_m != null ? `${distance_m}m` : '',
+        like_count: 0,
+        review_count: 0,
+        liked: false,
+    };
+}
+
+function _normalizeLocationKey(location) {
+    const pair = _parseLocationPair(location);
+    if (!pair) return String(location || '').trim().toLowerCase();
+    return `${pair.lng.toFixed(4)},${pair.lat.toFixed(4)}`;
+}
+
+function _guideSearchDedupeKey(item) {
+    const name = (item.name || '').trim().toLowerCase();
+    const loc = _normalizeLocationKey(item.location);
+    const addr = (item.address || '').trim().toLowerCase();
+    if (name && loc) return `nl:${name}|${loc}`;
+    if (name && addr) return `na:${name}|${addr}`;
+    if (item.poi_id) return `poi:${item.poi_id}`;
+    return `raw:${name}|${addr}|${loc}`;
+}
+
+function _guideSearchItemRichness(item) {
+    return (
+        (item.poi_id ? 4 : 0)
+        + (item.rating ? 2 : 0)
+        + (item.price ? 1 : 0)
+        + (item.image ? 1 : 0)
+    );
+}
+
+function _mergeGuideSearchItemPair(a, b) {
+    const base = _guideSearchItemRichness(a) >= _guideSearchItemRichness(b) ? a : b;
+    const other = base === a ? b : a;
+    return {
+        ...base,
+        poi_id: base.poi_id || other.poi_id,
+        rating: base.rating || other.rating,
+        price: base.price || other.price,
+        image: base.image || other.image,
+        address: base.address || other.address,
+        location: base.location || other.location,
+        distance_m: base.distance_m ?? other.distance_m,
+        distance_label: base.distance_label || other.distance_label,
+    };
+}
+
+function _mergeGuideSearchItems(...lists) {
+    const order = [];
+    const byKey = new Map();
+    for (const list of lists) {
+        for (const item of list) {
+            const key = _guideSearchDedupeKey(item);
+            if (byKey.has(key)) {
+                byKey.set(key, _mergeGuideSearchItemPair(byKey.get(key), item));
+            } else {
+                byKey.set(key, item);
+                order.push(key);
+            }
+        }
+    }
+    return order.map((key) => byKey.get(key));
+}
+
+function _sortGuideSearchItems(items, keyword) {
+    const kw = (keyword || '').trim().toLowerCase();
+    if (!kw) {
+        return [...items].sort((a, b) => (a.distance_m ?? 999999) - (b.distance_m ?? 999999));
+    }
+    const score = (item) => {
+        const name = (item.name || '').toLowerCase();
+        let s = 0;
+        if (name === kw) s += 500;
+        if (name.includes(kw)) s += 200;
+        if (name.startsWith(kw)) s += 80;
+        for (const ch of kw) {
+            if (name.includes(ch)) s += 2;
+        }
+        return s;
+    };
+    return [...items].sort((a, b) => {
+        const diff = score(b) - score(a);
+        if (diff !== 0) return diff;
+        return (a.distance_m ?? 999999) - (b.distance_m ?? 999999);
+    });
+}
+
+async function _searchGuidePlacesByKeyword(campus, category, keyword, page, guideConfig) {
+    const campuses = guideConfig?.campuses || {};
+    let effectiveCampus = campus;
+    if (campus === 'all' || !campuses[campus]) effectiveCampus = '鼓楼';
+    const location = campuses[effectiveCampus] || campuses['鼓楼'] || '118.780,32.058';
+    const origin = _parseLocationPair(location);
+    const city = effectiveCampus === '苏州' ? '苏州' : '南京';
+    const pageSize = guideConfig.page_size || 25;
+    const trimmedKeyword = (keyword || '').trim();
+    const mapPois = (pois) => _filterGuideSearchItems(
+        (pois || []).map((poi) => _poiToGuideItem(poi, category, effectiveCampus, origin)),
+        { keywordMode: true },
+    );
+
+    let items = [];
+    try {
+        const suggestData = await getPlaceSuggestions(trimmedKeyword, city, location);
+        items = _mergeGuideSearchItems(
+            items,
+            (suggestData.tips || []).map((tip) => _tipToGuideItem(tip, category, effectiveCampus, origin)),
+        );
+    } catch {
+        // suggestions 失败时继续用 POI 搜索
+    }
+
+    try {
+        const around = await searchPlaces(
+            trimmedKeyword,
+            city,
+            location,
+            1,
+            GUIDE_SEARCH_PAGE_SIZE_MAX,
+            10000,
+            null,
+            'weight',
+        );
+        if (around.status === '1') {
+            items = _mergeGuideSearchItems(items, mapPois(around.pois));
+        }
+    } catch {
+        // 周边 POI 失败时仍保留 suggestions 结果
+    }
+
+    try {
+        const cityWide = await searchPlaces(
+            trimmedKeyword,
+            city,
+            null,
+            1,
+            GUIDE_SEARCH_PAGE_SIZE_MAX,
+            null,
+            null,
+            'weight',
+        );
+        if (cityWide.status === '1') {
+            items = _mergeGuideSearchItems(items, mapPois(cityWide.pois));
+        }
+    } catch {
+        // 全市检索失败不影响已有结果
+    }
+
+    items = _filterGuideSearchItems(items, { keywordMode: true });
+    items = _sortGuideSearchItems(items, trimmedKeyword);
+
+    const start = (page - 1) * pageSize;
+    const pageItems = items.slice(start, start + pageSize);
+    return {
+        items: pageItems,
+        page,
+        page_size: pageSize,
+        total: items.length,
+        has_more: start + pageSize < items.length,
+        campus: effectiveCampus,
+        category,
+        keyword: trimmedKeyword,
+        campus_fallback: campus === 'all' || !campuses[campus],
+    };
+}
+
+/** 旧版后端无 /guide-search 时，回退到 /places/search + 前端格式化 */
+async function _searchGuidePlacesViaAmap(campus, category, keyword, page, guideConfig) {
+    const campuses = guideConfig?.campuses || {};
+    const categories = guideConfig?.categories || {};
+    let effectiveCampus = campus;
+    if (campus === 'all' || !campuses[campus]) effectiveCampus = '鼓楼';
+    const cfg = categories[category];
+    if (!cfg) {
+        return {
+            items: [],
+            page,
+            has_more: false,
+            total: 0,
+            campus: effectiveCampus,
+            category,
+            keyword: keyword || '',
+            campus_fallback: campus === 'all' || !campuses[campus],
+        };
+    }
+
+    const location = campuses[effectiveCampus] || campuses['鼓楼'] || '118.780,32.058';
+    const origin = _parseLocationPair(location);
+    const city = effectiveCampus === '苏州' ? '苏州' : '南京';
+    const pageSize = guideConfig.page_size || 25;
+    const baseRadius = guideConfig.search_radius || 5000;
+    const radius = keyword ? Math.max(baseRadius, GUIDE_MAX_DISTANCE_M) : baseRadius;
+    const sortrule = keyword ? 'weight' : (guideConfig.sortrule || 'distance');
+    const trimmedKeyword = (keyword || '').trim();
+
+    // 有关键词：与发起组局同源（/places/suggestions），不受美食分类码限制
+    if (trimmedKeyword) {
+        return _searchGuidePlacesByKeyword(campus, category, trimmedKeyword, page, guideConfig);
+    }
+
+    const mapPois = (pois) => _filterGuideSearchItems(
+        (pois || []).map((poi) => _poiToGuideItem(poi, category, effectiveCampus, origin)),
+    );
+
+    let result = await searchPlaces(
+        trimmedKeyword,
+        city,
+        location,
+        page,
+        pageSize,
+        radius,
+        cfg.types,
+        sortrule,
+    );
+    if (result.status !== '1') {
+        throw new Error('高德搜索失败');
+    }
+
+    let items = mapPois(result.pois);
+    let total = items.length;
+    try {
+        total = parseInt(result.count, 10) || items.length;
+    } catch {
+        total = items.length;
+    }
+
+    return {
+        items,
+        page,
+        page_size: pageSize,
+        total,
+        has_more: page * pageSize < total,
+        campus: effectiveCampus,
+        category,
+        keyword: trimmedKeyword,
+        campus_fallback: campus === 'all' || !campuses[campus],
+    };
+}
+
+export async function searchGuidePlaces(campus, category, keyword = '', page = 1, guideConfig = null) {
+    if (!guideConfig) {
+        throw new Error('缺少 guide 配置');
+    }
+    // 生产环境 guide-search 可能未部署；跨域带 token 会触发预检失败。
+    // 统一走高德 /places/search，稳定可用。
+    return _searchGuidePlacesViaAmap(campus, category, keyword, page, guideConfig);
+}
+export async function getPlaceSuggestions(keyword, city = '南京', location = null) {
+    let url = `/places/suggestions?keyword=${encodeURIComponent(keyword)}&city=${encodeURIComponent(city)}`;
+    if (location) url += `&location=${encodeURIComponent(location)}`;
     return request(url, 'GET', null, false);
 }
 export async function ensureGuidePlace({ campus, category, item }) {
-    return request('/places/guide/ensure-place', 'POST', { campus, category, item });
+    return _ensureGuidePlaceWithFallback({ campus, category, item });
 }
-export async function togglePlaceLike(placeId) {
-    return request('/like', 'POST', { place_id: placeId });
+export async function togglePlaceLike(placeId, liked = null) {
+    const body = { place_id: placeId };
+    if (liked != null) body.liked = liked;
+    return request('/like', 'POST', body);
+}
+
+const GUIDE_PLACE_ID_CACHE_KEY = 'njuatlas_guide_place_ids';
+
+function _loadGuidePlaceIdCache() {
+    try {
+        const raw = sessionStorage.getItem(GUIDE_PLACE_ID_CACHE_KEY);
+        if (raw) return new Map(JSON.parse(raw));
+    } catch { /* ignore */ }
+    return new Map();
+}
+
+const _guidePlaceIdCache = _loadGuidePlaceIdCache();
+
+function _persistGuidePlaceIdCache() {
+    try {
+        sessionStorage.setItem(GUIDE_PLACE_ID_CACHE_KEY, JSON.stringify([..._guidePlaceIdCache.entries()]));
+    } catch { /* ignore */ }
+}
+
+function _guidePlaceCacheKey(item) {
+    if (item?.poi_id) return `poi:${String(item.poi_id).trim()}`;
+    const name = (item?.name || '').trim().toLowerCase();
+    const addr = (item?.address || '').trim().toLowerCase();
+    if (name) return `na:${name}|${addr}`;
+    return '';
+}
+
+function _resolveGuidePlaceId(item) {
+    if (item?.place_id) return item.place_id;
+    const key = _guidePlaceCacheKey(item);
+    return key ? _guidePlaceIdCache.get(key) : null;
+}
+
+/** 供 guide 页 dedupe  inflight 与缓存 place_id 对齐 */
+export function resolveGuidePlaceId(item) {
+    return _resolveGuidePlaceId(item);
+}
+
+function _rememberGuidePlaceId(item, placeId) {
+    if (!placeId || !item) return;
+    item.place_id = placeId;
+    const key = _guidePlaceCacheKey(item);
+    if (key) {
+        _guidePlaceIdCache.set(key, placeId);
+        _persistGuidePlaceIdCache();
+    }
+}
+
+function _formatGuideLikeResult(result, fallbackPlaceId = null) {
+    const likesRaw = result.likes ?? result.like_count;
+    return {
+        place_id: result.place_id ?? fallbackPlaceId,
+        liked: Boolean(result.liked),
+        likes: likesRaw != null && likesRaw !== '' ? Number(likesRaw) : null,
+        message: result.message,
+    };
+}
+
+async function _setGuidePlaceLike(placeId, liked) {
+    const result = await request(
+        '/like',
+        'POST',
+        { place_id: placeId, liked: Boolean(liked) },
+        true,
+        DEFAULT_TIMEOUT_MS,
+        true,
+    );
+    return _formatGuideLikeResult(result, placeId);
+}
+
+async function _ensureGuidePlaceWithFallback({ campus, category, item }) {
+    try {
+        return await request(
+            '/places/guide/ensure-place',
+            'POST',
+            { campus, category, item },
+            true,
+            DEFAULT_TIMEOUT_MS,
+            true,
+        );
+    } catch (err) {
+        if (!_isRecoverableGuideApiError(err)) throw err;
+    }
+    const created = await request('/place', 'POST', {
+        name: item?.name,
+        address: item?.address || '',
+        location: item?.location || '',
+        poi_id: item?.poi_id || undefined,
+        category,
+    }, true, DEFAULT_TIMEOUT_MS, true);
+    return { place_id: created.id, likes: 0, liked: false };
+}
+
+/** 幂等设置点赞状态（供延迟同步队列调用） */
+export async function syncGuideLikeToServer({ campus, category, item, liked }) {
+    const targetLiked = Boolean(liked);
+
+    if (!IS_CROSS_ORIGIN_API) {
+        try {
+            const result = await request(
+                '/places/guide/like',
+                'POST',
+                { campus, category, item, liked: targetLiked },
+                true,
+                DEFAULT_TIMEOUT_MS,
+                true,
+            );
+            _rememberGuidePlaceId(item, result.place_id);
+            return _formatGuideLikeResult(result);
+        } catch (err) {
+            if (!_isRecoverableGuideApiError(err)) throw err;
+        }
+    }
+
+    let placeId = _resolveGuidePlaceId(item);
+    if (!placeId) {
+        const ensured = await _ensureGuidePlaceWithFallback({ campus, category, item });
+        placeId = ensured.place_id;
+        _rememberGuidePlaceId(item, placeId);
+    }
+
+    const result = await _setGuidePlaceLike(placeId, targetLiked);
+    _rememberGuidePlaceId(item, result.place_id ?? placeId);
+    return result;
+}
+
+export function getGuideLikeKey(item) {
+    if (item?.poi_id) return `poi:${String(item.poi_id).trim()}`;
+    const name = (item?.name || '').trim().toLowerCase();
+    const addr = (item?.address || '').trim().toLowerCase();
+    if (name) return `na:${name}|${addr}`;
+    const placeId = _resolveGuidePlaceId(item);
+    return placeId ? `p:${placeId}` : 'guide:unknown';
+}
+
+/** @deprecated 请用 queueGuideLikeChange + syncGuideLikeToServer */
+export async function guideLikePlace({ campus, category, item, liked = null }) {
+    if (liked != null) {
+        return syncGuideLikeToServer({ campus, category, item, liked });
+    }
+    const current = Boolean(item?.liked);
+    return syncGuideLikeToServer({ campus, category, item, liked: !current });
 }
 
 // ── 地图搜索 ──

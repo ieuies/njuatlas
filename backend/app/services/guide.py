@@ -2,6 +2,8 @@
 
 import json
 import random
+import re
+import time
 
 from sqlalchemy import func
 
@@ -23,6 +25,8 @@ GUIDE_SORT_RULE = "distance"
 GUIDE_LEADERBOARD_LIMIT = 10
 GUIDE_MAX_DISTANCE_M = 8000
 GUIDE_CANDIDATE_PAGES = 1
+_SEED_CACHE_TTL_SEC = 300
+_seed_cache = {}
 
 GUIDE_CATEGORY_CONFIG = {
     "美食": {"types": "050000", "keyword": "", "max_pages": 1},
@@ -60,6 +64,10 @@ GUIDE_EXCLUDED_NAME_KEYWORDS = (
     "政府部门",
     "商学院",
 )
+# 校外分店后缀，如「李记吊笼牛肉汤(南京大学店)」
+_GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
+    r"\([^)]*(南京大学|南大)[^)]*店\)"
+)
 
 
 def _normalize_poi_name(name):
@@ -70,7 +78,13 @@ def is_excluded_guide_poi_name(name):
     normalized = _normalize_poi_name(name)
     if not normalized:
         return False
-    return any(keyword in normalized for keyword in GUIDE_EXCLUDED_NAME_KEYWORDS)
+    for keyword in GUIDE_EXCLUDED_NAME_KEYWORDS:
+        if keyword not in normalized:
+            continue
+        if keyword in ("南京大学", "南大") and _GUIDE_CAMPUS_BRANCH_SUFFIX_RE.search(normalized):
+            continue
+        return True
+    return False
 
 
 def filter_guide_items(items):
@@ -167,6 +181,11 @@ def leaderboard_sort_key(item):
 
 def fetch_guide_category(campus, cat, cfg=None):
     """按距离拉取校区周边候选 POI（人工规则过滤后用于排行榜种子）。"""
+    cache_key = (campus, cat)
+    cached = _seed_cache.get(cache_key)
+    if cached and time.time() - cached[0] < _SEED_CACHE_TTL_SEC:
+        return cached[1]
+
     cfg = cfg or GUIDE_CATEGORY_CONFIG[cat]
     location = GUIDE_CAMPUS_COORDS.get(campus, GUIDE_CAMPUS_COORDS["鼓楼"])
     city = guide_search_city(campus)
@@ -207,10 +226,19 @@ def fetch_guide_category(campus, cat, cfg=None):
             if len(items) >= target_count:
                 break
         page += 1
+    _seed_cache[cache_key] = (time.time(), items)
     return items
 
 
-def enrich_guide_items(items):
+def _name_addr_key(name, address=""):
+    name = (name or "").strip().lower()
+    address = (address or "").strip().lower()
+    if not name:
+        return ""
+    return f"{name}|{address}"
+
+
+def enrich_guide_items(items, user_id=None):
     if not items:
         return items
 
@@ -220,7 +248,28 @@ def enrich_guide_items(items):
         for place in Place.query.filter(Place.poi_id.in_(poi_ids)).all():
             places_by_poi[place.poi_id] = place
 
-    place_ids = [place.id for place in places_by_poi.values()]
+    direct_place_ids = [item["place_id"] for item in items if item.get("place_id")]
+    places_by_id = {}
+    if direct_place_ids:
+        for place in Place.query.filter(Place.id.in_(direct_place_ids)).all():
+            places_by_id[place.id] = place
+
+    places_by_name = {}
+    if user_id:
+        for place in (
+            db.session.query(Place)
+            .join(Like, Like.place_id == Place.id)
+            .filter(Like.user_id == user_id)
+            .all()
+        ):
+            places_by_id[place.id] = place
+            if place.poi_id:
+                places_by_poi[place.poi_id] = place
+            name_key = _name_addr_key(place.name, place.address)
+            if name_key:
+                places_by_name[name_key] = place
+
+    place_ids = list({place.id for place in places_by_poi.values()} | set(places_by_id.keys()))
     like_counts = {}
     review_counts = {}
     review_avg = {}
@@ -247,10 +296,22 @@ def enrich_guide_items(items):
             if avg is not None:
                 review_avg[place_id] = round(float(avg), 1)
 
+        if user_id:
+            user_liked = {
+                row[0]
+                for row in db.session.query(Like.place_id)
+                .filter(Like.user_id == user_id, Like.place_id.in_(place_ids))
+                .all()
+            }
+
     enriched = []
     for item in items:
         row = dict(item)
-        place = places_by_poi.get(row.get("poi_id") or "")
+        place = (
+            places_by_poi.get(row.get("poi_id") or "")
+            or places_by_id.get(row.get("place_id"))
+            or places_by_name.get(_name_addr_key(row.get("name"), row.get("address")))
+        )
         like_count = 0
         review_count = 0
         platform_rating = None
@@ -265,6 +326,7 @@ def enrich_guide_items(items):
 
         row["like_count"] = like_count
         row["review_count"] = review_count
+        row["liked"] = bool(place and place.id in user_liked)
         if platform_rating is not None:
             row["platform_rating"] = platform_rating
             display = effective_rating(row)
@@ -345,22 +407,91 @@ def merge_leaderboard_candidates(seed_items, db_items):
     return list(merged.values())
 
 
-def rank_leaderboard(items, limit=None, random_order=False):
+def rank_leaderboard(items, limit=None, random_order=False, user_id=None):
     limit = limit or GUIDE_LEADERBOARD_LIMIT
     items = dedupe_guide_items(filter_guide_items(items))
-    items = enrich_guide_items(items)
+    items = enrich_guide_items(items, user_id=user_id)
+    items.sort(key=leaderboard_sort_key)
     if random_order:
-        random.shuffle(items)
-        items = items[:limit]
-    else:
-        items.sort(key=leaderboard_sort_key)
-        items = items[:limit]
+        # 仅在相同赞数内打乱，避免 0 赞随机排到 TOP 1
+        grouped = []
+        i = 0
+        while i < len(items):
+            score = leaderboard_sort_key(items[i])[:1]
+            j = i + 1
+            while j < len(items) and leaderboard_sort_key(items[j])[:1] == score:
+                j += 1
+            bucket = items[i:j]
+            random.shuffle(bucket)
+            grouped.extend(bucket)
+            i = j
+        items = grouped
+    items = items[:limit]
     for idx, item in enumerate(items, start=1):
         item["rank"] = idx
     return items
 
 
-def build_leaderboard(campus, cat, random_order=False):
+def search_guide_places(campus, category, keyword="", page=1, page_size=None, user_id=None):
+    """按校区+分类搜索周边 POI，返回与排行榜一致的结构化条目。"""
+    if category not in GUIDE_CATEGORY_CONFIG:
+        return {"items": [], "page": page, "has_more": False, "total": 0}
+
+    effective_campus = campus
+    if campus == "all" or campus not in GUIDE_CAMPUS_COORDS:
+        effective_campus = "鼓楼"
+
+    cfg = GUIDE_CATEGORY_CONFIG[category]
+    page_size = page_size or GUIDE_PAGE_SIZE
+    location = GUIDE_CAMPUS_COORDS[effective_campus]
+    city = guide_search_city(effective_campus)
+    keyword = (keyword or "").strip()
+    sortrule = "weight" if keyword else GUIDE_SORT_RULE
+
+    result = search_places(
+        keyword or cfg.get("keyword", ""),
+        city=city,
+        location=location,
+        page=page,
+        page_size=page_size,
+        radius=GUIDE_SEARCH_RADIUS,
+        types=cfg["types"],
+        sortrule=sortrule,
+    )
+    if result.get("status") != "1":
+        return {"items": [], "page": page, "has_more": False, "total": 0, "error": True}
+
+    items = []
+    for poi in result.get("pois") or []:
+        item = _poi_to_item(poi, category, effective_campus)
+        if is_excluded_guide_poi_name(item["name"]):
+            continue
+        dist = item.get("distance_m")
+        if dist is not None and dist > GUIDE_MAX_DISTANCE_M:
+            continue
+        items.append(item)
+
+    items = enrich_guide_items(dedupe_guide_items(items), user_id=user_id)
+    try:
+        total = int(result.get("count") or 0)
+    except (TypeError, ValueError):
+        total = len(items)
+    has_more = page * page_size < total
+
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "has_more": has_more,
+        "campus": effective_campus,
+        "category": category,
+        "keyword": keyword,
+        "campus_fallback": campus == "all" or campus not in GUIDE_CAMPUS_COORDS,
+    }
+
+
+def build_leaderboard(campus, cat, random_order=False, user_id=None):
     if cat not in GUIDE_CATEGORY_CONFIG:
         return []
 
@@ -369,17 +500,22 @@ def build_leaderboard(campus, cat, random_order=False):
         for campus_name in GUIDE_CAMPUS_COORDS:
             sections.append({
                 "campus": campus_name,
-                "items": build_leaderboard(campus_name, cat, random_order=random_order),
+                "items": build_leaderboard(
+                    campus_name, cat, random_order=random_order, user_id=user_id
+                ),
             })
         return sections
 
     if campus not in GUIDE_CAMPUS_COORDS:
         campus = "鼓楼"
 
-    seed = fetch_guide_category(campus, cat)
     db_items = fetch_db_leaderboard_candidates(campus, cat)
+    if len(db_items) >= GUIDE_LEADERBOARD_LIMIT:
+        return rank_leaderboard(db_items, random_order=random_order, user_id=user_id)
+
+    seed = fetch_guide_category(campus, cat)
     merged = merge_leaderboard_candidates(seed, db_items)
-    return rank_leaderboard(merged, random_order=random_order)
+    return rank_leaderboard(merged, random_order=random_order, user_id=user_id)
 
 
 def place_from_guide_item(item, campus, guide_category, user_id=None):
@@ -402,7 +538,7 @@ def place_from_guide_item(item, campus, guide_category, user_id=None):
     }
     if existing:
         for key, value in payload.items():
-            if value and not getattr(existing, key, None):
+            if value is not None and value != "":
                 setattr(existing, key, value)
         db.session.commit()
         return existing

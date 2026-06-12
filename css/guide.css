@@ -137,6 +137,154 @@
     font-weight: 800;
 }
 
+/* ========== 主搜索栏 ========== */
+.guide-search-wrap {
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+.guide-search-bar {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.guide-search-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+.guide-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+.guide-search-input-wrap input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--atlas-line);
+    border-radius: 12px;
+    padding: 11px 36px 11px 36px;
+    background: var(--bg-primary);
+    color: var(--atlas-ink);
+    font-size: 0.9rem;
+}
+.guide-search-input-wrap input:focus {
+    outline: none;
+    border-color: var(--atlas-purple);
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+}
+.guide-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.guide-search-clear:hover { color: var(--atlas-ink); background: var(--atlas-line); }
+.guide-search-submit {
+    border: none;
+    border-radius: 12px;
+    padding: 0 18px;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.guide-search-submit:hover { filter: brightness(1.05); }
+.guide-search-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(124, 58, 237, 0.08);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+.guide-search-back {
+    border: none;
+    background: transparent;
+    color: var(--atlas-purple);
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 0;
+}
+.guide-search-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    margin: 0;
+    padding: 6px 0;
+    list-style: none;
+    background: var(--bg-primary);
+    border: 1px solid var(--atlas-line);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    max-height: 240px;
+    overflow-y: auto;
+}
+.guide-search-suggestions li {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.guide-search-suggestions li:hover,
+.guide-search-suggestions li.is-active {
+    background: rgba(124, 58, 237, 0.08);
+}
+.guide-suggestion-name { font-weight: 700; color: var(--atlas-ink); }
+.guide-suggestion-addr {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.guide-load-more-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0 8px;
+    grid-column: 1 / -1;
+}
+.guide-load-more-btn {
+    border: 1px solid var(--atlas-line);
+    background: transparent;
+    border-radius: 999px;
+    padding: 10px 24px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--atlas-ink);
+}
+.guide-load-more-btn:hover {
+    border-color: var(--atlas-purple);
+    color: var(--atlas-purple);
+}
+.guide-load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* ========== 排行榜双列（左图右文） ========== */
 .guide-waterfall {
     display: grid !important;
@@ -435,6 +583,10 @@
     gap: 12px;
     padding: 12px 0;
     border-bottom: 1px solid var(--atlas-line);
+    cursor: pointer;
+}
+.guide-explore-item:hover .guide-explore-name {
+    color: var(--atlas-purple);
 }
 .guide-explore-main { flex: 1; min-width: 0; }
 .guide-explore-name { font-weight: 700; margin-bottom: 4px; }
@@ -465,6 +617,29 @@
 .guide-explore-like.is-liked {
     color: #e11d48;
     border-color: rgba(225, 29, 72, 0.35);
+}
+.guide-explore-footer {
+    padding-top: 8px;
+    border-top: 1px solid var(--atlas-line);
+    margin-top: 4px;
+}
+.guide-explore-load-more {
+    width: 100%;
+    border: 1px dashed var(--atlas-line);
+    background: transparent;
+    border-radius: 10px;
+    padding: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    color: var(--atlas-ink);
+}
+.guide-explore-load-more:hover {
+    border-color: var(--atlas-purple);
+    color: var(--atlas-purple);
+}
+.guide-explore-load-more:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* ========== 暗色模式 ========== */

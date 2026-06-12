@@ -12,6 +12,12 @@ from app.logging_utils import log_event
 from app.models import ConversationMessage, Favorite, Like, Place, Review
 from app.rate_limit import limiter
 from app.services.amap import search_places
+from app.services.guide import GUIDE_MAX_DISTANCE_M, is_excluded_guide_poi_name
+from app.services.place_search import (
+    collect_keyword_search_pois,
+    expand_keyword_search_terms,
+    sort_pois_by_keyword,
+)
 from app.services.llm import chat_with_llm, stream_chat_with_llm
 from app.validators import clean_string, get_json_body, positive_int, validate_session_id
 
@@ -280,6 +286,95 @@ def _emit_chat_recommend_response(
     )
 
 
+_LLM_AREA_ONLY_KEYWORDS = {
+    "仙林", "鼓楼", "浦口", "南京大学", "南大", "新街口", "夫子庙",
+    "汉口路", "珠江路", "南门", "北门",
+}
+
+_LLM_SHOP_KEYWORD_STRIP_WORDS = [
+    "附近", "周边", "一带", "推荐", "一些", "有什么", "有", "吗", "呢", "去",
+    "帮我", "能不能", "可以", "给我", "啥", "什么", "哪里", "哪些",
+    "好吃的", "吃的", "附近有", "推荐一下", "吃啥", "吃啥呢",
+    "吃什么", "吃点啥", "去哪吃", "去哪", "去哪儿吃",
+    "有好吃的", "有什么好吃的", "有啥好吃的",
+    "有推荐的", "有推荐吗", "推荐吗",
+    "想吃什么", "想吃啥", "想吃点",
+    "叫外卖", "外卖", "今天", "今晚", "中午", "晚上",
+    "吃", "喝", "是", "的", "了", "呀", "吧", "啊",
+    "鼓楼校区", "仙林校区", "浦口校区", "仙林大学城",
+    "汉口路", "珠江路", "鼓楼", "仙林", "浦口", "新街口", "夫子庙",
+    "南门", "北门", "南大", "南京大学", "校区",
+    "餐厅", "美食", "小吃", "饭馆", "饭店", "店铺", "好吃", "饿了",
+    "如何", "怎么样", "怎样", "好不好", "咋样", "靠谱吗", "值得去吗", "可以吗", "行不行",
+]
+
+_LLM_DEFAULT_CAMPUS_LOCATION = "118.780,32.058"
+
+_SHOP_INQUIRY_SUFFIX_RE = re.compile(
+    r"(如何|怎么样|怎样|好不好|咋样|靠谱吗|值得去吗|可以吗|行不行)$"
+)
+
+
+def _resolve_shop_search_keywords(message, area_only_keywords=None):
+    """从用户消息提取店名/品牌检索词，避免「南大附近李记」被降成泛搜「美食」。"""
+    area_only_keywords = area_only_keywords or _LLM_AREA_ONLY_KEYWORDS
+    msg = (message or "").strip()
+    if not msg:
+        return []
+
+    keywords = []
+    seen = set()
+
+    def _add(kw):
+        kw = (kw or "").strip()
+        if len(kw) < 2 or kw in area_only_keywords:
+            return
+        key = kw.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        keywords.append(kw)
+
+    clean = msg
+    for word in sorted(_LLM_SHOP_KEYWORD_STRIP_WORDS, key=len, reverse=True):
+        clean = clean.replace(word, " ")
+    _add(" ".join(clean.split()).strip())
+
+    for part in re.split(r"[，,。！？!?、；;\s]+", msg):
+        part = part.strip()
+        if len(part) < 2:
+            continue
+        normalized = part
+        for word in sorted(_LLM_SHOP_KEYWORD_STRIP_WORDS, key=len, reverse=True):
+            normalized = normalized.replace(word, " ")
+        normalized = " ".join(normalized.split()).strip()
+        if normalized:
+            _add(normalized)
+        elif part not in _LLM_SHOP_KEYWORD_STRIP_WORDS and part not in area_only_keywords:
+            _add(part)
+
+    return keywords[:4]
+
+
+def _is_shop_inquiry_message(message):
+    return bool(_SHOP_INQUIRY_SUFFIX_RE.search((message or "").strip()))
+
+
+def _candidate_matches_shop_keywords(candidate, shop_keywords):
+    name = (candidate.get("name") or "").strip().lower()
+    if not name:
+        return False
+    for kw in shop_keywords or []:
+        token = (kw or "").strip().lower()
+        if len(token) < 2:
+            continue
+        if token in name or name in token:
+            return True
+        if len(token) >= 2 and token[:2] in name:
+            return True
+    return False
+
+
 def _format_llm_candidate_line(candidate, index):
     """LLM context line: omit missing rating/cost and internal source tags."""
     dist_text = f"距离约{candidate['distance_text']}，" if candidate.get("distance_text") else ""
@@ -337,6 +432,12 @@ def chat_recommend():
     if not is_food_request:
         if "推荐" in user_message.lower() and any(loc in user_message for loc in location_keywords):
             is_food_request = True
+
+    shop_search_keywords = expand_keyword_search_terms(
+        _resolve_shop_search_keywords(user_message)
+    )
+    if shop_search_keywords or _is_shop_inquiry_message(user_message):
+        is_food_request = True
 
     # 细分餐饮类型映射：按关键词长度降序排列（越长越优先匹配）
     # 高德 POI 分类码参考：
@@ -598,10 +699,7 @@ def chat_recommend():
         food_focus_keyword = _resolve_food_focus_keyword(user_message)
         strict_tokens = _resolve_name_constraints(user_message)
 
-        AREA_ONLY_KEYWORDS = {
-            "仙林", "鼓楼", "浦口", "南京大学", "南大", "新街口", "夫子庙",
-            "汉口路", "珠江路", "南门", "北门",
-        }
+        AREA_ONLY_KEYWORDS = _LLM_AREA_ONLY_KEYWORDS
 
         def _has_empty_result(result):
             return (
@@ -667,7 +765,9 @@ def chat_recommend():
             return bonus
 
         def _resolve_around_keyword():
-            """周边检索用词：用餐饮词，不用“仙林/鼓楼”等地名。"""
+            """周边检索用词：优先店名/品牌，其次餐饮词，不用纯地名。"""
+            if shop_search_keywords:
+                return shop_search_keywords[0]
             if food_focus_keyword:
                 return food_focus_keyword
             if strict_tokens:
@@ -700,7 +800,8 @@ def chat_recommend():
                     pois.append(poi)
             return pois
 
-        def _append_around_search(results, keyword, location, types_code, page_size=50):
+        def _append_around_search(results, keyword, location, types_code="050000", page_size=25):
+            page_size = min(int(page_size or 25), 25)
             results.append(
                 search_places(
                     keyword,
@@ -708,90 +809,114 @@ def chat_recommend():
                     radius=MAX_DISTANCE_M,
                     page=1,
                     page_size=page_size,
-                    types=types_code,
-                    sortrule="distance",
+                    types=types_code or None,
+                    sortrule="distance" if types_code else "weight",
                 )
             )
 
         message_anchor = _resolve_area_anchor(user_message)
         search_area_label = _resolve_area_label(user_message)
         search_location = message_anchor or user_location_raw
+        if not search_location and shop_search_keywords:
+            search_location = _LLM_DEFAULT_CAMPUS_LOCATION
+            search_area_label = search_area_label or "鼓楼校区"
         rank_lng = rank_lat = None
         if message_anchor:
             rank_lng, rank_lat = _parse_loc(message_anchor)
         elif gps_lng is not None:
             rank_lng, rank_lat = gps_lng, gps_lat
+        elif search_location:
+            rank_lng, rank_lat = _parse_loc(search_location)
 
         around_keyword = _resolve_around_keyword()
-        amap_results = []
-        if search_location:
-            _append_around_search(amap_results, around_keyword, search_location, search_types)
-            if search_types != "050000" and _has_empty_result(amap_results[-1]):
-                _append_around_search(amap_results, around_keyword, search_location, "050000")
-            if not strict_tokens:
-                if around_keyword != "餐厅":
-                    _append_around_search(amap_results, "餐厅", search_location, "050000")
-                if around_keyword != "小吃":
-                    _append_around_search(amap_results, "小吃", search_location, "050000")
-            if "仙林" in user_message:
-                xianlin_extra = "118.93021,32.10247"
-                if xianlin_extra != search_location:
-                    _append_around_search(amap_results, around_keyword, xianlin_extra, "050000")
-            if message_anchor and ("南大" in user_message or "南京大学" in user_message):
-                _append_around_search(amap_results, "南京大学", search_location, "050000", page_size=40)
-        else:
-            city_primary = search_places(
-                search_keyword or around_keyword,
+        amap_pois = []
+
+        if shop_search_keywords:
+            search_loc = search_location or _LLM_DEFAULT_CAMPUS_LOCATION
+            if rank_lng is None:
+                rank_lng, rank_lat = _parse_loc(search_loc)
+            if not search_area_label:
+                search_area_label = "鼓楼校区"
+            guide_pois = collect_keyword_search_pois(
+                shop_search_keywords[0],
                 city=city,
-                page=1,
-                page_size=25,
-                types=search_types,
+                location=search_loc,
+                extra_terms=shop_search_keywords,
             )
-            amap_results.append(city_primary)
-            if search_types != "050000" and _has_empty_result(city_primary):
+            amap_pois = sort_pois_by_keyword(guide_pois, shop_search_keywords[0])
+        else:
+            amap_results = []
+            if search_location:
+                _append_around_search(amap_results, around_keyword, search_location, search_types)
+                if search_types != "050000" and _has_empty_result(amap_results[-1]):
+                    _append_around_search(amap_results, around_keyword, search_location, "050000")
+                if not strict_tokens:
+                    if around_keyword != "餐厅":
+                        _append_around_search(amap_results, "餐厅", search_location, "050000")
+                    if around_keyword != "小吃":
+                        _append_around_search(amap_results, "小吃", search_location, "050000")
+                if "仙林" in user_message:
+                    xianlin_extra = "118.93021,32.10247"
+                    if xianlin_extra != search_location:
+                        _append_around_search(amap_results, around_keyword, xianlin_extra, "050000")
+            else:
+                city_primary = search_places(
+                    search_keyword or around_keyword,
+                    city=city,
+                    page=1,
+                    page_size=25,
+                    types=search_types,
+                )
+                amap_results.append(city_primary)
+                if search_types != "050000" and _has_empty_result(city_primary):
+                    amap_results.append(
+                        search_places(
+                            search_keyword or around_keyword,
+                            city=city,
+                            page=1,
+                            page_size=25,
+                            types="050000",
+                        )
+                    )
+
+            if strict_tokens and food_focus_keyword and food_focus_keyword not in (search_keyword or ""):
                 amap_results.append(
                     search_places(
-                        search_keyword or around_keyword,
+                        food_focus_keyword,
+                        city=city,
+                        page=1,
+                        page_size=25,
+                        types=search_types,
+                    )
+                )
+
+            amap_pois = _collect_amap_pois(amap_results)
+            if strict_tokens and not amap_pois and food_focus_keyword:
+                amap_results.append(
+                    search_places(
+                        food_focus_keyword,
                         city=city,
                         page=1,
                         page_size=25,
                         types="050000",
                     )
                 )
-
-        if strict_tokens and food_focus_keyword and food_focus_keyword not in (search_keyword or ""):
-            amap_results.append(
-                search_places(
-                    food_focus_keyword,
-                    city=city,
-                    page=1,
-                    page_size=25,
-                    types=search_types,
-                )
-            )
-
-        amap_pois = _collect_amap_pois(amap_results)
-        if strict_tokens and not amap_pois and food_focus_keyword:
-            amap_results.append(
-                search_places(
-                    food_focus_keyword,
-                    city=city,
-                    page=1,
-                    page_size=25,
-                    types="050000",
-                )
-            )
-            amap_pois = _collect_amap_pois(amap_results)
+                amap_pois = _collect_amap_pois(amap_results)
 
         raw_candidates = []
 
         # 渠道1：高德实时 POI（基准数据源）
         for poi in amap_pois:
+                poi_name = _normalize_field_text(poi.get("name", ""))
+                if is_excluded_guide_poi_name(poi_name):
+                    continue
+
                 poi_loc = poi.get("location", "")
                 dist_m = _distance_from(rank_lng, rank_lat, poi_loc)
 
                 # 硬过滤：按检索锚点半径筛选（与展示用的 GPS 距离无关）
-                if rank_lng is not None and (dist_m is None or dist_m > MAX_DISTANCE_M):
+                max_dist = GUIDE_MAX_DISTANCE_M if shop_search_keywords else MAX_DISTANCE_M
+                if rank_lng is not None and (dist_m is None or dist_m > max_dist):
                     continue
 
                 biz_ext = poi.get("biz_ext") or {}
@@ -807,7 +932,7 @@ def chat_recommend():
                         pass
 
                 raw_candidates.append({
-                    "name": _normalize_field_text(poi.get("name", "未知")) or "未知",
+                    "name": poi_name or "未知",
                     "address": _normalize_field_text(poi.get("address", "未知")) or "未知",
                     "location": poi_loc,
                     "type": _normalize_field_text(poi.get("type", "")),
@@ -818,33 +943,6 @@ def chat_recommend():
                     "rating_num": rating_num,
                     "sources": {"amap"},
                 })
-
-        # 渠道2：本地沉淀库（用户互动 + OSM 导入等）
-        search_terms = []
-        if search_keyword:
-            search_terms.extend([t for t in re.split(r"\s+", search_keyword) if len(t) >= 2])
-        search_terms.extend(strict_tokens[:4])
-        # 去重并限制数量，避免 SQL 条件过大
-        dedup_terms = []
-        seen_terms = set()
-        for term in search_terms:
-            key = term.strip().lower()
-            if not key or key in seen_terms:
-                continue
-            seen_terms.add(key)
-            dedup_terms.append(term.strip())
-            if len(dedup_terms) >= 6:
-                break
-
-        local_query = Place.query
-        if dedup_terms:
-            like_conditions = []
-            for term in dedup_terms:
-                pattern = f"%{term}%"
-                like_conditions.append(Place.name.ilike(pattern))
-                like_conditions.append(Place.address.ilike(pattern))
-                like_conditions.append(Place.category.ilike(pattern))
-            local_query = local_query.filter(or_(*like_conditions))
 
         def _bbox_for_radius(lng, lat, radius_m):
             from math import cos, radians
@@ -890,48 +988,78 @@ def chat_recommend():
                 return []
             return Place.query.filter(Place.id.in_(ids)).all()
 
-        local_places = []
-        seen_local_ids = set()
-        if rank_lng is not None:
-            min_lng, max_lng, min_lat, max_lat = _bbox_for_radius(
-                rank_lng, rank_lat, MAX_DISTANCE_M
-            )
-            geo_hits = []
-            for place in _places_in_bbox(min_lng, max_lng, min_lat, max_lat):
-                if not _is_food_category(place.category):
+        # 渠道2：本地沉淀库（用户互动 + OSM 导入等）
+        if not shop_search_keywords:
+            search_terms = []
+            if search_keyword:
+                search_terms.extend([t for t in re.split(r"\s+", search_keyword) if len(t) >= 2])
+            search_terms.extend(strict_tokens[:4])
+            # 去重并限制数量，避免 SQL 条件过大
+            dedup_terms = []
+            seen_terms = set()
+            for term in search_terms:
+                key = term.strip().lower()
+                if not key or key in seen_terms:
                     continue
-                dist_m = _distance_from(rank_lng, rank_lat, place.location)
-                if dist_m is None or dist_m > MAX_DISTANCE_M:
+                seen_terms.add(key)
+                dedup_terms.append(term.strip())
+                if len(dedup_terms) >= 6:
+                    break
+
+            local_query = Place.query
+            if dedup_terms:
+                like_conditions = []
+                for term in dedup_terms:
+                    pattern = f"%{term}%"
+                    like_conditions.append(Place.name.ilike(pattern))
+                    like_conditions.append(Place.address.ilike(pattern))
+                    like_conditions.append(Place.category.ilike(pattern))
+                local_query = local_query.filter(or_(*like_conditions))
+
+            local_places = []
+            seen_local_ids = set()
+            if rank_lng is not None:
+                min_lng, max_lng, min_lat, max_lat = _bbox_for_radius(
+                    rank_lng, rank_lat, MAX_DISTANCE_M
+                )
+                geo_hits = []
+                for place in _places_in_bbox(min_lng, max_lng, min_lat, max_lat):
+                    if not _is_food_category(place.category):
+                        continue
+                    dist_m = _distance_from(rank_lng, rank_lat, place.location)
+                    if dist_m is None or dist_m > MAX_DISTANCE_M:
+                        continue
+                    geo_hits.append((dist_m, place))
+                geo_hits.sort(key=lambda item: item[0])
+                for _, place in geo_hits[:120]:
+                    local_places.append(place)
+                    seen_local_ids.add(place.id)
+
+            text_places = local_query.order_by(Place.id.desc()).limit(120).all()
+            for place in text_places:
+                if place.id not in seen_local_ids:
+                    local_places.append(place)
+                    seen_local_ids.add(place.id)
+
+            for place in local_places:
+                if is_excluded_guide_poi_name(place.name):
                     continue
-                geo_hits.append((dist_m, place))
-            geo_hits.sort(key=lambda item: item[0])
-            for _, place in geo_hits[:120]:
-                local_places.append(place)
-                seen_local_ids.add(place.id)
-
-        text_places = local_query.order_by(Place.id.desc()).limit(120).all()
-        for place in text_places:
-            if place.id not in seen_local_ids:
-                local_places.append(place)
-                seen_local_ids.add(place.id)
-
-        for place in local_places:
-            poi_loc = (place.location or "").strip()
-            dist_m = _distance_from(rank_lng, rank_lat, poi_loc)
-            if rank_lng is not None and (dist_m is None or dist_m > MAX_DISTANCE_M):
-                continue
-            raw_candidates.append({
-                "name": place.name or "未知",
-                "address": place.address or "未知",
-                "location": poi_loc,
-                "type": place.category or "本地补充",
-                "rating": "暂无评分",
-                "cost": "暂无价格",
-                "distance_m": dist_m,
-                "display_distance_m": _distance_from(gps_lng, gps_lat, poi_loc) or dist_m,
-                "rating_num": None,
-                "sources": {"local_db"},
-            })
+                poi_loc = (place.location or "").strip()
+                dist_m = _distance_from(rank_lng, rank_lat, poi_loc)
+                if rank_lng is not None and (dist_m is None or dist_m > MAX_DISTANCE_M):
+                    continue
+                raw_candidates.append({
+                    "name": place.name or "未知",
+                    "address": place.address or "未知",
+                    "location": poi_loc,
+                    "type": place.category or "本地补充",
+                    "rating": "暂无评分",
+                    "cost": "暂无价格",
+                    "distance_m": dist_m,
+                    "display_distance_m": _distance_from(gps_lng, gps_lat, poi_loc) or dist_m,
+                    "rating_num": None,
+                    "sources": {"local_db"},
+                })
 
         # 多源去重并合并证据
         merged = {}
@@ -983,10 +1111,13 @@ def chat_recommend():
             name_bonus = 0.0
             if strict_tokens and any(tok in (c.get("name") or "").lower() for tok in strict_tokens):
                 name_bonus = 0.1
+            shop_name_bonus = 0.0
+            if shop_search_keywords and _candidate_matches_shop_keywords(c, shop_search_keywords):
+                shop_name_bonus = 0.25
             campus_bonus = _campus_affinity_bonus(c.get("name"), c.get("address"))
             return (
                 dist_score * 0.5 + rating_score * 0.35 + source_bonus
-                + source_quality_bonus + name_bonus + campus_bonus
+                + source_quality_bonus + name_bonus + shop_name_bonus + campus_bonus
             )
 
         raw_candidates.sort(key=_candidate_score, reverse=True)
@@ -1094,6 +1225,42 @@ def chat_recommend():
                 + candidates_text
             )
 
+    # 具体店名查询：与吃喝玩乐同源检索，固定模板回复，禁止落入 LLM 编造
+    if is_food_request and shop_search_keywords:
+        matched_shop = [c for c in candidates if _candidate_matches_shop_keywords(c, shop_search_keywords)]
+        if not matched_shop:
+            matched_shop = candidates[:5]
+        query_name = shop_search_keywords[0]
+        if matched_shop:
+            lines = [_format_user_candidate_line(item, idx) for idx, item in enumerate(matched_shop[:3], 1)]
+            shop_reply = (
+                f"帮你查到了和「{query_name}」相关的店：\n"
+                + "\n".join(lines)
+                + "\n详细信息可以看下面卡片。"
+            )
+            _save_conversation_message(user_id, session_id, "user", user_message)
+            _save_conversation_message(user_id, session_id, "assistant", shop_reply)
+            db.session.commit()
+            return _emit_chat_recommend_response(
+                stream_mode=stream_mode,
+                session_id=session_id,
+                reply=shop_reply,
+                candidates=_public_candidates(matched_shop[:5]),
+            )
+        no_shop_reply = (
+            f"我用「{query_name}」及相关关键词在南大鼓楼附近检索了，暂时没匹配到明确店名。"
+            "你可以试试更短的关键词（比如只搜品牌名），或告诉我大概在哪个校区/路口。"
+        )
+        _save_conversation_message(user_id, session_id, "user", user_message)
+        _save_conversation_message(user_id, session_id, "assistant", no_shop_reply)
+        db.session.commit()
+        return _emit_chat_recommend_response(
+            stream_mode=stream_mode,
+            session_id=session_id,
+            reply=no_shop_reply,
+            candidates=[],
+        )
+
     # 对明确品类需求（如饺子馆/火锅/咖啡）使用严格模板回复，
     # 避免模型在这类问题上自由发挥导致编造细节。
     strict_tokens = _resolve_name_constraints(user_message)
@@ -1176,7 +1343,8 @@ def chat_recommend():
         "1. 你只推荐南京市范围内的餐厅和场所。问到其他城市就老实说「我只熟南京这一片，别的地方你问问别人～」\n"
         "1.1 用户消息里若写了具体校区/片区（如仙林校区、鼓楼校区），推荐排序按该校区筛选，不要按用户当前定位去推其他区域的店；"
         "回复里提到的距离，是用户当前定位到店铺的距离（未授权定位时才是校区锚点距离）；"
-        "不要把南师大/其他学校的食堂当成南大食堂推荐。\n"
+        "不要把南师大/其他学校的食堂当成南大食堂推荐。"
+        "店名带有「(南京大学店)」「(南大店)」的通常是校外分店，不是校内食堂，可以正常推荐。\n"
         "2. 你不是万能助手。别人聊编程、数学、政治、养生，你就说「这个我不太懂诶，不如聊聊南京哪家鸭血粉丝汤好喝？」\n"
         "3. 推荐餐厅时只能使用系统给你的检索候选。你拥有的信息仅包括：店名、地址、评分、人均价格、分类。你无法获取顾客评论、菜品图片、菜单、排队情况等。如果用户问你要评论、要具体菜品、要菜单——直接说「这个我查不到，我只有评分和人均，你可以去大众点评看看真实评价」，不要自己编造。\n"
         "3.1 向用户展示时：没有评分或人均就不要写「暂无评分」「暂无价格」，直接省略该字段；不要向用户提及数据来源。\n"
@@ -1194,6 +1362,8 @@ def chat_recommend():
         "10. 如果候选列表为空，只能明确告诉用户“当前检索不到”，并建议其换关键词或放宽范围；"
         "绝对不要输出任何具体店名、地址、评分、人均，也不要引用或编造“食客评价”。\n"
         "11. 如果候选列表不为空，只能引用候选列表里的店名；禁止新增候选外店名。\n"
+        "12. 用户询问具体店名（如「李记吊笼牛肉汤如何」）时，只要候选名称包含该店名或品牌关键词，就应视为找到了，"
+        "不要声称「没有这个注册门店」；店名带「(南京大学店)」的是校外分店，可正常介绍。\n"
         "\n"
         "如果用户第一次来聊天，可以主动打招呼：「嘿，我是小南！在南大附近找吃的随时问我～」"
     )

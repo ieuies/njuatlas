@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from app.auth_utils import jwt_required
+from app.auth_utils import jwt_optional, jwt_required
+from app import db
 from app.errors import error_response
 from app.models import Like
 from app.rate_limit import limiter
@@ -8,14 +9,21 @@ from app.services.amap import geocode, regeocode, search_places
 from app.services.guide import (
     GUIDE_CAMPUS_COORDS,
     GUIDE_CATEGORY_CONFIG,
+    GUIDE_MAX_DISTANCE_M,
     build_leaderboard,
     guide_config_payload,
     place_from_guide_item,
+    search_guide_places,
 )
+from app.services.place_search import collect_keyword_search_pois, sort_pois_by_keyword
 from app.validators import clean_string, get_json_body, int_range, validate_location
 
 
 places_bp = Blueprint("places", __name__, url_prefix="/api/places")
+
+
+def _optional_user_id():
+    return getattr(g, "current_user_id", None)
 
 HOT_AREAS = {
     "xinjiekou": {"name": "新街口", "location": "118.78472,32.03517"},
@@ -54,6 +62,27 @@ def search():
         return error_response("高德 API 调用失败", 502, code="amap_api_error")
 
     return jsonify(result)
+
+
+@places_bp.route("/keyword-search", methods=["GET"])
+@limiter.limit("120 per minute")
+def keyword_search():
+    """与前端 guide 关键词搜索对齐：inputtips + 无分类周边 + 全市文本。"""
+    keyword = clean_string(request.args.get("keyword"), "keyword", required=True, max_length=50)
+    city = clean_string(request.args.get("city", "南京"), "city", max_length=30)
+    location = request.args.get("location", "").strip() or None
+    if location:
+        location = validate_location(location)
+
+    pois = collect_keyword_search_pois(keyword, city=city, location=location)
+    pois = sort_pois_by_keyword(pois, keyword)
+    return jsonify({
+        "keyword": keyword,
+        "city": city,
+        "location": location,
+        "count": len(pois),
+        "pois": pois,
+    })
 
 
 @places_bp.route("/geocode", methods=["GET"])
@@ -138,7 +167,29 @@ def guide_config():
     return jsonify(guide_config_payload())
 
 
+@places_bp.route("/guide-search", methods=["GET"])
+@jwt_optional
+@limiter.limit("90 per minute")
+def guide_search():
+    """吃喝玩乐搜索：按校区+分类+关键词检索周边 POI。"""
+    campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
+    category = clean_string(request.args.get("category"), "category", required=True, max_length=20)
+    keyword = clean_string(request.args.get("keyword"), "keyword", max_length=80) or ""
+    page = int_range(request.args.get("page", 1), "page", min_value=1, max_value=50)
+
+    if category not in GUIDE_CATEGORY_CONFIG:
+        return error_response("无效的分类", 400, code="invalid_category")
+
+    payload = search_guide_places(
+        campus, category, keyword=keyword, page=page, user_id=_optional_user_id()
+    )
+    if payload.get("error"):
+        return error_response("高德 API 调用失败", 502, code="amap_api_error")
+    return jsonify(payload)
+
+
 @places_bp.route("/guide-leaderboard", methods=["GET"])
+@jwt_optional
 @limiter.limit("90 per minute")
 def guide_leaderboard():
     """吃喝玩乐排行榜：每校区每分类最多 10 家（按点赞优先）。"""
@@ -149,7 +200,9 @@ def guide_leaderboard():
     if category not in GUIDE_CATEGORY_CONFIG:
         return error_response("无效的分类", 400, code="invalid_category")
 
-    result = build_leaderboard(campus, category, random_order=random_order)
+    result = build_leaderboard(
+        campus, category, random_order=random_order, user_id=_optional_user_id()
+    )
     if campus == "all":
         return jsonify({"campus": "all", "category": category, "sections": result})
     return jsonify({"campus": campus, "category": category, "items": result})
@@ -182,7 +235,36 @@ def ensure_guide_place():
     return jsonify({"place_id": place.id, "likes": likes, "liked": liked})
 
 
+@places_bp.route("/guide/like", methods=["POST"])
+@jwt_required
+@limiter.limit("60 per minute")
+def guide_like():
+    """收录 POI 并设置点赞状态（合并请求，降低前端延迟）。"""
+    data = get_json_body(request)
+    campus = clean_string(data.get("campus"), "campus", max_length=20) or "鼓楼"
+    category = clean_string(data.get("category"), "category", required=True, max_length=30)
+    item = data.get("item") or {}
+    if category not in GUIDE_CATEGORY_CONFIG:
+        return error_response("无效的分类", 400, code="invalid_category")
+
+    place = place_from_guide_item(item, campus, category, user_id=g.current_user_id)
+    from app.services.place_likes import set_place_like, toggle_place_like
+
+    if "liked" in data and data.get("liked") is not None:
+        result = set_place_like(place, g.current_user_id, bool(data.get("liked")))
+    else:
+        result = toggle_place_like(place, g.current_user_id)
+
+    return jsonify({
+        "place_id": result["place_id"],
+        "liked": result["liked"],
+        "likes": result["likes"],
+        "message": "点赞成功" if result["liked"] else "已取消点赞",
+    })
+
+
 @places_bp.route("/guide-bundle", methods=["GET"])
+@jwt_optional
 @limiter.limit("20 per minute")
 def guide_bundle():
     """刷新用：拉取各分类排行榜（单校区）。"""
@@ -190,8 +272,9 @@ def guide_bundle():
     if campus == "all":
         campus = "鼓楼"
     random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
+    user_id = _optional_user_id()
     categories = {
-        cat: build_leaderboard(campus, cat, random_order=random_order)
+        cat: build_leaderboard(campus, cat, random_order=random_order, user_id=user_id)
         for cat in GUIDE_CATEGORY_CONFIG
     }
     return jsonify({"campus": campus, "categories": categories})

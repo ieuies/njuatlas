@@ -99,29 +99,60 @@ def add_review():
 @limiter.limit("60 per minute")
 def toggle_like():
     data = get_json_body(request)
-    place_id = positive_int(data.get("place_id"), "place_id")
+    place_id_raw = data.get("place_id")
+    place = None
 
-    place = Place.query.get(place_id)
+    if place_id_raw is not None and str(place_id_raw).strip() != "":
+        place_id = positive_int(place_id_raw, "place_id")
+        place = Place.query.get(place_id)
+    elif data.get("item"):
+        from app.services.guide import GUIDE_CATEGORY_CONFIG, place_from_guide_item
+
+        campus = clean_string(data.get("campus"), "campus", max_length=20) or "鼓楼"
+        category = clean_string(data.get("category"), "category", required=True, max_length=30)
+        item = data.get("item") or {}
+        if category not in GUIDE_CATEGORY_CONFIG:
+            return error_response("无效的分类", 400, code="invalid_category")
+        place = place_from_guide_item(item, campus, category, user_id=g.current_user_id)
+        place_id = place.id
+    else:
+        return error_response("缺少 place_id 或 item", 400, code="invalid_payload")
+
     if not place:
         return error_response("场所不存在", 404, code="place_not_found")
-    existing = Like.query.filter_by(user_id=g.current_user_id, place_id=place_id).first()
-    if existing:
-        db.session.delete(existing)
-        db.session.commit()
-        from app.services.guide_rank_cache import sync_place_rank
 
-        sync_place_rank(place)
-        log_event(current_app.logger, "like_removed", user_id=g.current_user_id, place_id=place_id)
-        return jsonify({"liked": False, "message": "已取消点赞"})
+    from app.services.place_likes import set_place_like, toggle_place_like
 
-    like = Like(user_id=g.current_user_id, place_id=place_id)
-    db.session.add(like)
-    db.session.commit()
-    from app.services.guide_rank_cache import sync_place_rank
+    if "liked" in data and data.get("liked") is not None:
+        result = set_place_like(place, g.current_user_id, bool(data.get("liked")))
+        message = "点赞成功" if result["liked"] else "已取消点赞"
+        if result["changed"]:
+            log_event(
+                current_app.logger,
+                "like_added" if result["liked"] else "like_removed",
+                user_id=g.current_user_id,
+                place_id=place.id,
+            )
+        return jsonify({
+            "liked": result["liked"],
+            "likes": result["likes"],
+            "place_id": result["place_id"],
+            "message": message,
+        })
 
-    sync_place_rank(place)
-    log_event(current_app.logger, "like_added", user_id=g.current_user_id, place_id=place_id)
-    return jsonify({"liked": True, "message": "点赞成功"})
+    result = toggle_place_like(place, g.current_user_id)
+    log_event(
+        current_app.logger,
+        "like_added" if result["liked"] else "like_removed",
+        user_id=g.current_user_id,
+        place_id=place.id,
+    )
+    return jsonify({
+        "liked": result["liked"],
+        "likes": result["likes"],
+        "place_id": result["place_id"],
+        "message": "点赞成功" if result["liked"] else "已取消点赞",
+    })
 
 
 @inter_bp.route("/favorite", methods=["POST"])

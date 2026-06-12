@@ -61,7 +61,11 @@ def create_app():
     from app.realtime import hub as realtime_hub
     realtime_hub.init_app(app)
 
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {
+        "origins": "*",
+        "allow_headers": ["Authorization", "Content-Type"],
+        "expose_headers": ["Content-Type"],
+    }})
 
     @app.route("/")
     def index():

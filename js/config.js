@@ -13,6 +13,14 @@ const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname
 const useLocalApi = isLocal && runtimeConfig.USE_LOCAL_API === true;
 export const API_BASE = runtimeConfig.API_BASE
     || (useLocalApi ? LOCAL_API_BASE : PRODUCTION_API_BASE);
+export const IS_CROSS_ORIGIN_API = (() => {
+    try {
+        const apiOrigin = new URL(API_BASE, window.location.href).origin;
+        return apiOrigin !== window.location.origin;
+    } catch {
+        return true;
+    }
+})();
 export const AMAP_KEY = runtimeConfig.AMAP_KEY || '97ac6e711cde17463af06c10b8b05f42';
 export const AMAP_SECURITY_CODE = runtimeConfig.AMAP_SECURITY_CODE || '';
 

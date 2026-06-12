@@ -565,9 +565,11 @@ def place_suggestions():
     seen = set()
 
     def _append_tip(name, address, district, loc):
-        if not name or not loc:
+        name = (name or "").strip()
+        if not name:
             return
-        dedupe_key = (name.strip().lower(), loc.strip())
+        loc = (loc or "").strip()
+        dedupe_key = (name.lower(), loc, (address or "").strip().lower())
         if dedupe_key in seen:
             return
         seen.add(dedupe_key)
@@ -577,6 +579,14 @@ def place_suggestions():
             "district": district or "",
             "location": loc,
         })
+
+    def _append_poi(poi):
+        _append_tip(
+            poi.get("name", ""),
+            poi.get("address", ""),
+            poi.get("adname", ""),
+            _normalize_location(poi.get("location")),
+        )
 
     try:
         data = inputtips(keyword, city=city, location=location)
@@ -590,27 +600,68 @@ def place_suggestions():
     except Exception:
         data = {"tips": []}
 
-    # 输入提示有时会返回无坐标项（例如“新街口”），这里用 POI 文本检索做兜底，
-    # 保证前端始终拿到可用于发帖地图定位的坐标。
-    if not tips:
+    # 始终补充周边 POI（无餐饮分类限制），与组局/指南搜索对齐
+    if location:
         try:
-            fallback = search_places(
+            around = search_places(
                 keyword,
                 city=city,
-                location=None,  # 不用前端固定坐标，避免把结果限制在某个小范围内
+                location=location,
                 page=1,
-                page_size=12,
+                page_size=25,
+                radius=8000,
+                types=None,
+                sortrule="weight",
             )
-            if str(fallback.get("status")) == "1":
-                for poi in fallback.get("pois", []):
-                    _append_tip(
-                        poi.get("name", ""),
-                        poi.get("address", ""),
-                        poi.get("adname", ""),
-                        _normalize_location(poi.get("location")),
-                    )
+            if str(around.get("status")) == "1":
+                for poi in around.get("pois") or []:
+                    _append_poi(poi)
         except Exception:
-            if not data.get("tips"):
-                return error_response("地点搜索服务暂时不可用", 502)
+            pass
+
+    # 补充全市文本检索（inputtips 有结果时也执行，避免漏掉未收录进 tips 的店）
+    try:
+        text = search_places(
+            keyword,
+            city=city,
+            location=None,
+            page=1,
+            page_size=20,
+            types=None,
+            sortrule="weight",
+        )
+        if str(text.get("status")) == "1":
+            for poi in text.get("pois") or []:
+                _append_poi(poi)
+    except Exception:
+        if not tips and not data.get("tips"):
+            return error_response("地点搜索服务暂时不可用", 502)
+
+    # 为仅有名称、无坐标的 tip 反查 POI 坐标
+    for tip in tips:
+        if tip.get("location"):
+            continue
+        try:
+            resolved = search_places(
+                tip["name"],
+                city=city,
+                location=location,
+                page=1,
+                page_size=3,
+                radius=8000,
+                types=None,
+                sortrule="weight",
+            )
+            if str(resolved.get("status")) != "1":
+                continue
+            pois = resolved.get("pois") or []
+            if not pois:
+                continue
+            poi = pois[0]
+            tip["location"] = _normalize_location(poi.get("location")) or ""
+            if not tip.get("address"):
+                tip["address"] = poi.get("address") or ""
+        except Exception:
+            continue
 
     return jsonify({"tips": tips})
