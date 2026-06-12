@@ -105,7 +105,15 @@ function bindPartnerPrefetchIntent() {
     document.querySelectorAll('[data-page="partner"]').forEach((el) => {
         el.addEventListener('mouseenter', prefetchPartnerOnIntent, { once: true });
         el.addEventListener('focus', prefetchPartnerOnIntent, { once: true });
+        el.addEventListener('touchstart', prefetchPartnerOnIntent, { once: true, passive: true });
     });
+    const mapFab = document.getElementById('mapFabMobile');
+    if (mapFab) {
+        mapFab.addEventListener('touchstart', () => {
+            prefetchAmapScript();
+            _loadPartner().catch(() => {});
+        }, { passive: true });
+    }
 }
 
 function prefetchCommonAssets() {
@@ -113,7 +121,7 @@ function prefetchCommonAssets() {
     if (!mobile) {
         setTimeout(() => prefetchAmapScript(), 500);
     } else {
-        setTimeout(() => prefetchAmapScript(), 6000);
+        setTimeout(() => prefetchAmapScript(), 2000);
     }
     bindPartnerPrefetchIntent();
 }
@@ -131,8 +139,12 @@ async function switchPage(pageId) {
         ensurePageStyles(pageId),
         prefetchPageModule(pageId),
     ];
-    if (pageId === 'partner' || pageId === 'fullMap') {
-        pageBootTasks.push(prefetchAmapScript());
+    const amapPrefetch = (pageId === 'partner' || pageId === 'fullMap')
+        ? prefetchAmapScript()
+        : null;
+    // 全屏地图先展示页面再加载 SDK，避免点击后长时间白屏
+    if (pageId === 'partner' && amapPrefetch) {
+        pageBootTasks.push(amapPrefetch);
     }
     await Promise.all(pageBootTasks);
 
@@ -224,11 +236,9 @@ async function switchPage(pageId) {
         }
         mod.refreshMessages();
     } else if (pageId === 'fullMap') {
-        // 确保 partner 模块已加载（全屏地图需要 initFullMapMarkers）
         await _loadPartner();
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => initFullMapMarkers());
-        });
+        if (amapPrefetch) amapPrefetch.catch(() => {});
+        requestAnimationFrame(() => initFullMapMarkers());
     }
 
     if (pageId === 'home') {

@@ -7,6 +7,45 @@ let _sharedMap = null;
 let _sharedMapContainer = null;
 let _previewMapPending = false;
 let _previewMapInFlight = false;
+let _mobileMapPrewarmed = false;
+let _fullMapInitPromise = null;
+
+function _mapCreateOptions() {
+    const mobile = isMobileViewport();
+    return {
+        zoom: 15,
+        center: getMapCenter(),
+        mapStyle: 'amap://styles/light',
+        resizeEnable: false,
+        animateEnable: !mobile,
+        jogEnable: !mobile,
+        pitchEnable: false,
+        rotateEnable: false,
+        showBuildingBlock: !mobile,
+        showLabel: !mobile,
+    };
+}
+
+function _setFullMapLoading(loading) {
+    document.getElementById('fullMapContainer')?.classList.toggle('is-loading', loading);
+}
+
+async function _waitForMapContainer(container, maxFrames = 24) {
+    if (!container) return false;
+    for (let i = 0; i < maxFrames; i++) {
+        if (container.offsetWidth > 0 && container.offsetHeight > 0) return true;
+        await new Promise((r) => requestAnimationFrame(r));
+    }
+    return container.offsetWidth > 0;
+}
+
+/** 移动端在找搭子页浏览时预拉 SDK，点地图 FAB 时更快 */
+export function scheduleMobileMapPrewarm() {
+    if (!isMobileViewport() || _mobileMapPrewarmed) return;
+    _mobileMapPrewarmed = true;
+    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 400));
+    idle(() => prefetchAmapScript().catch(() => {}));
+}
 async function _initPreviewMapCore() {
     await ensureAMap();
     const map = getOrCreateSharedMap('preview');
@@ -65,20 +104,13 @@ export function getOrCreateSharedMap(targetParent) {
         return _sharedMap;
     }
 
-    const center = getMapCenter();
-
     if (!_sharedMap) {
         _sharedMapContainer = document.createElement('div');
         _sharedMapContainer.style.cssText = 'width:100%;height:100%;';
         target.innerHTML = '';
         target.appendChild(_sharedMapContainer);
 
-        _sharedMap = new window.AMap.Map(_sharedMapContainer, {
-            zoom: 15,
-            center: center,
-            mapStyle: 'amap://styles/light',
-            resizeEnable: false,
-        });
+        _sharedMap = new window.AMap.Map(_sharedMapContainer, _mapCreateOptions());
         partnerStore.currentMapParent = targetParent;
         _setupResizeObserver();
     } else {
@@ -178,6 +210,7 @@ export function addMarkersToMap(map, data) {
     map.clearMap();
     if (!data.length) return [];
 
+    const mobile = isMobileViewport();
     const markers = [];
     data.forEach(post => {
         const coords = post.lnglat;
@@ -185,13 +218,26 @@ export function addMarkersToMap(map, data) {
             return;
         }
         const style = categoryStyle(post.category);
-        const marker = new window.AMap.Marker({
-            position: coords,
-            title: post.title,
-            icon: _getMarkerIcon(style.color),
-            offset: _getMarkerOffset(),
-            zIndex: 100,
-        });
+        let marker;
+        if (mobile) {
+            marker = new window.AMap.CircleMarker({
+                center: coords,
+                radius: 7,
+                strokeColor: '#ffffff',
+                strokeWeight: 2,
+                fillColor: style.color,
+                fillOpacity: 0.92,
+                zIndex: 100,
+            });
+        } else {
+            marker = new window.AMap.Marker({
+                position: coords,
+                title: post.title,
+                icon: _getMarkerIcon(style.color),
+                offset: _getMarkerOffset(),
+                zIndex: 100,
+            });
+        }
         marker.on('click', () => _openInfoWindow(map, coords, post, style));
         markers.push(marker);
     });
@@ -217,18 +263,26 @@ export function refreshPreviewMarkers() {
 }
 
 export async function initFullMapMarkers() {
-    try {
-        await ensureAMap();
-        const container = document.getElementById('fullMap');
-        if (!container || container.offsetWidth === 0) {
-            await new Promise(r => setTimeout(r, 200));
+    if (_fullMapInitPromise) return _fullMapInitPromise;
+
+    _fullMapInitPromise = (async () => {
+        _setFullMapLoading(true);
+        try {
+            await ensureAMap();
+            const container = document.getElementById('fullMap');
+            await _waitForMapContainer(container);
+            const map = getOrCreateSharedMap('full');
+            if (map) {
+                addMarkersToMap(map, partnerStore.partnersData);
+                requestAnimationFrame(() => map.resize());
+            }
+        } catch (err) {
+            console.warn('全屏地图初始化失败:', err);
+        } finally {
+            _setFullMapLoading(false);
+            _fullMapInitPromise = null;
         }
-        const map = getOrCreateSharedMap('full');
-        if (map) {
-            addMarkersToMap(map, partnerStore.partnersData);
-            requestAnimationFrame(() => map.resize());
-        }
-    } catch (err) {
-        console.warn('全屏地图初始化失败:', err);
-    }
+    })();
+
+    return _fullMapInitPromise;
 }

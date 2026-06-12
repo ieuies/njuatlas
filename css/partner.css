@@ -385,6 +385,29 @@
     .fab-create-group {
         bottom: calc(var(--bottom-tab-height) + 20px) !important;
     }
+    #fullMapPage.active-page {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: calc(100dvh - var(--topbar-height) - var(--bottom-tab-height));
+        min-height: 0;
+        padding: 8px 0 0 !important;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+    #fullMapPage .full-map-header {
+        flex-shrink: 0;
+        margin-bottom: 8px;
+        padding: 0 2px;
+    }
+    #fullMapPage .full-map-container {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+        border-radius: 14px 14px 0 0;
+        box-shadow: none;
+    }
 }
 
 /* ========== 瀑布流卡片容器 ========== */
@@ -690,12 +713,29 @@
 }
 .back-btn:hover { background: var(--bg-tertiary); }
 .full-map-container {
+    position: relative;
     width: 100%;
     height: calc(100vh - var(--topbar-height) - var(--bottom-tab-height) - 80px);
     border-radius: 16px;
     overflow: hidden;
     box-shadow: var(--shadow-md);
     border: 1px solid var(--gray-200);
+}
+.full-map-container.is-loading::after {
+    content: '地图加载中…';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    z-index: 2;
+    pointer-events: none;
+}
+.full-map-container.is-loading .map-container {
+    visibility: hidden;
 }
 
 /* ========== 暗色模式 ========== */

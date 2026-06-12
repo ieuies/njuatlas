@@ -3,7 +3,7 @@ import { partnerStore } from './shared.js';
 import { loadPostsByPage, handleScroll, handleParticipate, prefetchPartnerList } from './list.js';
 import {
     schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
-    addMarkersToMap, getOrCreateSharedMap,
+    addMarkersToMap, getOrCreateSharedMap, scheduleMobileMapPrewarm,
 } from './map.js';
 import { initPostDetailModal, openPostDetail } from './post-detail.js';
 import { initPartnerModal } from './partner-form.js';
@@ -29,6 +29,7 @@ export async function loadPartnerData() {
     }
 
     if (partnerStore.partnerDataLoaded) {
+        scheduleMobileMapPrewarm();
         if (partnerStore.currentMapParent === 'full') {
             const map = getOrCreateSharedMap('preview');
             if (map) {
@@ -43,6 +44,7 @@ export async function loadPartnerData() {
     prefetchAmapScript();
     await loadPostsByPage(1, false);
     schedulePreviewMapAfterPaint();
+    scheduleMobileMapPrewarm();
 }
 
 function ensureRightPanel() {
