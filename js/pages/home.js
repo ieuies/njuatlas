@@ -1,6 +1,13 @@
 import { showToast } from '../utils.js';
+import { t } from '../i18n.js';
+
+const REGISTER_EMAIL_SUFFIX = '@smail.nju.edu.cn';
 
 let currentModalTab = 'login';
+
+function isAllowedRegistrationEmail(email) {
+    return String(email || '').trim().toLowerCase().endsWith(REGISTER_EMAIL_SUFFIX);
+}
 
 function startCountdown(button, seconds = 60) {
     let remaining = seconds;
@@ -67,6 +74,7 @@ async function handleRegister() {
     const code = document.getElementById('regCode').value;
     const password = document.getElementById('regPassword').value;
     if (!username || !email || !code || !password) return showToast('请填写完整');
+    if (!isAllowedRegistrationEmail(email)) return showToast(t('auth.regEmailInvalid'));
     if (password.length < 8) return showToast('密码至少8位');
     const { doRegister } = await import('../auth.js');
     try {
@@ -94,6 +102,7 @@ async function handleForgot() {
 async function sendRegisterCode() {
     const email = document.getElementById('regEmail').value;
     if (!email) return showToast('请输入邮箱');
+    if (!isAllowedRegistrationEmail(email)) return showToast(t('auth.regEmailInvalid'));
     const button = document.getElementById('sendRegCodeBtn');
     const { requestRegisterCode } = await import('../api.js');
     await requestRegisterCode(email);

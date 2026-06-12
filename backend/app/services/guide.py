@@ -300,7 +300,16 @@ def _place_row_to_item(place, cat, campus, like_count=0, review_count=0):
 
 
 def fetch_db_leaderboard_candidates(campus, cat):
-    """站内已收录、有点赞的店铺可冲入排行榜。"""
+    """站内已收录、有点赞的店铺可冲入排行榜（优先 Redis ZSET，回退 SQL）。"""
+    from app.services.guide_rank_cache import fetch_ranked_places, warm_rank_cache
+
+    cached_rows = fetch_ranked_places(campus, cat)
+    if cached_rows is not None:
+        return [
+            _place_row_to_item(place, cat, campus, like_count=likes, review_count=review_count)
+            for place, likes, review_count in cached_rows
+        ]
+
     q = (
         db.session.query(Place, func.count(Like.id).label("likes"))
         .outerjoin(Like, Like.place_id == Place.id)
@@ -312,6 +321,7 @@ def fetch_db_leaderboard_candidates(campus, cat):
         q = q.filter(Place.campus == campus)
 
     rows = q.all()
+    warm_rank_cache(campus, cat, [(place.id, likes) for place, likes in rows])
     items = []
     for place, likes in rows:
         review_count = Review.query.filter_by(place_id=place.id).count()

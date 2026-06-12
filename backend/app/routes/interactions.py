@@ -101,19 +101,25 @@ def toggle_like():
     data = get_json_body(request)
     place_id = positive_int(data.get("place_id"), "place_id")
 
-    if not Place.query.get(place_id):
+    place = Place.query.get(place_id)
+    if not place:
         return error_response("场所不存在", 404, code="place_not_found")
-
     existing = Like.query.filter_by(user_id=g.current_user_id, place_id=place_id).first()
     if existing:
         db.session.delete(existing)
         db.session.commit()
+        from app.services.guide_rank_cache import sync_place_rank
+
+        sync_place_rank(place)
         log_event(current_app.logger, "like_removed", user_id=g.current_user_id, place_id=place_id)
         return jsonify({"liked": False, "message": "已取消点赞"})
 
     like = Like(user_id=g.current_user_id, place_id=place_id)
     db.session.add(like)
     db.session.commit()
+    from app.services.guide_rank_cache import sync_place_rank
+
+    sync_place_rank(place)
     log_event(current_app.logger, "like_added", user_id=g.current_user_id, place_id=place_id)
     return jsonify({"liked": True, "message": "点赞成功"})
 

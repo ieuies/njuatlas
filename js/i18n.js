@@ -24,8 +24,9 @@ const MESSAGES = {
         'lang.label': '语言',
         'theme.dark': '切换夜间模式',
         'theme.light': '切换日间模式',
+        'site.title': 'NJUATLAS · 南大图谱',
         'brand.home': 'NJUATLAS 首页',
-        'home.subtitle': '南大图谱 · 南朋友搭子平台',
+        'home.subtitle': '你的生活中心',
         'home.btnPartner': '开始找搭子',
         'home.btnGuide': '看看周边',
         'home.feat1Title': '找搭子',
@@ -142,6 +143,9 @@ const MESSAGES = {
         'auth.register': '注册',
         'auth.forgot': '找回密码',
         'auth.email': '邮箱',
+        'auth.regEmail': '南大邮箱 name@smail.nju.edu.cn',
+        'auth.regEmailHint': '请使用 @smail.nju.edu.cn 邮箱注册',
+        'auth.regEmailInvalid': '注册请使用 @smail.nju.edu.cn 邮箱',
         'auth.password': '密码',
         'auth.username': '用户名',
         'auth.code': '邮箱验证码',
@@ -226,8 +230,9 @@ const MESSAGES = {
         'lang.label': 'Language',
         'theme.dark': 'Switch to dark mode',
         'theme.light': 'Switch to light mode',
+        'site.title': 'NJUATLAS · NJU Atlas',
         'brand.home': 'NJUATLAS Home',
-        'home.subtitle': 'NJU Atlas · Campus buddy platform',
+        'home.subtitle': 'Your life hub',
         'home.btnPartner': 'Find buddies',
         'home.btnGuide': 'Explore nearby',
         'home.feat1Title': 'Find buddies',
@@ -344,6 +349,9 @@ const MESSAGES = {
         'auth.register': 'Sign up',
         'auth.forgot': 'Reset password',
         'auth.email': 'Email',
+        'auth.regEmail': 'NJU email name@smail.nju.edu.cn',
+        'auth.regEmailHint': 'Sign up with an @smail.nju.edu.cn address',
+        'auth.regEmailInvalid': 'Please use an @smail.nju.edu.cn email to register',
         'auth.password': 'Password',
         'auth.username': 'Username',
         'auth.code': 'Email code',
@@ -518,7 +526,7 @@ export function applyDocumentI18n(root = document) {
     });
 
     document.documentElement.lang = currentLocale === 'en' ? 'en' : 'zh-CN';
-    document.title = `nju.atlas · ${t('nav.partner')}`;
+    document.title = t('site.title');
 }
 
 export function setLocale(locale) {

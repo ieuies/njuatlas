@@ -18,6 +18,7 @@ from app.validators import clean_string, get_json_body
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/user")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+REGISTER_EMAIL_SUFFIX = "@smail.nju.edu.cn"
 EMAIL_CODE_PURPOSES = {"register", "reset_password"}
 
 
@@ -37,6 +38,11 @@ def _normalize_email(value):
     if value is None:
         return ""
     return str(value).strip().lower()
+
+
+def _is_allowed_registration_email(email):
+    """新注册须使用南大 smail 邮箱；不影响已有账号登录。"""
+    return bool(email) and email.endswith(REGISTER_EMAIL_SUFFIX)
 
 
 def _validate_password(password):
@@ -191,6 +197,13 @@ def request_email_code():
     if purpose not in EMAIL_CODE_PURPOSES:
         return error_response("purpose 只能是 register 或 reset_password", 400, code="invalid_purpose")
 
+    if purpose == "register" and not _is_allowed_registration_email(email):
+        return error_response(
+            "注册请使用 @smail.nju.edu.cn 邮箱",
+            400,
+            code="invalid_registration_email",
+        )
+
     if purpose == "register" and User.query.filter_by(email=email).first():
         return error_response("邮箱已被注册", 409, code="email_exists")
 
@@ -239,6 +252,13 @@ def register():
 
     if not EMAIL_RE.match(email):
         return error_response("需要有效的邮箱地址", 400, code="invalid_email")
+
+    if not _is_allowed_registration_email(email):
+        return error_response(
+            "注册请使用 @smail.nju.edu.cn 邮箱",
+            400,
+            code="invalid_registration_email",
+        )
 
     password_error = _validate_password(password)
     if password_error:

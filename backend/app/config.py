@@ -86,7 +86,7 @@ class Config:
     EMAIL_CODE_RESEND_SECONDS = _get_int_env("EMAIL_CODE_RESEND_SECONDS", 60)
     EMAIL_CODE_MAX_ATTEMPTS = _get_int_env("EMAIL_CODE_MAX_ATTEMPTS", 5)
     RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
-    MAIL_FROM = _get_env("MAIL_FROM", "no-reply@njuatlas.local")
+    MAIL_FROM = _get_env("MAIL_FROM", "今天奶龙吃什么 <no-reply@njuatlas.local>")
 
     # ── 帖子热度与过期阈值（均可通过 .env 覆盖）─────────────────
     HOT_NOW_BOOST = float(_get_env("HOT_NOW_BOOST", "2.0"))

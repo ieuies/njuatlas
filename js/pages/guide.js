@@ -63,52 +63,67 @@ function _cacheKey(campus, cat) {
     return `${campus}\x1f${cat}`;
 }
 
-function _rankBadge(rank) {
-    if (rank === 1) return '<span class="guide-rank guide-rank--1">1</span>';
-    if (rank === 2) return '<span class="guide-rank guide-rank--2">2</span>';
-    if (rank === 3) return '<span class="guide-rank guide-rank--3">3</span>';
-    return `<span class="guide-rank">${rank}</span>`;
+function _topRankBadge(rank) {
+    if (rank === 1) {
+        return '<div class="guide-top-badge guide-top-badge--1"><i class="fas fa-crown" aria-hidden="true"></i><span>TOP 1</span></div>';
+    }
+    if (rank === 2) {
+        return '<div class="guide-top-badge guide-top-badge--2"><span>TOP 2</span></div>';
+    }
+    if (rank === 3) {
+        return '<div class="guide-top-badge guide-top-badge--3"><span>TOP 3</span></div>';
+    }
+    return '';
 }
 
 function _guideCardHtml(item, idx) {
     const likes = item.like_count || 0;
+    const reviews = item.review_count || 0;
     const rank = item.rank || (idx + 1);
     const dist = item.distance_label || (item.distance_m != null ? `${item.distance_m}m` : '');
+    const topClass = rank <= 3 ? ` guide-waterfall-card--top${rank}` : '';
+    const imgSrc = _secureImageUrl(item.image) || GUIDE_IMG_PLACEHOLDER;
+
     return `
-        <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
-            <div class="guide-card-top">
-                ${_rankBadge(rank)}
-                <button type="button" class="guide-like-chip ${item.liked ? 'is-liked' : ''}" data-like-idx="${idx}" aria-label="点赞">
-                    <i class="fas fa-heart" aria-hidden="true"></i> ${likes}
+        <article class="guide-waterfall-card${topClass}" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
+            ${_topRankBadge(rank)}
+            <div class="guide-card-cover">
+                <img class="guide-card-cover-img" src="${imgSrc}" alt="${esc(item.name)}" loading="lazy" decoding="async">
+            </div>
+            <div class="guide-card-body">
+                <h3 class="guide-card-name">${esc(item.name)}</h3>
+                <div class="guide-card-stats">
+                    <span class="guide-stat guide-stat--likes" title="点赞数">
+                        <i class="fas fa-heart" aria-hidden="true"></i> ${likes} 赞
+                    </span>
+                    ${item.rating ? `<span class="guide-stat guide-stat--rating" title="评分"><i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}</span>` : ''}
+                    ${reviews ? `<span class="guide-stat guide-stat--reviews" title="评论数"><i class="fas fa-comment" aria-hidden="true"></i> ${reviews}</span>` : ''}
+                    ${dist ? `<span class="guide-stat guide-stat--dist" title="距校区"><i class="fas fa-route" aria-hidden="true"></i> ${esc(dist)}</span>` : ''}
+                </div>
+                <p class="guide-card-addr">${esc(item.address || item.desc || '暂无地址')}</p>
+                <div class="guide-card-tags">
+                    ${item.campus ? `<span class="guide-tag guide-tag--campus"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.campus)}</span>` : ''}
+                    ${item.type ? `<span class="guide-tag guide-tag--type">${esc(item.type)}</span>` : ''}
+                    ${item.price ? `<span class="guide-tag guide-tag--price">${esc(item.price)}</span>` : ''}
+                </div>
+                <button type="button" class="guide-card-like-btn ${item.liked ? 'is-liked' : ''}" data-like-idx="${idx}" aria-label="点赞">
+                    <i class="fas fa-heart" aria-hidden="true"></i>
+                    <span>${item.liked ? '已点赞' : '点赞支持'}</span>
                 </button>
             </div>
-            <img class="guide-img" src="${_secureImageUrl(item.image) || GUIDE_IMG_PLACEHOLDER}" alt="${esc(item.name)}" loading="lazy" decoding="async">
-            <div class="guide-info">
-                <div class="guide-title">
-                    ${esc(item.name)}
-                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}</span>` : ''}
-                </div>
-                <div class="guide-desc">${esc(item.address || item.desc || '')}</div>
-                <div class="guide-meta">
-                    ${item.campus ? `<span class="guide-campus-tag"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.campus)}</span>` : ''}
-                    <span class="guide-type">${esc(item.type)}</span>
-                    ${dist ? `<span class="guide-distance">${esc(dist)}</span>` : ''}
-                    ${item.price ? `<span class="guide-price">${esc(item.price)}</span>` : ''}
-                </div>
-            </div>
-        </div>`;
+        </article>`;
 }
 
 function _sectionHtml(title, items, offset = 0) {
     const cards = items.map((item, i) => _guideCardHtml(item, offset + i)).join('');
-    return `<section class="guide-campus-section"><h3 class="guide-section-title">${esc(title)}</h3><div class="guide-section-grid">${cards}</div></section>`;
+    return `<section class="guide-campus-section"><h3 class="guide-section-title">${esc(title)}</h3><div class="guide-waterfall guide-section-waterfall">${cards}</div></section>`;
 }
 
 function _bindGuideGridDelegation(container) {
     if (container.dataset.guideBound === 'true') return;
     container.dataset.guideBound = 'true';
     container.addEventListener('click', async (e) => {
-        const likeBtn = e.target.closest('[data-like-idx]');
+        const likeBtn = e.target.closest('.guide-card-like-btn[data-like-idx]');
         if (likeBtn) {
             e.stopPropagation();
             const idx = parseInt(likeBtn.getAttribute('data-like-idx'), 10);
@@ -117,7 +132,7 @@ function _bindGuideGridDelegation(container) {
             }
             return;
         }
-        const card = e.target.closest('.guide-card');
+        const card = e.target.closest('.guide-waterfall-card');
         if (!card) return;
         const idx = parseInt(card.getAttribute('data-guide-idx'), 10);
         if (!Number.isNaN(idx) && _guideRenderItems[idx]) {
@@ -212,7 +227,11 @@ async function handleGuideLike(item, btnEl) {
         item.liked = result.liked;
         item.like_count = likes;
         btnEl.classList.toggle('is-liked', result.liked);
-        btnEl.innerHTML = `<i class="fas fa-heart" aria-hidden="true"></i> ${likes}`;
+        const label = btnEl.querySelector('span');
+        if (label) label.textContent = result.liked ? '已点赞' : '点赞支持';
+        const card = btnEl.closest('.guide-waterfall-card');
+        const likesStat = card?.querySelector('.guide-stat--likes');
+        if (likesStat) likesStat.innerHTML = `<i class="fas fa-heart" aria-hidden="true"></i> ${likes} 赞`;
         if (_detailItem && _detailItem.poi_id === item.poi_id) {
             _detailItem = { ...item };
             _syncDetailLikeBtn();
@@ -489,7 +508,7 @@ export function prefetchGuideData() {
 
 export function initGuidePage() {
     const container = document.getElementById('guideGrid');
-    if (container && !container.querySelector('.guide-card')) {
+    if (container && !container.querySelector('.guide-waterfall-card')) {
         container.innerHTML = '<div class="guide-loading">加载排行榜…</div>';
     }
     loadGuideData();

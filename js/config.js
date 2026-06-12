@@ -6,10 +6,13 @@ const runtimeConfig = window.NJUATLAS_CONFIG || {};
 const hostname = window.location.hostname;
 const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
 
-// 启用同域 API：在 index.html 的 NJUATLAS_CONFIG 里设置 API_BASE: '/api'，
-// 且 Render → njuatlas-frontend → Redirects/Rewrites 已配置 /api/* → api.njuatlas.cn/api/*
+// API 选择（优先级：API_BASE > 本地后端开关 > 默认）
+// - 生产 / 同域：PRODUCTION_API_BASE 或 index.html 里 API_BASE: '/api'
+// - 本地静态预览：默认直连生产 API，无需起 Flask
+// - 本地后端联调：在 index.html 设 NJUATLAS_CONFIG.USE_LOCAL_API = true
+const useLocalApi = isLocal && runtimeConfig.USE_LOCAL_API === true;
 export const API_BASE = runtimeConfig.API_BASE
-    || (isLocal ? LOCAL_API_BASE : PRODUCTION_API_BASE);
+    || (useLocalApi ? LOCAL_API_BASE : PRODUCTION_API_BASE);
 export const AMAP_KEY = runtimeConfig.AMAP_KEY || '97ac6e711cde17463af06c10b8b05f42';
 export const AMAP_SECURITY_CODE = runtimeConfig.AMAP_SECURITY_CODE || '';
 

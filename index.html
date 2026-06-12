@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>nju.atlas · 找搭子</title>
+    <title>NJUATLAS · 南大图谱</title>
     <!-- 高德地图预连接 -->
     <link rel="dns-prefetch" href="https://webapi.amap.com">
     <link rel="preconnect" href="https://webapi.amap.com" crossorigin>
@@ -22,7 +22,10 @@
     <link rel="stylesheet" href="css/enhance.css">
     <link rel="stylesheet" href="css/mobile.css">
 
-    <script> window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {}; </script>
+    <script>
+    window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
+    // 本地联调 Flask 时取消下一行注释：window.NJUATLAS_CONFIG.USE_LOCAL_API = true;
+    </script>
     <!-- 首页分层入场：首屏绘制前标记，避免未动画层闪一下 -->
     <script>
     (function () {
@@ -83,7 +86,7 @@
                         <div class="home-brand-inner">
                             <p class="home-brand-kicker">NANJING UNIVERSITY</p>
                             <h1 class="home-brand-title"><span class="home-brand-logo" role="img" aria-label="NJUATLAS"></span></h1>
-                            <p class="home-brand-sub" data-i18n="home.subtitle">南大图谱 · 南朋友搭子平台</p>
+                            <p class="home-brand-sub" data-i18n="home.subtitle">你的生活中心</p>
                             <div class="home-brand-actions">
                                 <button class="home-brand-btn primary" data-page="partner" type="button" data-i18n="home.btnPartner">开始找搭子</button>
                                 <button class="home-brand-btn secondary" data-page="guide" type="button" data-i18n="home.btnGuide">看看周边</button>
@@ -212,7 +215,7 @@
                     <button data-guide-cat="购物商圈" class="guide-chip"><i class="fas fa-store" aria-hidden="true"></i> 购物商圈</button>
                     <button data-guide-cat="景点公园" class="guide-chip"><i class="fas fa-tree" aria-hidden="true"></i> 景点公园</button>
                 </div>
-                <div id="guideGrid" class="guide-grid"><div class="guide-loading" data-i18n="guide.loading">加载精彩推荐中...</div></div>
+                <div id="guideGrid" class="guide-waterfall"><div class="guide-loading" data-i18n="guide.loading">加载精彩推荐中...</div></div>
             </div>
 
             <!-- 个人中心页面 -->
@@ -341,7 +344,8 @@
         <div id="registerForm" style="display:none;">
             <h2><i class="fas fa-user-plus"></i> <span data-i18n="auth.register">注册</span></h2>
             <input type="text" id="regUsername" data-i18n-placeholder="auth.username" placeholder="用户名" autocomplete="nickname">
-            <input type="email" id="regEmail" data-i18n-placeholder="auth.email" placeholder="邮箱" autocomplete="email" inputmode="email">
+            <input type="email" id="regEmail" data-i18n-placeholder="auth.regEmail" placeholder="name@smail.nju.edu.cn" autocomplete="email" inputmode="email">
+            <p class="auth-email-hint" data-i18n="auth.regEmailHint">请使用 @smail.nju.edu.cn 邮箱注册</p>
             <div class="code-row">
                 <input type="text" id="regCode" data-i18n-placeholder="auth.code" placeholder="邮箱验证码" maxlength="6" autocomplete="one-time-code" inputmode="numeric">
                 <button id="sendRegCodeBtn" class="secondary-btn" type="button" data-i18n="auth.getCode">获取验证码</button>
