@@ -234,30 +234,56 @@ def unread_notification_count(user_id):
 
 
 def unread_dm_count(user_id):
-    return DirectMessage.query.filter_by(receiver_id=user_id, is_read=False).count()
+    return unread_friend_dm_count(user_id)
+
+
+def unread_friend_dm_count(user_id):
+    """仅统计来自好友的未读私信，与会话列表可见范围一致。"""
+    friend_ids = list_friend_ids(user_id)
+    if not friend_ids:
+        return 0
+    return (
+        DirectMessage.query.filter(
+            DirectMessage.receiver_id == user_id,
+            DirectMessage.is_read.is_(False),
+            DirectMessage.sender_id.in_(friend_ids),
+        ).count()
+    )
+
+
+def mark_orphan_dms_read(user_id):
+    """非好友/已删好友的未读私信无法进入会话列表，静默标为已读避免红点残留。"""
+    friend_ids = list_friend_ids(user_id)
+    q = DirectMessage.query.filter_by(receiver_id=user_id, is_read=False)
+    if friend_ids:
+        q = q.filter(~DirectMessage.sender_id.in_(friend_ids))
+    updated = q.update({"is_read": True}, synchronize_session=False)
+    if updated:
+        db.session.commit()
+    return updated
+
+
+def unread_interact_count(user_id):
+    """未读互动通知（排除好友请求；与互动 Tab 可见项一致）。"""
+    rows = (
+        Notification.query.filter(
+            Notification.user_id == user_id,
+            Notification.is_read.is_(False),
+            Notification.type != "friend_request",
+        )
+        .all()
+    )
+    return sum(1 for n in rows if should_show_notification(n))
 
 
 def unread_counts(user_id):
     """一次往返返回各 Tab 未读数（好友请求与互动通知分开，避免重复计数）。"""
-    from sqlalchemy import text
-
-    row = db.session.execute(
-        text("""
-            SELECT
-                (SELECT COUNT(*) FROM notifications
-                 WHERE user_id = :uid AND NOT is_read AND type != 'friend_request') AS interact,
-                (SELECT COUNT(*) FROM friendships
-                 WHERE addressee_id = :uid AND status = 'pending') AS friend_requests,
-                (SELECT COUNT(*) FROM direct_messages
-                 WHERE receiver_id = :uid AND NOT is_read) AS messages
-        """),
-        {"uid": user_id},
-    ).first()
-    if not row:
-        return {"messages": 0, "interact": 0, "friend_requests": 0, "total": 0}
-    messages = int(row[2] or 0)
-    interact = int(row[0] or 0)
-    friend_requests = int(row[1] or 0)
+    mark_orphan_dms_read(user_id)
+    messages = unread_friend_dm_count(user_id)
+    interact = unread_interact_count(user_id)
+    friend_requests = Friendship.query.filter_by(
+        addressee_id=user_id, status="pending"
+    ).count()
     total = messages + interact + friend_requests
     return {
         "messages": messages,
@@ -386,6 +412,8 @@ def conversation_summaries(user_id):
         .all()
     )
 
+    friend_ids = set(list_friend_ids(user_id))
+
     unread_rows = (
         db.session.query(
             DirectMessage.sender_id,
@@ -395,9 +423,12 @@ def conversation_summaries(user_id):
         .group_by(DirectMessage.sender_id)
         .all()
     )
-    unread_map = {sender_id: count for sender_id, count in unread_rows}
+    unread_map = {
+        sender_id: count
+        for sender_id, count in unread_rows
+        if sender_id in friend_ids
+    }
 
-    friend_ids = set(list_friend_ids(user_id))
     peer_ids = {row.peer_id for row in latest_rows if row.peer_id in friend_ids}
     users = User.query.filter(User.id.in_(peer_ids)).all() if peer_ids else []
     user_map = {u.id: u for u in users}

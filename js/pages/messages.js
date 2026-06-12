@@ -129,7 +129,7 @@ function setTabBadge(tabId, count) {
     } else {
         tab.classList.remove('has-badge');
         tab.removeAttribute('aria-label');
-        if (badge) badge.hidden = true;
+        if (badge) badge.remove();
     }
 }
 
@@ -157,9 +157,11 @@ function normalizeUnreadCounts(data = {}) {
     return { messages, interact, friend_requests: friendRequests, total };
 }
 
-async function refreshAllBadges(preloaded) {
+async function refreshAllBadges(preloaded, { force = false } = {}) {
     try {
-        const data = normalizeUnreadCounts(preloaded || await getUnreadCounts());
+        const data = normalizeUnreadCounts(
+            preloaded || await getUnreadCounts({ force: Boolean(force) }),
+        );
         setTabBadge('chats', data.messages);
         setTabBadge('interact', data.interact);
         setTabBadge('friends', data.friend_requests);
@@ -568,7 +570,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         markDmThreadRead(peerId)
             .then(() => {
                 invalidateUnreadCache();
-                refreshAllBadges();
+                return refreshAllBadges(null, { force: true });
             })
             .catch(() => {});
         startRealtimeSync();
@@ -974,7 +976,7 @@ async function renderInteract({ force = false } = {}) {
                     : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
                 await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
                 invalidateUnreadCache();
-                refreshAllBadges();
+                await refreshAllBadges(null, { force: true });
             })
             .catch(() => {});
         return;
@@ -987,7 +989,7 @@ async function renderInteract({ force = false } = {}) {
             : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
         await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
         invalidateUnreadCache();
-        refreshAllBadges();
+        await refreshAllBadges(null, { force: true });
     } catch {
         view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
     }
@@ -1122,7 +1124,8 @@ function bindEvents() {
                 invalidateCache('friends', 'chats', 'interact');
                 if (currentTab === 'interact') await renderInteract({ force: true });
                 else await reloadFriendsPreserveSearch();
-                refreshAllBadges();
+                invalidateUnreadCache();
+                await refreshAllBadges(null, { force: true });
             } catch (err) {
                 showToast(err.message);
                 accept.disabled = false;
@@ -1138,7 +1141,8 @@ function bindEvents() {
                 invalidateCache('friends', 'interact');
                 if (currentTab === 'interact') await renderInteract({ force: true });
                 else await reloadFriendsPreserveSearch();
-                refreshAllBadges();
+                invalidateUnreadCache();
+                await refreshAllBadges(null, { force: true });
             } catch (err) {
                 showToast(err.message);
                 reject.disabled = false;
@@ -1278,7 +1282,7 @@ export async function refreshMessages({ force = false } = {}) {
     bindEvents();
     bindVisibilitySync();
     renderTabs();
-    updateTabBadges();
+    await refreshAllBadges(null, { force });
     if (currentTab === 'chats') await renderChats({ force });
     else if (currentTab === 'friends') await renderFriends({ force });
     else await renderInteract({ force });

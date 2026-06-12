@@ -1,5 +1,5 @@
-import { setAuthToken, getAuthToken, login, register, logout, requestEmailVerification } from './api.js';
-import { showToast } from './utils.js';
+import { setAuthToken, getAuthToken, login, register, logout, requestEmailVerification, getMyProfile } from './api.js';
+import { showToast, bumpAvatarVersion } from './utils.js';
 
 let currentUser = readStoredUser();
 
@@ -114,4 +114,21 @@ export async function resendVerificationEmail() {
 
 export function updateUserFromLogin(data) {
     persistUser(userFromAuthPayload(data, currentUser || {}));
+}
+
+/** 从服务端拉取最新头像/封面，保证手机与电脑等设备显示一致 */
+export async function syncUserMediaFromServer() {
+    if (!isLoggedIn()) return null;
+    const user = getUser();
+    if (!user) return null;
+    try {
+        const profile = await getMyProfile();
+        const next = userFromAuthPayload(profile, user);
+        const avatarChanged = (next.avatar_url || '') !== (user.avatar_url || '');
+        persistUser(next);
+        if (avatarChanged && next.avatar_url) bumpAvatarVersion(user.id);
+        return next;
+    } catch (e) {
+        return user;
+    }
 }

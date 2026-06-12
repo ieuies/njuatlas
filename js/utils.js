@@ -144,7 +144,7 @@ export function formatTimeBrief(iso) {
 }
 
 // ============================================================
-// 用户头像：优先服务端 avatar_url，本人可回退 localStorage 裁剪图
+// 用户头像：优先服务端 avatar_url（跨设备一致），本人无服务端头像时回退 localStorage
 // ============================================================
 // ============================================================
 // API 静态资源 URL（头像、封面等）：统一补全 /api 前缀与域名
@@ -253,12 +253,6 @@ if (typeof window !== 'undefined' && !window.__njuAtlasAvatarErr) {
 
 /** 返回头像描述对象：{ type:'image', src } 或 { type:'initial', initial, bg } */
 export function getUserAvatar(user) {
-    if (isSelfUser(user)) {
-        const key = avatarStorageKey(user);
-        const saved = key ? localStorage.getItem(key) : null;
-        if (saved?.startsWith('data:')) return { type: 'image', src: saved };
-    }
-
     const serverUrl = resolveAvatarUrl(user?.avatar_url);
     if (serverUrl) {
         let src = serverUrl;
@@ -271,11 +265,13 @@ export function getUserAvatar(user) {
         return { type: 'image', src };
     }
 
+    // 仅当服务端尚无头像时，本机裁剪图作为离线回退
     if (isSelfUser(user)) {
         const key = avatarStorageKey(user);
         const saved = key ? localStorage.getItem(key) : null;
-        if (saved) return { type: 'image', src: saved };
+        if (saved?.startsWith('data:')) return { type: 'image', src: saved };
     }
+
     return { type: 'initial', ...getAvatarInitial(user) };
 }
 

@@ -1,4 +1,4 @@
-import { isLoggedIn, getUser, doLogout } from './auth.js';
+import { isLoggedIn, getUser, doLogout, syncUserMediaFromServer } from './auth.js';
 import { showToast, renderAvatarInto, isMobileViewport } from './utils.js';
 import { getUnreadCounts } from './api.js';
 import { showHomePage } from './pages/home.js';
@@ -741,6 +741,9 @@ async function init() {
     initLocaleToggle();
     seedLoadedStyles();
     updateNavBar();
+    if (isLoggedIn()) {
+        syncUserMediaFromServer().then(() => updateNavBar()).catch(() => {});
+    }
 
     // 初始化各模块
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件
@@ -833,14 +836,14 @@ document.getElementById('authModal')?.addEventListener('click', (e) => {
 window.switchPage = switchPage;
 window.updateNavBar = updateNavBar;
 
-async function refreshUnreadBadge(preloaded) {
+async function refreshUnreadBadge(preloaded, { force = false } = {}) {
     if (!isLoggedIn()) {
         clearNavUnreadBadges();
         return;
     }
-    if (!preloaded && shouldSkipGlobalUnreadPoll()) return;
+    if (!preloaded && shouldSkipGlobalUnreadPoll() && !force) return;
     try {
-        const raw = preloaded || await getUnreadCounts();
+        const raw = preloaded || await getUnreadCounts({ force: Boolean(force) });
         const messages = Math.max(0, Number(raw.messages) || 0);
         const friendRequests = Math.max(0, Number(raw.friend_requests) || 0);
         let interact = raw.interact;

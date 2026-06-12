@@ -4,7 +4,7 @@
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
-import { showToast, escapeHtml, formatDate, avatarStorageKey, resolveApiAssetUrl, getAvatarInitial, bumpAvatarVersion } from '../utils.js';
+import { showToast, escapeHtml, formatDate, avatarStorageKey, resolveApiAssetUrl, getAvatarInitial, bumpAvatarVersion, renderAvatarInto } from '../utils.js';
 import { t } from '../i18n.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
 
@@ -12,6 +12,8 @@ let currentProfileTab = 'posts';
 let _profileBioCache = null;
 let _viewingUserId = null;
 let _viewingProfileCache = null;
+let _userCardModalInited = false;
+let _userCardOpenUserId = null;
 const VISITOR_HIDDEN_TABS = ['comments', 'favorites', 'activities'];
 
 const CROPPER_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css';
@@ -163,19 +165,21 @@ function _localCoverForUser(userId) {
     return _readLocalCoverDataUrl(getCoverStorageKey());
 }
 
-function _ensureCoverImg(coverDiv) {
-    let img = coverDiv.querySelector('.profile-cover-img');
+function _ensureCoverImg(coverDiv, imgClass = 'profile-cover-img') {
+    let img = coverDiv.querySelector('img');
     if (!img) {
         img = document.createElement('img');
-        img.className = 'profile-cover-img';
+        if (imgClass) img.className = imgClass;
         img.alt = '';
         coverDiv.insertBefore(img, coverDiv.firstChild);
+    } else if (imgClass) {
+        img.className = imgClass;
     }
     return img;
 }
 
 function _applyCoverGradient(coverDiv, gradient) {
-    const img = coverDiv.querySelector('.profile-cover-img');
+    const img = coverDiv.querySelector('img');
     if (img) {
         img.onerror = null;
         img.onload = null;
@@ -186,6 +190,50 @@ function _applyCoverGradient(coverDiv, gradient) {
     coverDiv.style.backgroundSize = 'cover';
     coverDiv.style.backgroundPosition = 'center';
     coverDiv.dataset.coverSrc = '';
+}
+
+function applyCoverToElement(coverEl, coverUrl, { userId = null, cacheBust = false, fallback = null, imgClass = 'profile-cover-img' } = {}) {
+    if (!coverEl) return;
+    const uid = userId ?? getUser()?.id;
+    const gradientFallback = fallback || _fallbackCoverByUserId(uid);
+    const candidates = _buildCoverCandidates(coverUrl, uid, {
+        cacheBust: cacheBust || Boolean(coverUrl && String(coverUrl).includes('/users/')),
+    });
+
+    if (!candidates.length) {
+        _applyCoverGradient(coverEl, gradientFallback);
+        return;
+    }
+
+    const img = _ensureCoverImg(coverEl, imgClass);
+    coverEl.style.backgroundImage = 'none';
+
+    let attempt = 0;
+    img.style.display = 'block';
+    img.onload = () => {
+        img.style.display = 'block';
+        coverEl.dataset.coverSrc = img.currentSrc || img.src;
+    };
+    img.onerror = () => {
+        attempt += 1;
+        if (attempt < candidates.length) {
+            img.src = candidates[attempt];
+        } else {
+            _applyCoverGradient(coverEl, gradientFallback);
+        }
+    };
+
+    attempt = 0;
+    img.src = candidates[0];
+}
+
+function setProfileCover(coverUrl, fallback = null, { userId = null, cacheBust = false } = {}) {
+    applyCoverToElement(document.getElementById('profileCover'), coverUrl, {
+        userId,
+        cacheBust,
+        fallback,
+        imgClass: 'profile-cover-img',
+    });
 }
 
 function resolveCoverUrl(raw, { cacheBust = false } = {}) {
@@ -211,51 +259,16 @@ function _buildCoverCandidates(coverUrl, userId, { cacheBust = false } = {}) {
     };
 
     const local = _localCoverForUser(userId);
-    if (local?.startsWith('data:')) add(local);
 
     const primary = resolveCoverUrl(coverUrl, { cacheBust });
     add(primary);
 
     for (const legacy of _legacyCoverCandidates(userId)) add(legacy);
 
+    if (local?.startsWith('data:')) add(local);
     if (local && !local.startsWith('data:')) add(local);
 
     return candidates;
-}
-
-function setProfileCover(coverUrl, fallback = null, { userId = null, cacheBust = false } = {}) {
-    const coverDiv = document.getElementById('profileCover');
-    if (!coverDiv) return;
-    const uid = userId ?? getUser()?.id;
-    const gradientFallback = fallback || _fallbackCoverByUserId(uid);
-    const candidates = _buildCoverCandidates(coverUrl, uid, {
-        cacheBust: cacheBust || Boolean(coverUrl && String(coverUrl).includes('/users/')),
-    });
-
-    if (!candidates.length) {
-        _applyCoverGradient(coverDiv, gradientFallback);
-        return;
-    }
-
-    const img = _ensureCoverImg(coverDiv);
-    coverDiv.style.backgroundImage = 'none';
-
-    let attempt = 0;
-    img.onload = () => {
-        img.style.display = 'block';
-        coverDiv.dataset.coverSrc = img.currentSrc || img.src;
-    };
-    img.onerror = () => {
-        attempt += 1;
-        if (attempt < candidates.length) {
-            img.src = candidates[attempt];
-        } else {
-            _applyCoverGradient(coverDiv, gradientFallback);
-        }
-    };
-
-    attempt = 0;
-    img.src = candidates[0];
 }
 
 function _readLocalCoverDataUrl(storageKey) {
@@ -322,14 +335,13 @@ function _buildAvatarCandidates(avatarUrl, userId, { cacheBust = false } = {}) {
         if (!candidates.includes(url)) candidates.push(url);
     };
 
-    const local = _localAvatarForUser(userId);
-    if (local?.startsWith('data:')) add(local);
-
     const primary = resolveAvatarDisplayUrl(avatarUrl, {
         cacheBust: cacheBust || Boolean(avatarUrl && String(avatarUrl).includes('/users/')),
     });
     add(primary);
 
+    const local = _localAvatarForUser(userId);
+    if (local?.startsWith('data:')) add(local);
     if (local && !local.startsWith('data:')) add(local);
 
     return candidates;
@@ -453,7 +465,6 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
         throw new Error('服务器未返回头像地址');
     } catch (e) {
         console.warn('头像上传服务端失败，已保存本地:', e?.message);
-        updateUserFromLogin({ ...getUser(), avatar_url: '' });
         showToast(t('profile.avatarLocalOnly'));
         setProfileAvatar(base64, { userId: user.id, username: user.username || '' });
         if (typeof window.updateNavBar === 'function') window.updateNavBar();
@@ -671,29 +682,172 @@ function applyProfileModeUI(isSelf) {
 async function renderSocialActions(profile) {
     const box = document.getElementById('profileSocialActions');
     if (!box || isViewingSelf()) return;
+    _bindSocialActions(profile, box, {
+        onRefresh: async () => {
+            _viewingProfileCache = null;
+            await renderProfileHeader();
+        },
+    });
+}
+
+function _buildSocialActionsHtml(profile) {
     const status = profile.friendship_status || 'none';
-    let html = '';
     if (status === 'none') {
-        html = `<button class="profile-social-btn primary" id="profileAddFriendBtn" type="button"><i class="fas fa-user-plus"></i> 加好友</button>`;
-    } else if (status === 'pending_sent') {
-        html = `<button class="profile-social-btn" disabled type="button">已发送请求</button>`;
-    } else if (status === 'pending_received') {
-        html = `<button class="profile-social-btn" disabled type="button">对方已请求加你</button>`;
-    } else if (status === 'friends') {
-        html = `<button class="profile-social-btn primary" id="profileDmBtn" type="button"><i class="fas fa-comment"></i> 发消息</button>`;
+        return `<button class="profile-social-btn primary js-user-social-add" type="button"><i class="fas fa-user-plus"></i> 加好友</button>`;
     }
-    box.innerHTML = html;
-    document.getElementById('profileAddFriendBtn')?.addEventListener('click', async () => {
+    if (status === 'pending_sent') {
+        return `<button class="profile-social-btn" disabled type="button">已发送请求</button>`;
+    }
+    if (status === 'pending_received') {
+        return `<button class="profile-social-btn" disabled type="button">对方已请求加你</button>`;
+    }
+    if (status === 'friends') {
+        return `<button class="profile-social-btn primary js-user-social-dm" type="button"><i class="fas fa-comment"></i> 发消息</button>`;
+    }
+    return '';
+}
+
+function _bindSocialActions(profile, container, { onRefresh, closeCardOnDm = false } = {}) {
+    if (!container) return;
+    container.innerHTML = _buildSocialActionsHtml(profile);
+    container.querySelector('.js-user-social-add')?.addEventListener('click', async () => {
         try {
             await sendFriendRequest(profile.id);
             showToast('好友请求已发送');
-            await viewUserProfile(profile.id);
-        } catch (e) { showToast(e.message); }
+            if (onRefresh) await onRefresh();
+        } catch (e) {
+            showToast(e.message);
+        }
     });
-    document.getElementById('profileDmBtn')?.addEventListener('click', () => {
+    container.querySelector('.js-user-social-dm')?.addEventListener('click', () => {
+        if (closeCardOnDm) closeUserCardModal();
         if (window.openChatWith) window.openChatWith(profile.id);
         else window.switchPage('messages');
     });
+}
+
+function _applyUserCardCover(coverEl, profile) {
+    if (!coverEl || !profile) return;
+    applyCoverToElement(coverEl, profile.cover_url, {
+        userId: profile.id,
+        fallback: _fallbackCoverByUserId(profile.id),
+        imgClass: '',
+    });
+}
+
+function _renderUserCardContent(profile) {
+    const nameEl = document.getElementById('userCardName');
+    const campusEl = document.getElementById('userCardCampus');
+    const bioEl = document.getElementById('userCardBio');
+    const tagsEl = document.getElementById('userCardTags');
+    const avatarEl = document.getElementById('userCardAvatar');
+    const coverEl = document.getElementById('userCardCover');
+    const actionsEl = document.getElementById('userCardActions');
+
+    if (nameEl) nameEl.textContent = profile.username || '用户';
+    if (campusEl) {
+        campusEl.innerHTML = profile.campus
+            ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(profile.campus)}校区`
+            : '';
+    }
+    if (bioEl) {
+        bioEl.textContent = profile.bio || '这个人很懒，什么都没写...';
+    }
+    if (tagsEl) {
+        const tags = profile.tags || [];
+        tagsEl.innerHTML = tags.length
+            ? tags.map((tag) => `<span class="user-card-tag">${escapeHtml(tag)}</span>`).join('')
+            : '';
+    }
+    document.getElementById('userCardPostCount').textContent = profile.post_count ?? 0;
+    document.getElementById('userCardFriendCount').textContent = profile.friend_count ?? 0;
+    document.getElementById('userCardLikeCount').textContent = profile.like_received_count ?? 0;
+
+    if (avatarEl) renderAvatarInto(avatarEl, profile, '1.5rem');
+    _applyUserCardCover(coverEl, profile);
+
+    const cardActionsEl = actionsEl;
+    if (cardActionsEl) {
+        const status = profile.friendship_status || 'none';
+        let html = '';
+        if (status === 'none') {
+            html = `<button class="user-card-action-btn primary js-user-card-add" type="button"><i class="fas fa-user-plus"></i> 加好友</button>`;
+        } else if (status === 'pending_sent') {
+            html = `<button class="user-card-action-btn" disabled type="button">已发送请求</button>`;
+        } else if (status === 'pending_received') {
+            html = `<button class="user-card-action-btn" disabled type="button">对方已请求加你</button>`;
+        } else if (status === 'friends') {
+            html = `<button class="user-card-action-btn primary js-user-card-dm" type="button"><i class="fas fa-comment"></i> 发消息</button>`;
+        }
+        cardActionsEl.innerHTML = html;
+        cardActionsEl.querySelector('.js-user-card-add')?.addEventListener('click', async () => {
+            try {
+                await sendFriendRequest(profile.id);
+                showToast('好友请求已发送');
+                const refreshed = await getUserProfile(profile.id);
+                if (_userCardOpenUserId === profile.id) _renderUserCardContent(refreshed);
+            } catch (e) {
+                showToast(e.message);
+            }
+        });
+        cardActionsEl.querySelector('.js-user-card-dm')?.addEventListener('click', () => {
+            closeUserCardModal();
+            if (window.openChatWith) window.openChatWith(profile.id);
+            else window.switchPage('messages');
+        });
+    }
+}
+
+function closeUserCardModal() {
+    const modal = document.getElementById('userCardModal');
+    if (modal) modal.style.display = 'none';
+    _userCardOpenUserId = null;
+    document.getElementById('userCardBody')?.classList.remove('is-loading');
+    document.querySelector('.user-card-modal')?.classList.remove('is-loading');
+}
+
+function initUserCardModal() {
+    if (_userCardModalInited) return;
+    _userCardModalInited = true;
+    const modal = document.getElementById('userCardModal');
+    if (!modal) return;
+    document.getElementById('closeUserCardBtn')?.addEventListener('click', closeUserCardModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeUserCardModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') closeUserCardModal();
+    });
+}
+
+export async function showUserCardModal(userId) {
+    if (!isLoggedIn()) {
+        const authModal = document.getElementById('authModal');
+        if (authModal) authModal.style.display = 'flex';
+        return;
+    }
+    initUserCardModal();
+    const modal = document.getElementById('userCardModal');
+    const card = modal?.querySelector('.user-card-modal');
+    const body = document.getElementById('userCardBody');
+    if (!modal || !card) return;
+
+    _userCardOpenUserId = userId;
+    modal.style.display = 'flex';
+    card.classList.add('is-loading');
+    body?.classList.add('is-loading');
+
+    try {
+        const profile = await getUserProfile(userId);
+        if (_userCardOpenUserId !== userId) return;
+        _renderUserCardContent(profile);
+    } catch (e) {
+        showToast('无法加载用户资料');
+        closeUserCardModal();
+    } finally {
+        card.classList.remove('is-loading');
+        body?.classList.remove('is-loading');
+    }
 }
 
 async function renderProfileHeader() {
@@ -864,12 +1018,7 @@ async function loadAndRenderBio(force = false) {
     }
 }
 
-function _applyProfileBio(profile) {
-    const bioEl = document.getElementById('profileBio');
-    if (bioEl) bioEl.innerText = profile.bio || '这个人很懒，什么都没写...';
-    const campusEl = document.getElementById('profileCampus');
-    if (campusEl) campusEl.innerHTML = profile.campus ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(profile.campus)}校区` : '';
-
+function _fillEditProfileForm(profile) {
     const editUsername = document.getElementById('editUsername');
     const editBio = document.getElementById('editBio');
     const editTags = document.getElementById('editTags');
@@ -879,7 +1028,39 @@ function _applyProfileBio(profile) {
     if (editBio) editBio.value = profile.bio || '';
     if (editTags) editTags.value = (profile.tags || []).join(', ');
     if (editCampus) editCampus.value = profile.campus || '';
-    if (editBubbleStyle) editBubbleStyle.value = normalizeBubbleStyle(profile.bubble_style || DEFAULT_BUBBLE_STYLE);
+    if (editBubbleStyle) {
+        editBubbleStyle.value = normalizeBubbleStyle(profile.bubble_style || DEFAULT_BUBBLE_STYLE);
+    }
+}
+
+function _clearEditProfileForm() {
+    document.getElementById('editUsername')?.value = '';
+    document.getElementById('editBio')?.value = '';
+    document.getElementById('editTags')?.value = '';
+    document.getElementById('editCampus')?.value = '';
+    document.getElementById('editOldPassword')?.value = '';
+    document.getElementById('editNewPassword')?.value = '';
+    document.getElementById('deleteAccountPassword')?.value = '';
+    const bubbleSelect = document.getElementById('editBubbleStyle');
+    if (bubbleSelect) bubbleSelect.value = DEFAULT_BUBBLE_STYLE;
+    _setEditProfileFormEnabled(false);
+}
+
+function _setEditProfileFormEnabled(enabled) {
+    [
+        'editUsername', 'editBio', 'editTags', 'editCampus',
+        'editOldPassword', 'editNewPassword', 'deleteAccountPassword', 'editBubbleStyle',
+    ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+    });
+}
+
+function _applyProfileBio(profile) {
+    const bioEl = document.getElementById('profileBio');
+    if (bioEl) bioEl.innerText = profile.bio || '这个人很懒，什么都没写...';
+    const campusEl = document.getElementById('profileCampus');
+    if (campusEl) campusEl.innerHTML = profile.campus ? `<i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(profile.campus)}校区` : '';
 
     const tagsContainer = document.getElementById('profileTags');
     if (tagsContainer) {
@@ -1197,6 +1378,7 @@ async function renderMyActivities(container) {
 
 // ========== 编辑个人资料 ==========
 function initEditProfile() {
+    _clearEditProfileForm();
     const modal = document.getElementById('editProfileModal');
     const openBtn = document.getElementById('editProfileBtn');
     const closeBtn = document.getElementById('closeEditProfileBtn');
@@ -1205,26 +1387,25 @@ function initEditProfile() {
     const deleteBtn = document.getElementById('deleteAccountBtn');
 
     openBtn?.addEventListener('click', async () => {
-        document.getElementById('editOldPassword').value = '';
-        document.getElementById('editNewPassword').value = '';
-        document.getElementById('deleteAccountPassword').value = '';
-        const bubbleSelect = document.getElementById('editBubbleStyle');
-        if (bubbleSelect) bubbleSelect.value = DEFAULT_BUBBLE_STYLE;
+        _clearEditProfileForm();
+        _setEditProfileFormEnabled(true);
         try {
-            const profile = await getMyProfile();
-            document.getElementById('editUsername').value = profile.username || '';
-            document.getElementById('editBio').value = profile.bio || '';
-            document.getElementById('editTags').value = (profile.tags || []).join(', ');
-            document.getElementById('editCampus').value = profile.campus || '';
-            if (bubbleSelect) bubbleSelect.value = normalizeBubbleStyle(profile.bubble_style || DEFAULT_BUBBLE_STYLE);
-        } catch (e) { /* 使用默认值 */ }
+            const profile = _profileBioCache || await getMyProfile();
+            if (!_profileBioCache) _profileBioCache = profile;
+            _fillEditProfileForm(profile);
+        } catch (e) { /* 使用空表单 */ }
         modal.style.display = 'flex';
     });
 
-    closeBtn?.addEventListener('click', () => { modal.style.display = 'none'; });
-    cancelBtn?.addEventListener('click', () => { modal.style.display = 'none'; });
+    const closeEditModal = () => {
+        modal.style.display = 'none';
+        _clearEditProfileForm();
+    };
+
+    closeBtn?.addEventListener('click', closeEditModal);
+    cancelBtn?.addEventListener('click', closeEditModal);
     modal?.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target === modal) closeEditModal();
     });
 
     form?.addEventListener('submit', async (e) => {
@@ -1253,6 +1434,7 @@ function initEditProfile() {
                 showToast('资料已更新');
             }
             modal.style.display = 'none';
+            _clearEditProfileForm();
             updateUserFromLogin(profile);
             _profileBioCache = profile;
             renderProfileHeader();
@@ -1301,17 +1483,16 @@ export async function viewUserProfile(userId) {
     if (me && String(me.id) === String(userId)) {
         _viewingUserId = null;
         _viewingProfileCache = null;
-    } else {
-        _viewingUserId = userId;
-        _viewingProfileCache = null;
+        currentProfileTab = 'posts';
+        window._profileViewPending = true;
+        if (typeof window.switchPage === 'function') {
+            await window.switchPage('profile');
+        } else {
+            await refreshProfile();
+        }
+        return;
     }
-    currentProfileTab = 'posts';
-    window._profileViewPending = true;
-    if (typeof window.switchPage === 'function') {
-        await window.switchPage('profile');
-    } else {
-        await refreshProfile();
-    }
+    await showUserCardModal(userId);
 }
 
 export async function refreshProfile() {
@@ -1342,6 +1523,7 @@ export function resetProfileView() {
 // ========== 初始化入口 ==========
 export function initProfilePage() {
     ensureBubbleStyleEditor();
+    initUserCardModal();
     initProfileTabs();
     initProfileStatJump();
     initEditProfile();
