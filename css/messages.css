@@ -513,12 +513,28 @@
 }
 
 @media (max-width: 768px) {
+    /* 单层滚动：避免 content-area + 聊天室双层滚动抢手势 */
     .msg-chatroom {
-        height: calc(100dvh - var(--atlas-topbar) - var(--atlas-bottombar) - 120px);
-        min-height: 320px;
+        height: auto;
+        min-height: 0;
         max-height: none;
-        border-radius: 14px;
+        border: none;
+        border-radius: 0;
+        overflow: visible;
+        background: transparent;
     }
+    .msg-chat-body {
+        overflow-y: visible;
+        min-height: 48vh;
+        padding-bottom: 24px;
+    }
+    .msg-convo-item,
+    .msg-friend-item,
+    .msg-tab,
+    .msg-mini-btn {
+        transition: none !important;
+    }
+    .msg-chat-bg-swatches { grid-template-columns: repeat(4, 1fr); }
     .msg-friend-actions {
         flex-wrap: wrap;
         justify-content: flex-end;

@@ -160,21 +160,34 @@ function normalizeUnreadCounts(data = {}) {
 }
 
 async function refreshAllBadges(preloaded, { force = false } = {}) {
-    try {
-        const data = normalizeUnreadCounts(
-            preloaded || await getUnreadCounts({ force: Boolean(force) }),
-        );
-        setTabBadge('chats', data.messages);
-        setTabBadge('interact', data.interact);
-        setTabBadge('friends', data.friend_requests);
-        if (typeof window.refreshUnreadBadge === 'function') {
-            await window.refreshUnreadBadge(data);
+    refreshAllBadges._pending = {
+        preloaded: preloaded ?? refreshAllBadges._pending?.preloaded,
+        force: force || refreshAllBadges._pending?.force,
+    };
+    clearTimeout(refreshAllBadges._timer);
+    refreshAllBadges._timer = setTimeout(async () => {
+        refreshAllBadges._timer = null;
+        const pending = refreshAllBadges._pending;
+        refreshAllBadges._pending = null;
+        if (!pending) return;
+        try {
+            const data = normalizeUnreadCounts(
+                pending.preloaded || await getUnreadCounts({ force: Boolean(pending.force) }),
+            );
+            setTabBadge('chats', data.messages);
+            setTabBadge('interact', data.interact);
+            setTabBadge('friends', data.friend_requests);
+            if (typeof window.refreshUnreadBadge === 'function') {
+                await window.refreshUnreadBadge(data);
+            }
+        } catch {
+            clearTabBadges();
+            if (typeof window.clearNavUnreadBadges === 'function') window.clearNavUnreadBadges();
         }
-    } catch {
-        clearTabBadges();
-        if (typeof window.clearNavUnreadBadges === 'function') window.clearNavUnreadBadges();
-    }
+    }, 300);
 }
+refreshAllBadges._timer = null;
+refreshAllBadges._pending = null;
 
 async function updateTabBadges() {
     await refreshAllBadges();
@@ -215,8 +228,12 @@ function convoListHtml(items) {
 function paintConvoList(items) {
     const list = document.getElementById('msgConvoList');
     if (!list) return;
+    const sig = (items || []).map((c) => `${c.peer_id}:${c.last_at}:${c.unread_count}:${c.last_message}`).join('|');
+    if (sig === paintConvoList._lastSig) return;
+    paintConvoList._lastSig = sig;
     list.innerHTML = convoListHtml(items);
 }
+paintConvoList._lastSig = '';
 
 async function fetchConversations() {
     const data = await listDmConversations();
@@ -247,6 +264,8 @@ function showChatRoom() {
 async function renderChats({ force = false } = {}) {
     const view = document.getElementById('msgChatsView');
     if (!view) return;
+
+    if (force) paintConvoList._lastSig = '';
 
     if (openChatPeerId) {
         showChatRoom();
@@ -490,12 +509,7 @@ function handleStreamPayload(raw) {
     if (payload.type === 'unread') {
         invalidateUnreadCache();
         refreshAllBadges(null, { force: true });
-        if (currentTab === 'friends' && !openChatPeerId) {
-            renderFriends({ force: true }).catch(() => {});
-        }
-        if (currentTab === 'interact' && !openChatPeerId) {
-            renderInteract({ force: true }).catch(() => {});
-        }
+        scheduleSocialTabRefresh();
     }
 }
 
@@ -512,6 +526,11 @@ function startMessageStream() {
         _sseConnected = true;
         _sseRetryMs = SSE_RETRY_BASE_MS;
         window._unreadPollingPaused = true;
+        if (_syncMode === 'convo' && _convoSyncTimer) {
+            clearInterval(_convoSyncTimer);
+            _convoSyncTimer = null;
+            _syncMode = null;
+        }
     };
 
     es.addEventListener('ready', onConnected);
@@ -538,7 +557,7 @@ function startPollingSync() {
         _syncMode = 'chat';
         _chatSyncActive = true;
         void runChatSyncLoop();
-    } else if (currentTab === 'chats' && !openChatPeerId) {
+    } else if (currentTab === 'chats' && !openChatPeerId && !_sseConnected) {
         _syncMode = 'convo';
         void pollConvoOnce();
         _convoSyncTimer = setInterval(pollConvoOnce, CONVO_POLL_MS);
@@ -619,8 +638,21 @@ function applyIncomingChatMessages(peerId, data) {
         }
     }
     if (stickBottom && body) body.scrollTop = body.scrollHeight;
-    refreshAllBadges();
 }
+
+function scheduleSocialTabRefresh() {
+    clearTimeout(scheduleSocialTabRefresh._timer);
+    scheduleSocialTabRefresh._timer = setTimeout(() => {
+        scheduleSocialTabRefresh._timer = null;
+        if (currentTab === 'friends' && !openChatPeerId) {
+            renderFriends({ force: true }).catch(() => {});
+        }
+        if (currentTab === 'interact' && !openChatPeerId) {
+            renderInteract({ force: true }).catch(() => {});
+        }
+    }, 450);
+}
+scheduleSocialTabRefresh._timer = null;
 
 async function runChatSyncLoop() {
     while (_chatSyncActive && _syncMode === 'chat' && !document.hidden) {

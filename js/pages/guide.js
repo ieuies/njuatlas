@@ -1,6 +1,6 @@
 import { API_BASE } from '../config.js';
 import { getUser } from '../auth.js';
-import { showToast } from '../utils.js';
+import { showToast, isMobileViewport } from '../utils.js';
 
 const DEFAULT_CAMPUS = '鼓楼';
 const ALL_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州'];
@@ -15,6 +15,41 @@ let _guideCache = {};
 let _isRefreshing = false;
 let _randomOrder = false;
 let _lastRenderKey = '';
+let _guideRenderItems = [];
+const GUIDE_RENDER_BATCH = 8;
+
+function _guideCardHtml(item, idx) {
+    return `
+        <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
+            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy" decoding="async">
+            <div class="guide-info">
+                <div class="guide-title">
+                    ${esc(item.name)}
+                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}</span>` : ''}
+                </div>
+                <div class="guide-desc">${esc(item.desc)}</div>
+                <div class="guide-meta">
+                    ${item.campus ? `<span class="guide-campus-tag"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.campus)}校区</span>` : ''}
+                    <span class="guide-type">${esc(item.type)}</span>
+                    ${item.address ? `<span style="font-size:0.75rem;color:var(--text-tertiary);"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}</span>` : ''}
+                    ${item.price ? `<span class="guide-price">${esc(item.price)}</span>` : ''}
+                </div>
+            </div>
+        </div>`;
+}
+
+function _bindGuideGridDelegation(container) {
+    if (container.dataset.guideBound === 'true') return;
+    container.dataset.guideBound = 'true';
+    container.addEventListener('click', (e) => {
+        const card = e.target.closest('.guide-card');
+        if (!card) return;
+        const idx = parseInt(card.getAttribute('data-guide-idx'), 10);
+        if (!Number.isNaN(idx) && _guideRenderItems[idx]) {
+            openGuideDetail(_guideRenderItems[idx]);
+        }
+    });
+}
 
 function _categoryNames() {
     return _guideConfig ? Object.keys(_guideConfig.categories) : [];
@@ -357,18 +392,27 @@ function _kickPrefetch(cacheKey) {
     if (!cache || cache.prefetching || cache._bundleInflight) return;
     if (_isPrefetchComplete(cacheKey)) return;
 
-    const gen = cache.gen;
-    cache.prefetching = true;
-    if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
-        _setPrefetchHint(true);
-    }
-    (async () => {
-        await _loadCampusBundle(cacheKey, gen);
-        if (_guideCache[cacheKey]?.gen === gen) {
-            _maybeRender(cacheKey, gen, { force: true });
-            _setPrefetchHint(false);
+    const run = () => {
+        const c = _guideCache[cacheKey];
+        if (!c || c.prefetching || c._bundleInflight || _isPrefetchComplete(cacheKey)) return;
+        const gen = c.gen;
+        c.prefetching = true;
+        if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
+            _setPrefetchHint(true);
         }
-    })();
+        (async () => {
+            await _loadCampusBundle(cacheKey, gen);
+            if (_guideCache[cacheKey]?.gen === gen) {
+                _maybeRender(cacheKey, gen);
+                _setPrefetchHint(false);
+            }
+        })();
+    };
+
+    const idle = window.requestIdleCallback
+        ? (cb) => window.requestIdleCallback(cb, { timeout: 5000 })
+        : (cb) => setTimeout(cb, 1200);
+    idle(run);
 }
 
 function renderGuideGrid(items, meta = {}) {
@@ -377,6 +421,7 @@ function renderGuideGrid(items, meta = {}) {
 
     if (!items || items.length === 0) {
         _lastRenderKey = '';
+        _guideRenderItems = [];
         container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
         return;
     }
@@ -386,32 +431,29 @@ function renderGuideGrid(items, meta = {}) {
     const renderKey = meta.renderKey ?? _renderKey(cacheKey, cat, items);
     if (renderKey === _lastRenderKey) return;
     _lastRenderKey = renderKey;
+    _guideRenderItems = items;
+    _bindGuideGridDelegation(container);
 
-    container.innerHTML = items.map((item, idx) => `
-        <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
-            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy" decoding="async">
-            <div class="guide-info">
-                <div class="guide-title">
-                    ${esc(item.name)}
-                    ${item.rating ? `<span class="guide-rating"><i class="fas fa-star" aria-hidden="true"></i> ${esc(String(item.rating))}</span>` : ''}
-                </div>
-                <div class="guide-desc">${esc(item.desc)}</div>
-                <div class="guide-meta">
-                    ${item.campus ? `<span class="guide-campus-tag"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.campus)}校区</span>` : ''}
-                    <span class="guide-type">${esc(item.type)}</span>
-                    ${item.address ? `<span style="font-size:0.75rem;color:var(--text-tertiary);"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(item.address)}</span>` : ''}
-                    ${item.price ? `<span class="guide-price">${esc(item.price)}</span>` : ''}
-                </div>
-            </div>
-        </div>
-    `).join('');
+    const useBatch = isMobileViewport() && items.length > GUIDE_RENDER_BATCH;
+    if (!useBatch) {
+        container.innerHTML = items.map((item, idx) => _guideCardHtml(item, idx)).join('');
+        return;
+    }
 
-    container.querySelectorAll('.guide-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const idx = parseInt(card.getAttribute('data-guide-idx'), 10);
-            openGuideDetail(items[idx]);
-        });
-    });
+    container.innerHTML = '';
+    let index = 0;
+    const paintBatch = () => {
+        const end = Math.min(index + GUIDE_RENDER_BATCH, items.length);
+        let html = '';
+        for (; index < end; index++) {
+            html += _guideCardHtml(items[index], index);
+        }
+        container.insertAdjacentHTML('beforeend', html);
+        if (index < items.length) {
+            requestAnimationFrame(paintBatch);
+        }
+    };
+    requestAnimationFrame(paintBatch);
 }
 
 async function _applyGuideFilters(force = false) {

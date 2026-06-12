@@ -56,6 +56,17 @@
         box-shadow: var(--atlas-shadow) !important;
     }
 
+    html .guide-card .guide-img,
+    html .guide-card,
+    html .msg-convo-item,
+    html .msg-friend-item,
+    html .msg-tab {
+        transition: none !important;
+    }
+    html .guide-card:hover .guide-img {
+        transform: none !important;
+    }
+
     /* backdrop-filter 在移动端 GPU 开销极大 */
     .top-bar,
     .bottom-tab-bar,
