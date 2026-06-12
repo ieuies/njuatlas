@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.errors import error_response
 from app.rate_limit import limiter
@@ -138,6 +138,12 @@ def guide_config():
     return jsonify(guide_config_payload())
 
 
+def _fetch_guide_category_in_context(app, campus, cat, cfg):
+    """ThreadPool worker：子线程内需 Flask app_context 才能访问 current_app（amap 缓存/配置）。"""
+    with app.app_context():
+        return fetch_guide_category(campus, cat, cfg)
+
+
 @places_bp.route("/guide-bundle", methods=["GET"])
 @limiter.limit("30 per minute")
 def guide_bundle():
@@ -155,9 +161,10 @@ def guide_bundle():
 
     raw_by_cat = {cat: [] for cat in GUIDE_CATEGORY_CONFIG}
     max_workers = min(24, len(campuses) * len(GUIDE_CATEGORY_CONFIG))
+    app = current_app._get_current_object()
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [
-            pool.submit(fetch_guide_category, c, cat, cfg)
+            pool.submit(_fetch_guide_category_in_context, app, c, cat, cfg)
             for c in campuses
             for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
         ]

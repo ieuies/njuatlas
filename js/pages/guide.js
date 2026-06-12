@@ -277,15 +277,21 @@ async function _loadCategory(cacheKey, cat, gen) {
 
     cache._inflight[cat] = (async () => {
         try {
-            if (cacheKey === 'all') {
+            if (cache.cats[cat] === undefined) {
                 await _loadCampusBundle(cacheKey, gen);
-                return cache.cats[cat] || [];
             }
-            const items = await _fetchCategoryItems(cacheKey, cat);
-            if (cache.gen === gen) cache.cats[cat] = items;
-            return items;
+            if (cache.gen !== gen) return [];
+            if (cache.cats[cat] !== undefined) {
+                return cache.cats[cat];
+            }
+            if (cacheKey !== 'all') {
+                const items = await _fetchCategoryItems(cacheKey, cat);
+                if (cache.gen === gen) cache.cats[cat] = items;
+                return items;
+            }
+            return cache.cats[cat] || [];
         } catch (e) {
-            console.warn(`高德搜索 ${cat}（${cacheKey}）失败:`, e.message);
+            console.warn(`指南加载 ${cat}（${cacheKey}）失败:`, e.message);
             if (cache.gen === gen) cache.cats[cat] = [];
             return [];
         } finally {
