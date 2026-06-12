@@ -55,6 +55,8 @@ class Place(db.Model):
     location = db.Column(db.String(50))        # lng,lat 格式
     poi_id = db.Column(db.String(100))
     category = db.Column(db.String(50))        # 高德 POI 分类码
+    campus = db.Column(db.String(20))          # 指南排行榜：鼓楼/仙林/浦口/苏州
+    guide_category = db.Column(db.String(30))  # 指南分类：美食/咖啡饮品 等
     photos = db.Column(db.String(1000))        # JSON 数组: 图片 URL 列表
     avg_rating = db.Column(db.Float)           # 缓存平均评分
     added_by = db.Column(db.Integer, db.ForeignKey("users.id"))

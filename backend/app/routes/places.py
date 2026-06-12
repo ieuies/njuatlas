@@ -1,19 +1,18 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from flask import Blueprint, jsonify, request
 
-from flask import Blueprint, current_app, jsonify, request
-
+from app.auth_utils import jwt_required
 from app.errors import error_response
-from app.logging_utils import log_event
+from app.models import Like
 from app.rate_limit import limiter
 from app.services.amap import geocode, regeocode, search_places
 from app.services.guide import (
     GUIDE_CAMPUS_COORDS,
     GUIDE_CATEGORY_CONFIG,
-    fetch_guide_category,
-    finalize_guide_items,
+    build_leaderboard,
     guide_config_payload,
+    place_from_guide_item,
 )
-from app.validators import clean_string, int_range, validate_location
+from app.validators import clean_string, get_json_body, int_range, validate_location
 
 
 places_bp = Blueprint("places", __name__, url_prefix="/api/places")
@@ -139,16 +138,10 @@ def guide_config():
     return jsonify(guide_config_payload())
 
 
-def _fetch_guide_category_in_context(app, campus, cat, cfg):
-    """ThreadPool worker：子线程内需 Flask app_context 才能访问 current_app（amap 缓存/配置）。"""
-    with app.app_context():
-        return fetch_guide_category(campus, cat, cfg)
-
-
-@places_bp.route("/guide-category", methods=["GET"])
-@limiter.limit("60 per minute")
-def guide_category():
-    """单分类 POI（服务端聚合多校区 + AMap 缓存），供吃喝玩乐懒加载。"""
+@places_bp.route("/guide-leaderboard", methods=["GET"])
+@limiter.limit("90 per minute")
+def guide_leaderboard():
+    """吃喝玩乐排行榜：每校区每分类最多 10 家（按点赞优先）。"""
     campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
     category = clean_string(request.args.get("category"), "category", required=True, max_length=20)
     random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
@@ -156,82 +149,51 @@ def guide_category():
     if category not in GUIDE_CATEGORY_CONFIG:
         return error_response("无效的分类", 400, code="invalid_category")
 
-    cfg = GUIDE_CATEGORY_CONFIG[category]
+    result = build_leaderboard(campus, category, random_order=random_order)
     if campus == "all":
-        campuses = list(GUIDE_CAMPUS_COORDS.keys())
-    elif campus in GUIDE_CAMPUS_COORDS:
-        campuses = [campus]
-    else:
-        campus = "鼓楼"
-        campuses = [campus]
+        return jsonify({"campus": "all", "category": category, "sections": result})
+    return jsonify({"campus": campus, "category": category, "items": result})
 
-    raw = []
-    app = current_app._get_current_object()
-    max_workers = min(4, len(campuses))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [
-            pool.submit(_fetch_guide_category_in_context, app, c, category, cfg)
-            for c in campuses
-        ]
-        for future in as_completed(futures):
-            try:
-                raw.extend(future.result() or [])
-            except Exception as exc:
-                log_event(
-                    current_app.logger,
-                    "guide_category_campus_failed",
-                    level="warning",
-                    category=category,
-                    error=str(exc),
-                )
 
-    items = finalize_guide_items(raw, random_order=random_order)
-    return jsonify({"campus": campus, "category": category, "items": items})
+@places_bp.route("/guide-category", methods=["GET"])
+@limiter.limit("60 per minute")
+def guide_category():
+    """兼容旧前端：等同 guide-leaderboard（单校区）。"""
+    return guide_leaderboard()
+
+
+@places_bp.route("/guide/ensure-place", methods=["POST"])
+@jwt_required
+@limiter.limit("60 per minute")
+def ensure_guide_place():
+    """探索页点赞前将 POI 收录进 Place 表。"""
+    from flask import g
+
+    data = get_json_body(request)
+    campus = clean_string(data.get("campus"), "campus", max_length=20) or "鼓楼"
+    category = clean_string(data.get("category"), "category", required=True, max_length=30)
+    item = data.get("item") or {}
+    if category not in GUIDE_CATEGORY_CONFIG:
+        return error_response("无效的分类", 400, code="invalid_category")
+
+    place = place_from_guide_item(item, campus, category, user_id=g.current_user_id)
+    likes = Like.query.filter_by(place_id=place.id).count()
+    liked = Like.query.filter_by(user_id=g.current_user_id, place_id=place.id).first() is not None
+    return jsonify({"place_id": place.id, "likes": likes, "liked": liked})
 
 
 @places_bp.route("/guide-bundle", methods=["GET"])
-@limiter.limit("30 per minute")
+@limiter.limit("20 per minute")
 def guide_bundle():
-    """一次性拉取吃喝玩乐六类 POI（服务端并行 + AMap 缓存 + Place enrichment）。"""
+    """刷新用：拉取各分类排行榜（单校区）。"""
     campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
-    random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
-
     if campus == "all":
-        campuses = list(GUIDE_CAMPUS_COORDS.keys())
-    elif campus in GUIDE_CAMPUS_COORDS:
-        campuses = [campus]
-    else:
         campus = "鼓楼"
-        campuses = [campus]
-
-    raw_by_cat = {cat: [] for cat in GUIDE_CATEGORY_CONFIG}
-    max_workers = min(24, len(campuses) * len(GUIDE_CATEGORY_CONFIG))
-    app = current_app._get_current_object()
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [
-            pool.submit(_fetch_guide_category_in_context, app, c, cat, cfg)
-            for c in campuses
-            for cat, cfg in GUIDE_CATEGORY_CONFIG.items()
-        ]
-        for future in as_completed(futures):
-            try:
-                items = future.result()
-            except Exception as exc:
-                log_event(
-                    current_app.logger,
-                    "guide_bundle_category_failed",
-                    level="warning",
-                    error=str(exc),
-                )
-                continue
-            if items:
-                raw_by_cat[items[0]["type"]].extend(items)
-
+    random_order = request.args.get("shuffle", "").lower() in ("1", "true", "yes")
     categories = {
-        cat: finalize_guide_items(raw_by_cat[cat], random_order=random_order)
+        cat: build_leaderboard(campus, cat, random_order=random_order)
         for cat in GUIDE_CATEGORY_CONFIG
     }
-
     return jsonify({"campus": campus, "categories": categories})
 
 

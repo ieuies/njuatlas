@@ -103,6 +103,19 @@ export async function updateMyProfile({ username, bio, campus, tags, bubble_styl
     return request('/me/profile', 'PUT', { username, bio, campus, tags, bubble_style });
 }
 
+// ── 吃喝玩乐排行榜 / 探索 ──
+export async function getGuideLeaderboard(campus, category, { shuffle = false } = {}) {
+    let url = `/places/guide-leaderboard?campus=${encodeURIComponent(campus)}&category=${encodeURIComponent(category)}`;
+    if (shuffle) url += '&shuffle=1';
+    return request(url, 'GET', null, false);
+}
+export async function ensureGuidePlace({ campus, category, item }) {
+    return request('/places/guide/ensure-place', 'POST', { campus, category, item });
+}
+export async function togglePlaceLike(placeId) {
+    return request('/like', 'POST', { place_id: placeId });
+}
+
 // ── 地图搜索 ──
 export async function searchPlaces(keyword, city = '南京', location = null, page = 1, pageSize = 25, radius = null, types = null, sortrule = null) {
     let url = `/places/search?keyword=${encodeURIComponent(keyword)}&page=${page}&page_size=${pageSize}`;
