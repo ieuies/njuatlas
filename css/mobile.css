@@ -1,10 +1,19 @@
 /*! nju.atlas - mobile.css 移动端性能与体验优化 */
 
 @media (max-width: 768px) {
-    /* 单一滚动容器，避免 main-content + content-area 嵌套滚动抢帧 */
-    .main-content {
+    /* 单一滚动容器：锁定视口高度，让 content-area 承担纵向滚动 */
+    .app-layout.mobile-layout {
+        height: 100dvh;
+        max-height: 100dvh;
         overflow: hidden;
+    }
+    .main-content {
+        flex: 1;
         min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 0;
     }
     .content-area {
         flex: 1;
@@ -14,6 +23,9 @@
         -webkit-overflow-scrolling: touch;
         overscroll-behavior-y: contain;
         touch-action: pan-y;
+    }
+    .content-area > .page.active-page {
+        overflow: visible;
     }
 
     /* backdrop-filter 在移动端 GPU 开销极大 */
@@ -51,12 +63,11 @@
         min-height: 240px;
     }
 
-    /* 列表长内容：跳过屏外绘制 */
+    /* 列表长内容：跳过屏外绘制（guide 页 content-visibility 会导致 WebKit 滚动高度异常） */
     .partner-card,
     .msg-convo-item,
     .msg-friend-item,
-    .msg-notif-item,
-    .guide-card {
+    .msg-notif-item {
         content-visibility: auto;
         contain-intrinsic-size: auto 120px;
     }
