@@ -1034,13 +1034,13 @@ function _fillEditProfileForm(profile) {
 }
 
 function _clearEditProfileForm() {
-    document.getElementById('editUsername')?.value = '';
-    document.getElementById('editBio')?.value = '';
-    document.getElementById('editTags')?.value = '';
-    document.getElementById('editCampus')?.value = '';
-    document.getElementById('editOldPassword')?.value = '';
-    document.getElementById('editNewPassword')?.value = '';
-    document.getElementById('deleteAccountPassword')?.value = '';
+    [
+        'editUsername', 'editBio', 'editTags', 'editCampus',
+        'editOldPassword', 'editNewPassword', 'deleteAccountPassword',
+    ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
     const bubbleSelect = document.getElementById('editBubbleStyle');
     if (bubbleSelect) bubbleSelect.value = DEFAULT_BUBBLE_STYLE;
     _setEditProfileFormEnabled(false);
