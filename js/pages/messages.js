@@ -386,14 +386,13 @@ function bindChatScrollLoad() {
     });
 }
 
-const CHAT_POLL_MS = 1000;
-const CONVO_POLL_MS = 3000;
-const CHAT_LONG_POLL_WAIT_SEC = 20;
-const CHAT_LONG_POLL_TIMEOUT_MS = (CHAT_LONG_POLL_WAIT_SEC + 8) * 1000;
+const CHAT_POLL_MS = 4000;
+const CONVO_POLL_MS = 10000;
 
 let _convoSyncTimer = null;
 let _syncMode = null;
 let _chatSyncActive = false;
+let _chatSyncAbort = null;
 let _convoSyncInFlight = false;
 let _visibilityBound = false;
 
@@ -420,6 +419,10 @@ function stopRealtimeSync() {
     _syncMode = null;
     _chatSyncActive = false;
     window._unreadPollingPaused = false;
+    if (_chatSyncAbort) {
+        _chatSyncAbort.abort();
+        _chatSyncAbort = null;
+    }
 }
 
 function startRealtimeSync() {
@@ -461,28 +464,30 @@ function applyIncomingChatMessages(peerId, data) {
 }
 
 async function runChatSyncLoop() {
-    let useLongPoll = true;
     while (_chatSyncActive && _syncMode === 'chat' && !document.hidden) {
         const peerId = openChatPeerId || chatState.peerId;
         if (!peerId) break;
 
+        if (_chatSyncAbort) _chatSyncAbort.abort();
+        _chatSyncAbort = new AbortController();
+        const { signal } = _chatSyncAbort;
+
         const afterId = getLastConfirmedMessageId();
         try {
-            const data = useLongPoll
-                ? await getDmMessages(
-                    peerId,
-                    { after_id: afterId, wait: CHAT_LONG_POLL_WAIT_SEC },
-                    true,
-                    CHAT_LONG_POLL_TIMEOUT_MS,
-                )
-                : await getDmMessages(peerId, { after_id: afterId }, true);
+            const data = await getDmMessages(
+                peerId,
+                { after_id: afterId },
+                true,
+                undefined,
+                signal,
+            );
             applyIncomingChatMessages(peerId, data);
-            useLongPoll = true;
-        } catch {
-            if (!_chatSyncActive || _syncMode !== 'chat') break;
-            useLongPoll = false;
-            await sleep(CHAT_POLL_MS);
+        } catch (err) {
+            if (!_chatSyncActive || _syncMode !== 'chat' || signal.aborted || err?.name === 'AbortError') break;
         }
+
+        if (!_chatSyncActive || _syncMode !== 'chat' || document.hidden) break;
+        await sleep(CHAT_POLL_MS);
     }
 }
 
@@ -835,11 +840,9 @@ function paintFriendsData({ friends = [], requests = [], sent = [] } = {}) {
 }
 
 async function fetchFriendsData() {
-    const [friendsData, reqData, sentReqData] = await Promise.all([
-        listFriends(),
-        listFriendRequests(),
-        listSentFriendRequests(),
-    ]);
+    const friendsData = await listFriends();
+    const reqData = await listFriendRequests();
+    const sentReqData = await listSentFriendRequests();
     const payload = {
         friends: friendsData.items || [],
         requests: reqData.items || [],

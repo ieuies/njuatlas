@@ -28,6 +28,9 @@ def create_app():
 
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "pool_recycle": 300,
+        "pool_pre_ping": True,
+        "pool_size": 3,
+        "max_overflow": 2,
     }
 
     validate_config(app)

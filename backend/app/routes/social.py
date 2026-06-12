@@ -2,7 +2,6 @@
 import base64
 import os
 import re
-import time
 
 from flask import Blueprint, current_app, g, jsonify, request, Response, send_from_directory
 from sqlalchemy import or_
@@ -312,18 +311,6 @@ def _dm_sync_after(base_q, peer_id, current_user_id, after_id):
     return rows
 
 
-def _dm_wait_for_new(base_q, peer_id, current_user_id, after_id, wait_sec):
-    """长轮询：最多 wait_sec 秒，每 ~350ms 查一次新消息（零额外服务成本）。"""
-    poll_interval = 0.35
-    deadline = time.monotonic() + wait_sec
-    rows = _dm_sync_after(base_q, peer_id, current_user_id, after_id)
-    while not rows and time.monotonic() < deadline:
-        time.sleep(poll_interval)
-        db.session.expire_all()
-        rows = _dm_sync_after(base_q, peer_id, current_user_id, after_id)
-    return rows
-
-
 @social_bp.route("/messages/conversations", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")
@@ -343,17 +330,7 @@ def get_messages(peer_id):
     after_raw = request.args.get("after_id")
     if after_raw is not None and after_raw != "":
         after_id = max(0, int(after_raw))
-        wait_sec = 0
-        wait_raw = request.args.get("wait")
-        if wait_raw is not None and wait_raw != "":
-            try:
-                wait_sec = min(25, max(0, int(wait_raw)))
-            except (TypeError, ValueError):
-                wait_sec = 0
-        if wait_sec > 0:
-            rows = _dm_wait_for_new(base_q, peer_id, g.current_user_id, after_id, wait_sec)
-        else:
-            rows = _dm_sync_after(base_q, peer_id, g.current_user_id, after_id)
+        rows = _dm_sync_after(base_q, peer_id, g.current_user_id, after_id)
         return jsonify({
             "items": [_dm_item_dict(m, g.current_user_id) for m in rows],
             "sync": True,

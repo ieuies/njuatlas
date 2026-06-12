@@ -15,13 +15,18 @@ export function getAuthToken() {
     return authToken;
 }
 
-async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS, silent = false) {
+async function request(endpoint, method = 'GET', body = null, needAuth = true, timeoutMs = DEFAULT_TIMEOUT_MS, silent = false, fetchSignal = null) {
     const url = `${API_BASE}${endpoint}`;
     const headers = {};
     if (body != null) headers['Content-Type'] = 'application/json';
     if (needAuth && authToken) headers['Authorization'] = `Bearer ${authToken}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const onExternalAbort = () => controller.abort();
+    if (fetchSignal) {
+        if (fetchSignal.aborted) controller.abort();
+        else fetchSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
     const options = { method, headers, signal: controller.signal };
     if (body) options.body = JSON.stringify(body);
     try {
@@ -49,7 +54,9 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
         return data;
     } catch (err) {
         clearTimeout(timeoutId);
+        if (fetchSignal) fetchSignal.removeEventListener('abort', onExternalAbort);
         if (err.name === 'AbortError') {
+            if (fetchSignal?.aborted) throw err;
             err = new Error('请求超时，请稍后重试');
         }
         if (err.message === 'UNAUTHORIZED') throw err;
@@ -295,17 +302,17 @@ export async function listDmConversations() {
 }
 export async function getDmMessages(
     peerId,
-    { page = 1, page_size = 50, tail = false, before_id = null, after_id = null, wait = null } = {},
+    { page = 1, page_size = 50, tail = false, before_id = null, after_id = null } = {},
     silent = false,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal = null,
 ) {
     let url = `/social/messages/${peerId}?page_size=${page_size}`;
     if (tail) url += '&tail=1';
     else if (before_id != null && before_id > 0) url += `&before_id=${before_id}`;
     else url += `&page=${page}`;
     if (after_id != null && after_id >= 0) url += `&after_id=${after_id}`;
-    if (wait != null && wait > 0) url += `&wait=${wait}`;
-    return request(url, 'GET', null, true, timeoutMs, silent);
+    return request(url, 'GET', null, true, timeoutMs, silent, signal);
 }
 export async function sendDmMessage(peerId, content) {
     return request(`/social/messages/${peerId}`, 'POST', { content }, true, DEFAULT_TIMEOUT_MS, true);
