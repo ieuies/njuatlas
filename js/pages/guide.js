@@ -1,6 +1,6 @@
 import { API_BASE } from '../config.js';
 import { getUser } from '../auth.js';
-import { showToast, isMobileViewport } from '../utils.js';
+import { showToast } from '../utils.js';
 
 const DEFAULT_CAMPUS = '鼓楼';
 const ALL_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州'];
@@ -16,12 +16,21 @@ let _isRefreshing = false;
 let _randomOrder = false;
 let _lastRenderKey = '';
 let _guideRenderItems = [];
-const GUIDE_RENDER_BATCH = 8;
+let _guideDataLoadedAt = 0;
+let _prefetchTimer = null;
+let _prefetchCategoryTimer = null;
+let _prefetchPromise = null;
+
+const GUIDE_RENDER_BATCH = 6;
+const GUIDE_CACHE_TTL_MS = 5 * 60 * 1000;
+const GUIDE_PREFETCH_DELAY_MS = 4500;
+const GUIDE_CATEGORY_PREFETCH_GAP_MS = 900;
+const GUIDE_IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
 
 function _guideCardHtml(item, idx) {
     return `
         <div class="guide-card" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
-            <img class="guide-img" src="${item.image || 'https://picsum.photos/400/200?random=' + idx}" alt="${esc(item.name)}" loading="lazy" decoding="async">
+            <img class="guide-img" src="${item.image || GUIDE_IMG_PLACEHOLDER}" alt="${esc(item.name)}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="guide-info">
                 <div class="guide-title">
                     ${esc(item.name)}
@@ -387,32 +396,60 @@ function _maybeRender(cacheKey, gen, { force = false } = {}) {
     }
 }
 
-function _kickPrefetch(cacheKey) {
+function _cancelScheduledPrefetch() {
+    if (_prefetchTimer) {
+        clearTimeout(_prefetchTimer);
+        _prefetchTimer = null;
+    }
+    if (_prefetchCategoryTimer) {
+        clearTimeout(_prefetchCategoryTimer);
+        _prefetchCategoryTimer = null;
+    }
+}
+
+function _isGuidePageActive() {
+    return document.getElementById('guidePage')?.classList.contains('active-page');
+}
+
+function _prefetchNextCategory(cacheKey) {
     const cache = _guideCache[cacheKey];
-    if (!cache || cache.prefetching || cache._bundleInflight) return;
+    if (!cache || !_isGuidePageActive() || _getCacheKey() !== cacheKey) {
+        _setPrefetchHint(false);
+        return;
+    }
+    if (_isPrefetchComplete(cacheKey)) {
+        _setPrefetchHint(false);
+        return;
+    }
+
+    const nextCat = _categoryNames().find((cat) => cache.cats[cat] === undefined);
+    if (!nextCat) {
+        _setPrefetchHint(false);
+        return;
+    }
+
+    const gen = cache.gen;
+    if (currentGuideCat === 'all') _setPrefetchHint(true);
+
+    _loadCategory(cacheKey, nextCat, gen).then(() => {
+        if (_guideCache[cacheKey]?.gen !== gen || !_isGuidePageActive()) return;
+        _maybeRender(cacheKey, gen);
+        _prefetchCategoryTimer = setTimeout(() => {
+            _prefetchCategoryTimer = null;
+            _prefetchNextCategory(cacheKey);
+        }, GUIDE_CATEGORY_PREFETCH_GAP_MS);
+    });
+}
+
+/** 首屏后再逐个分类懒加载，避免 guide-bundle 占满后端 worker */
+function _scheduleIncrementalPrefetch(cacheKey) {
     if (_isPrefetchComplete(cacheKey)) return;
-
-    const run = () => {
-        const c = _guideCache[cacheKey];
-        if (!c || c.prefetching || c._bundleInflight || _isPrefetchComplete(cacheKey)) return;
-        const gen = c.gen;
-        c.prefetching = true;
-        if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
-            _setPrefetchHint(true);
-        }
-        (async () => {
-            await _loadCampusBundle(cacheKey, gen);
-            if (_guideCache[cacheKey]?.gen === gen) {
-                _maybeRender(cacheKey, gen);
-                _setPrefetchHint(false);
-            }
-        })();
-    };
-
-    const idle = window.requestIdleCallback
-        ? (cb) => window.requestIdleCallback(cb, { timeout: 5000 })
-        : (cb) => setTimeout(cb, 1200);
-    idle(run);
+    _cancelScheduledPrefetch();
+    _prefetchTimer = setTimeout(() => {
+        _prefetchTimer = null;
+        if (!_isGuidePageActive() || _getCacheKey() !== cacheKey) return;
+        _prefetchNextCategory(cacheKey);
+    }, GUIDE_PREFETCH_DELAY_MS);
 }
 
 function renderGuideGrid(items, meta = {}) {
@@ -434,8 +471,7 @@ function renderGuideGrid(items, meta = {}) {
     _guideRenderItems = items;
     _bindGuideGridDelegation(container);
 
-    const useBatch = isMobileViewport() && items.length > GUIDE_RENDER_BATCH;
-    if (!useBatch) {
+    if (items.length <= GUIDE_RENDER_BATCH) {
         container.innerHTML = items.map((item, idx) => _guideCardHtml(item, idx)).join('');
         return;
     }
@@ -469,12 +505,24 @@ async function _applyGuideFilters(force = false) {
         c.prefetching = false;
         _lastRenderKey = '';
         _setPrefetchHint(false);
+        _cancelScheduledPrefetch();
+        const gen = c.gen;
+        if (container) container.innerHTML = '<div class="guide-loading">加载中...</div>';
+        await _loadCampusBundle(cacheKey, gen);
+        const bundleItems = _getDisplayItems(cacheKey, currentGuideCat);
+        if (bundleItems !== null) {
+            renderGuideGrid(bundleItems, { cacheKey, cat: currentGuideCat });
+        } else if (container) {
+            container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
+        }
+        _guideDataLoadedAt = Date.now();
+        return;
     }
 
     const cached = _getDisplayItems(cacheKey, currentGuideCat);
-    if (!force && cached !== null) {
+    if (cached !== null) {
         renderGuideGrid(cached, { cacheKey, cat: currentGuideCat });
-        _kickPrefetch(cacheKey);
+        _scheduleIncrementalPrefetch(cacheKey);
         return;
     }
 
@@ -484,9 +532,7 @@ async function _applyGuideFilters(force = false) {
         .filter(cat => cache.cats[cat] === undefined);
 
     if (needed.length > 0) {
-        if (container && cached === null) {
-            container.innerHTML = '<div class="guide-loading">加载中...</div>';
-        }
+        if (container) container.innerHTML = '<div class="guide-loading">加载中...</div>';
         await Promise.all(needed.map(cat => _loadCategory(cacheKey, cat, gen)));
     }
 
@@ -498,7 +544,8 @@ async function _applyGuideFilters(force = false) {
         container.innerHTML = '<div class="guide-loading">该分类暂无推荐～</div>';
     }
 
-    _kickPrefetch(cacheKey);
+    _guideDataLoadedAt = Date.now();
+    _scheduleIncrementalPrefetch(cacheKey);
 }
 
 export async function refreshGuideData() {
@@ -627,18 +674,69 @@ function bindRefreshButton() {
     });
 }
 
-export async function loadGuideData() {
+export async function loadGuideData({ force = false } = {}) {
     initGuideModals();
     initGuideFilter();
     initGuideCampusFilter();
     bindRefreshButton();
+
+    if (!force) {
+        const cacheKey = _getCacheKey();
+        const cached = _getDisplayItems(cacheKey, currentGuideCat);
+        if (
+            cached !== null
+            && _guideDataLoadedAt
+            && (Date.now() - _guideDataLoadedAt) < GUIDE_CACHE_TTL_MS
+        ) {
+            renderGuideGrid(cached, { cacheKey, cat: currentGuideCat });
+            _scheduleIncrementalPrefetch(cacheKey);
+            return;
+        }
+    }
+
     try {
         await _loadGuideConfig();
-        await _applyGuideFilters();
+        await _applyGuideFilters(force);
     } catch (err) {
         console.error('吃喝玩乐配置加载失败:', err);
         showToast('加载失败，请稍后重试');
     }
+}
+
+/** 再次进入页面：优先用内存缓存秒开 */
+export function refreshGuideView() {
+    const cacheKey = _getCacheKey();
+    const cached = _getDisplayItems(cacheKey, currentGuideCat);
+    if (cached !== null && _guideDataLoadedAt) {
+        renderGuideGrid(cached, { cacheKey, cat: currentGuideCat });
+        if (!_isPrefetchComplete(cacheKey)) _scheduleIncrementalPrefetch(cacheKey);
+        return;
+    }
+    loadGuideData();
+}
+
+/** 离开吃喝玩乐页时停止后台预取 */
+export function onGuidePageHidden() {
+    _cancelScheduledPrefetch();
+    _setPrefetchHint(false);
+}
+
+/** 导航悬停时预拉配置 + 美食分类 */
+export function prefetchGuideData() {
+    if (_prefetchPromise) return _prefetchPromise;
+    _prefetchPromise = (async () => {
+        try {
+            await _loadGuideConfig();
+            const cacheKey = _getCacheKey();
+            const cache = _ensureCache(cacheKey);
+            if (cache.cats['美食'] !== undefined) return;
+            await _loadCategory(cacheKey, '美食', cache.gen);
+            _guideDataLoadedAt = Date.now();
+        } catch (e) {
+            _prefetchPromise = null;
+        }
+    })();
+    return _prefetchPromise;
 }
 
 export function initGuidePage() {

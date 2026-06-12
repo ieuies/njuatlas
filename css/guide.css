@@ -121,6 +121,8 @@
     box-shadow: var(--atlas-shadow);
     transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
     cursor: pointer;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
 }
 .guide-card:hover {
     transform: translateY(-3px);

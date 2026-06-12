@@ -43,8 +43,10 @@ let _profileMod = null;
 let _aiMod = null;
 let _messagesMod = null;
 let _partnerPageInited = false;
+let _guidePageInited = false;
 let _profilePageInited = false;
 let _messagesPageInited = false;
+let _lastSwitchedPageId = null;
 function _loadPartner() { return _partnerMod || (_partnerMod = import('./pages/partner.js')); }
 function _loadGuide()   { return _guideMod   || (_guideMod   = import('./pages/guide.js')); }
 function _loadProfile() { return _profileMod || (_profileMod = import('./pages/profile.js')); }
@@ -97,7 +99,22 @@ function prefetchPartnerOnIntent() {
     _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
 }
 
+function prefetchGuideOnIntent() {
+    _loadGuide().then((mod) => mod.prefetchGuideData?.()).catch(() => {});
+}
+
 let _partnerPrefetchBound = false;
+let _guidePrefetchBound = false;
+
+function bindGuidePrefetchIntent() {
+    if (_guidePrefetchBound) return;
+    _guidePrefetchBound = true;
+    document.querySelectorAll('[data-page="guide"]').forEach((el) => {
+        el.addEventListener('mouseenter', prefetchGuideOnIntent, { once: true });
+        el.addEventListener('focus', prefetchGuideOnIntent, { once: true });
+        el.addEventListener('touchstart', prefetchGuideOnIntent, { once: true, passive: true });
+    });
+}
 
 function bindPartnerPrefetchIntent() {
     if (_partnerPrefetchBound) return;
@@ -118,14 +135,10 @@ function bindPartnerPrefetchIntent() {
 
 function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
+    bindGuidePrefetchIntent();
     const mobile = isMobileViewport();
     const delay = mobile ? 1200 : 500;
     setTimeout(() => prefetchAmapScript(), delay);
-    if (mobile) {
-        document.querySelectorAll('[data-page="guide"]').forEach((el) => {
-            el.addEventListener('touchstart', () => _loadGuide().catch(() => {}), { once: true, passive: true });
-        });
-    }
 }
 
 async function switchPage(pageId) {
@@ -205,9 +218,18 @@ async function switchPage(pageId) {
     });
 
     // 页面切换时的初始化（大模块按需动态加载）
+    if (_lastSwitchedPageId === 'guide' && pageId !== 'guide') {
+        _loadGuide().then((mod) => mod.onGuidePageHidden?.()).catch(() => {});
+    }
+
     if (pageId === 'guide') {
         const mod = await _loadGuide();
-        mod.initGuidePage();
+        if (!_guidePageInited) {
+            _guidePageInited = true;
+            mod.initGuidePage();
+        } else {
+            mod.refreshGuideView?.();
+        }
     } else if (pageId === 'ai') {
         const mod = await _loadAI();
         mod.initAIPage();
@@ -248,6 +270,8 @@ async function switchPage(pageId) {
     } else {
         window._pauseHomeParticles?.();
     }
+
+    _lastSwitchedPageId = pageId;
 
     // 发起组局按钮只属于找搭子页，离开该页时隐藏。
     const fab = document.getElementById('fabCreateGroup');
