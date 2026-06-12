@@ -219,6 +219,23 @@ async function _fetchCategoryItems(campus, cat) {
     return _sortGuideItems(_poisToItems(pois, cat, campus));
 }
 
+async function _loadCategoryItemsForCacheKey(cacheKey, cat) {
+    if (cacheKey === 'all') {
+        const parts = await Promise.all(
+            ALL_CAMPUSES.map(async (campus) => {
+                try {
+                    return await _fetchCategoryItems(campus, cat);
+                } catch (fetchErr) {
+                    console.warn(`高德搜索 ${cat}（${campus}）失败:`, fetchErr.message);
+                    return [];
+                }
+            }),
+        );
+        return _sortGuideItems(parts.flat());
+    }
+    return _fetchCategoryItems(cacheKey, cat);
+}
+
 async function _loadCampusBundle(cacheKey, gen) {
     const cache = _ensureCache(cacheKey);
     if (cache.gen !== gen) return;
@@ -236,24 +253,21 @@ async function _loadCampusBundle(cacheKey, gen) {
             if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`);
             if (cache.gen !== gen) return;
             for (const cat of _categoryNames()) {
-                if (cache.cats[cat] !== undefined) continue;
-                cache.cats[cat] = Array.isArray(data.categories?.[cat]) ? data.categories[cat] : [];
+                const fromBundle = data.categories?.[cat];
+                if (Array.isArray(fromBundle)) {
+                    cache.cats[cat] = fromBundle;
+                }
             }
         } catch (e) {
             console.warn(`guide-bundle（${bundleCampus}）失败，回退分分类请求:`, e.message);
-            const campuses = cacheKey === 'all' ? ALL_CAMPUSES : [cacheKey];
             const todo = _categoryNames().filter(cat => cache.cats[cat] === undefined);
             for (const cat of todo) {
-                const merged = [];
-                for (const campus of campuses) {
-                    try {
-                        merged.push(...await _fetchCategoryItems(campus, cat));
-                    } catch (fetchErr) {
-                        console.warn(`高德搜索 ${cat}（${campus}）失败:`, fetchErr.message);
-                    }
-                }
-                if (cache.gen === gen) {
-                    cache.cats[cat] = _sortGuideItems(merged);
+                if (cache.gen !== gen) break;
+                try {
+                    cache.cats[cat] = await _loadCategoryItemsForCacheKey(cacheKey, cat);
+                } catch (fetchErr) {
+                    console.warn(`指南回退加载 ${cat}（${cacheKey}）失败:`, fetchErr.message);
+                    cache.cats[cat] = [];
                 }
             }
         } finally {
@@ -277,19 +291,12 @@ async function _loadCategory(cacheKey, cat, gen) {
 
     cache._inflight[cat] = (async () => {
         try {
-            if (cache.cats[cat] === undefined) {
-                await _loadCampusBundle(cacheKey, gen);
-            }
+            if (cache.cats[cat] !== undefined) return cache.cats[cat];
             if (cache.gen !== gen) return [];
-            if (cache.cats[cat] !== undefined) {
-                return cache.cats[cat];
-            }
-            if (cacheKey !== 'all') {
-                const items = await _fetchCategoryItems(cacheKey, cat);
-                if (cache.gen === gen) cache.cats[cat] = items;
-                return items;
-            }
-            return cache.cats[cat] || [];
+
+            const items = await _loadCategoryItemsForCacheKey(cacheKey, cat);
+            if (cache.gen === gen) cache.cats[cat] = items;
+            return items;
         } catch (e) {
             console.warn(`指南加载 ${cat}（${cacheKey}）失败:`, e.message);
             if (cache.gen === gen) cache.cats[cat] = [];
@@ -333,11 +340,8 @@ function _kickPrefetch(cacheKey) {
     (async () => {
         await _loadCampusBundle(cacheKey, gen);
         if (_guideCache[cacheKey]?.gen === gen) {
-            if (currentGuideCat === 'all' && _getCacheKey() === cacheKey) {
-                _maybeRender(cacheKey, gen, { force: true });
-            } else {
-                _setPrefetchHint(false);
-            }
+            _maybeRender(cacheKey, gen, { force: true });
+            _setPrefetchHint(false);
         }
     })();
 }
