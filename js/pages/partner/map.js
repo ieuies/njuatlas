@@ -5,9 +5,49 @@ import { getMapCenter, categoryStyle } from './shared.js';
 
 let _sharedMap = null;
 let _sharedMapContainer = null;
+let _previewMapPending = false;
+let _previewMapInFlight = false;
+
+function _runWhenIdle(fn) {
+    if (window.requestIdleCallback) {
+        requestIdleCallback(fn, { timeout: 3000 });
+    } else {
+        setTimeout(fn, 50);
+    }
+}
+
+async function _initPreviewMapCore() {
+    await ensureAMap();
+    const map = getOrCreateSharedMap('preview');
+    if (map) {
+        addMarkersToMap(map, partnerStore.partnersData);
+    }
+}
+
+function _queuePreviewMapInit() {
+    if (isMobileViewport()) return;
+    _previewMapPending = true;
+    if (_previewMapInFlight) return;
+    _previewMapInFlight = true;
+    _previewMapPending = false;
+    _runWhenIdle(() => {
+        _initPreviewMapCore()
+            .catch((err) => console.warn('预览地图初始化失败:', err))
+            .finally(() => {
+                _previewMapInFlight = false;
+                if (_previewMapPending) _queuePreviewMapInit();
+            });
+    });
+}
+
+/** 帖子渲染完成后再加载高德 SDK 与预览地图（不阻塞列表） */
+export function schedulePreviewMapAfterPosts() {
+    if (isMobileViewport()) return;
+    _queuePreviewMapInit();
+}
 
 // ============================================================
-// 高德地图初始化（保持不变）
+// 高德地图初始化
 // ============================================================
 async function ensureAMap() {
     if (window.AMap) return window.AMap;
@@ -166,41 +206,19 @@ export function addMarkersToMap(map, data) {
     return markers;
 }
 
-export async function initPreviewMap() {
-    try {
-        await ensureAMap();
-        await new Promise((resolve) => {
-            const doInit = () => {
-                try {
-                    const map = getOrCreateSharedMap('preview');
-                    if (map) {
-                        addMarkersToMap(map, partnerStore.partnersData);
-                    }
-                } catch (e) {
-                    console.warn('地图渲染失败:', e);
-                }
-                resolve();
-            };
-            if (window.requestIdleCallback) {
-                requestIdleCallback(doInit, { timeout: 3000 });
-            } else {
-                setTimeout(doInit, 50);
-            }
-        });
-    } catch (err) {
-        console.warn('预览地图初始化失败:', err);
-    }
+export function initPreviewMap() {
+    schedulePreviewMapAfterPosts();
 }
 
-export async function refreshPreviewMarkers() {
+export function refreshPreviewMarkers() {
     if (isMobileViewport()) return;
-    if (partnerStore.currentMapParent !== 'preview') return;
-    const map = _sharedMap;
-    if (!map) {
-        await initPreviewMap();
+    if (partnerStore.currentMapParent === 'full') return;
+    if (_sharedMap && partnerStore.currentMapParent === 'preview') {
+        addMarkersToMap(_sharedMap, partnerStore.partnersData);
         return;
     }
-    addMarkersToMap(map, partnerStore.partnersData);
+    _previewMapPending = true;
+    if (!_previewMapInFlight) _queuePreviewMapInit();
 }
 
 export async function initFullMapMarkers() {

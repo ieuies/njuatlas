@@ -1,7 +1,7 @@
 import { partnerStore } from './shared.js';
 import { loadPostsByPage, handleScroll, handleParticipate, prefetchPartnerList } from './list.js';
 import {
-    initPreviewMap, refreshPreviewMarkers, initFullMapMarkers,
+    schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap,
 } from './map.js';
 import { initPostDetailModal, openPostDetail } from './post-detail.js';
@@ -13,9 +13,11 @@ import { isMobileViewport } from '../../utils.js';
 // 页面入口 & 初始化
 // ============================================================
 
-function schedulePreviewMap() {
+function schedulePreviewMapAfterPaint() {
     if (isMobileViewport()) return;
-    initPreviewMap();
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => schedulePreviewMapAfterPosts());
+    });
 }
 
 export async function loadPartnerData() {
@@ -37,7 +39,7 @@ export async function loadPartnerData() {
 
     partnerStore.partnerDataLoaded = true;
     await loadPostsByPage(1, false);
-    schedulePreviewMap();
+    schedulePreviewMapAfterPaint();
 }
 
 function ensureRightPanel() {
