@@ -1,6 +1,7 @@
 """私信/通知 SSE 实时推送（Redis pub/sub，无 Redis 时进程内回退）。"""
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 KEEPALIVE_SECONDS = 25
 _CHANNEL_PREFIX = "njuatlas:events:"
+_REDIS_SOCKET_TIMEOUT = 3
 
 
 def _sse_event(event_name, payload):
@@ -19,7 +21,9 @@ def _sse_event(event_name, payload):
 
 class RealtimeHub:
     def __init__(self):
+        self._redis_url = None
         self._redis = None
+        self._redis_pid = None
         self._mode = "memory"
         self._lock = threading.Lock()
         self._subscribers = defaultdict(list)
@@ -33,22 +37,34 @@ class RealtimeHub:
         if not redis_url:
             logger.info("REDIS_URL 未配置，SSE 使用进程内队列（单 worker 有效）")
             self._mode = "memory"
+            self._redis_url = None
             return
 
-        try:
-            import redis
-
-            client = redis.from_url(redis_url, decode_responses=True)
-            client.ping()
-        except Exception as exc:
-            logger.warning("Redis 不可用，SSE 回退到进程内队列: %s", exc)
-            self._mode = "memory"
-            self._redis = None
-            return
-
-        self._redis = client
+        self._redis_url = redis_url
         self._mode = "redis"
-        logger.info("SSE 实时推送已启用 Redis pub/sub")
+        logger.info("SSE 实时推送将使用 Redis pub/sub（按 worker 延迟建连）")
+
+    def _redis_client(self):
+        """gunicorn --preload 下禁止在 master 进程建连，各 worker fork 后各自连接。"""
+        if self._mode != "redis" or not self._redis_url:
+            return None
+
+        pid = os.getpid()
+        if self._redis is not None and self._redis_pid == pid:
+            return self._redis
+
+        import redis
+
+        client = redis.from_url(
+            self._redis_url,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT,
+        )
+        client.ping()
+        self._redis = client
+        self._redis_pid = pid
+        return client
 
     def _channel(self, user_id):
         return f"{_CHANNEL_PREFIX}{int(user_id)}"
@@ -56,11 +72,13 @@ class RealtimeHub:
     def publish(self, user_id, payload):
         user_id = int(user_id)
         message = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        if self._redis is not None:
+        client = self._redis_client()
+        if client is not None:
             try:
-                self._redis.publish(self._channel(user_id), message)
+                client.publish(self._channel(user_id), message)
             except Exception as exc:
                 logger.warning("Redis publish 失败 user=%s: %s", user_id, exc)
+                self._redis = None
             return
 
         with self._lock:
@@ -75,13 +93,21 @@ class RealtimeHub:
         user_id = int(user_id)
         yield _sse_event("ready", {})
 
-        if self._redis is not None:
+        if self._mode == "redis":
             yield from self._stream_redis(user_id)
         else:
             yield from self._stream_memory(user_id)
 
     def _stream_redis(self, user_id):
-        pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
+        import redis
+
+        client = redis.from_url(
+            self._redis_url,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT,
+        )
+        pubsub = client.pubsub(ignore_subscribe_messages=True)
         channel = self._channel(user_id)
         pubsub.subscribe(channel)
         last_ping = time.monotonic()
@@ -99,6 +125,7 @@ class RealtimeHub:
             try:
                 pubsub.unsubscribe(channel)
                 pubsub.close()
+                client.close()
             except Exception:
                 pass
 

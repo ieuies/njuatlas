@@ -297,8 +297,8 @@ export async function cancelFriendRequest(requestId) {
 export async function removeFriend(userId) {
     return request(`/social/friends/${userId}`, 'DELETE');
 }
-export async function listDmConversations() {
-    return request('/social/messages/conversations', 'GET');
+export async function listDmConversations(silent = false) {
+    return request('/social/messages/conversations', 'GET', null, true, DEFAULT_TIMEOUT_MS, silent);
 }
 export async function getDmMessages(
     peerId,
@@ -343,7 +343,7 @@ export async function getUnreadCounts({ force = false } = {}) {
     if (_unreadInflight) {
         return _unreadInflight;
     }
-    _unreadInflight = request('/social/notifications/unread', 'GET')
+    _unreadInflight = request('/social/notifications/unread', 'GET', null, true, DEFAULT_TIMEOUT_MS, true)
         .then((data) => {
             _unreadCache = data;
             _unreadCacheAt = Date.now();

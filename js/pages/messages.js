@@ -235,8 +235,8 @@ function paintConvoList(items) {
 }
 paintConvoList._lastSig = '';
 
-async function fetchConversations() {
-    const data = await listDmConversations();
+async function fetchConversations({ silent = false } = {}) {
+    const data = await listDmConversations(silent);
     const items = data.items || [];
     tabCache.chats = { items, at: Date.now() };
     return items;
@@ -410,8 +410,8 @@ function bindChatScrollLoad() {
     });
 }
 
-const CHAT_POLL_MS = 4000;
-const CONVO_POLL_MS = 10000;
+const CHAT_POLL_MS = 8000;
+const CONVO_POLL_MS = 15000;
 const SSE_RETRY_BASE_MS = 2000;
 const SSE_RETRY_MAX_MS = 30000;
 
@@ -526,11 +526,7 @@ function startMessageStream() {
         _sseConnected = true;
         _sseRetryMs = SSE_RETRY_BASE_MS;
         window._unreadPollingPaused = true;
-        if (_syncMode === 'convo' && _convoSyncTimer) {
-            clearInterval(_convoSyncTimer);
-            _convoSyncTimer = null;
-            _syncMode = null;
-        }
+        stopPollingSync();
     };
 
     es.addEventListener('ready', onConnected);
@@ -539,10 +535,9 @@ function startMessageStream() {
     });
     es.onopen = onConnected;
     es.onerror = () => {
-        const hadSse = _sseConnected;
         stopMessageStream();
         _sseRetryMs = Math.min(Math.round(_sseRetryMs * 1.5), SSE_RETRY_MAX_MS);
-        if (hadSse) startPollingSync();
+        startPollingSync();
         scheduleMessageStreamReconnect();
     };
 }
@@ -570,6 +565,17 @@ function stopRealtimeSync() {
     window._unreadPollingPaused = false;
 }
 
+function schedulePollingFallback() {
+    clearTimeout(schedulePollingFallback._timer);
+    schedulePollingFallback._timer = setTimeout(() => {
+        schedulePollingFallback._timer = null;
+        if (_sseConnected || document.hidden) return;
+        if (!document.getElementById('messagesPage')?.classList.contains('active-page')) return;
+        startPollingSync();
+    }, 3000);
+}
+schedulePollingFallback._timer = null;
+
 function startRealtimeSync() {
     stopPollingSync();
     if (!getUser()) return;
@@ -580,8 +586,7 @@ function startRealtimeSync() {
     }
 
     startMessageStream();
-    // SSE 与轮询并行：进入聊天室后若 SSE 早已连接，仍要靠轮询拉取新消息
-    startPollingSync();
+    if (!_sseConnected) schedulePollingFallback();
 }
 
 /** 将 SSE/轮询到的自己发出的消息与乐观气泡合并，避免重复显示 */
@@ -686,9 +691,9 @@ async function pollConvoOnce() {
     if (_convoSyncInFlight || document.hidden || _syncMode !== 'convo' || openChatPeerId) return;
     _convoSyncInFlight = true;
     try {
-        const items = await fetchConversations();
+        const items = await fetchConversations({ silent: true });
         paintConvoList(items);
-        refreshAllBadges();
+        refreshAllBadges(null, { force: true });
     } catch { /* 静默 */ } finally {
         _convoSyncInFlight = false;
     }
