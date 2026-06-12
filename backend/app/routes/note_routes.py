@@ -108,7 +108,13 @@ def create_post():
         budget=budget,
         contact=contact,
     )
-    return jsonify(note.to_dict(current_user_id=g.current_user_id)), 201
+    return jsonify(note.to_dict(
+        current_user_id=g.current_user_id,
+        _tags=tags,
+        _is_liked=False,
+        _is_favorited=False,
+        _participation=None,
+    )), 201
 
 
 @note_bp.route("/posts", methods=["GET"])

@@ -73,6 +73,153 @@ function _readListCache() {
     return _getCategoryCache(partnerStore.currentCategory, partnerStore.searchQuery);
 }
 
+/** 发布/编辑/删除后清掉列表缓存，避免 loadPostsByPage 读到旧数据 */
+export function invalidatePartnerListCache() {
+    partnerListCache.clear();
+    partnerStore._prefetchPromise = null;
+    try {
+        const prefix = PARTNER_SESSION_CACHE_PREFIX;
+        const keys = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(prefix)) keys.push(key);
+        }
+        keys.forEach((key) => sessionStorage.removeItem(key));
+    } catch (_) { /* quota or private mode */ }
+}
+
+function _postMatchesCurrentView(post) {
+    const cat = partnerStore.currentCategory;
+    if (cat !== 'all' && !(post.tags || []).includes(cat)) return false;
+    const q = (partnerStore.searchQuery || '').trim().toLowerCase();
+    if (!q) return true;
+    const hay = [
+        post.title,
+        post.description,
+        post.location,
+        post.publisher,
+        ...(post.tags || []),
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+}
+
+/** 用 create/update 接口返回的帖子立即更新瀑布流，无需等待整页重载 */
+export function applyPostFromApi(apiPost) {
+    if (!apiPost?.id) return null;
+    const mapped = mapPost(apiPost);
+    invalidatePartnerListCache();
+
+    const visible = _postMatchesCurrentView(mapped);
+    partnerStore.allPartnersData = partnerStore.allPartnersData.filter((p) => p.id !== mapped.id);
+    if (visible) partnerStore.allPartnersData.unshift(mapped);
+    partnerStore.partnersData = partnerStore.allPartnersData;
+
+    const container = document.getElementById('partnerWaterfall');
+    if (container) {
+        container.querySelectorAll(`.partner-card[data-id="${mapped.id}"]`).forEach((el) => el.remove());
+        if (visible) {
+            const empty = container.querySelector('.partner-empty-state');
+            if (empty) container.innerHTML = '';
+            container.insertBefore(createPostCardElement(mapped), container.firstChild);
+            bindCardEvents(container);
+        }
+    }
+
+    _writeListCache(
+        partnerStore.allPartnersData,
+        partnerStore.hasMore,
+        partnerStore.currentPage,
+    );
+    return mapped;
+}
+
+/** 发布前先插入占位卡片，接口返回后再替换为真实数据 */
+export function applyOptimisticPost(payload) {
+    const user = getUser();
+    const tempId = -Date.now();
+    applyPostFromApi({
+        id: tempId,
+        type: payload.type,
+        title: payload.title,
+        content: payload.content,
+        tags: payload.tags || [],
+        location_name: payload.location_name,
+        location: payload.location,
+        urgency: payload.urgency,
+        event_time: payload.event_time,
+        event_end_time: payload.event_end_time,
+        max_participants: payload.slots,
+        budget: payload.budget,
+        contact: payload.contact,
+        user_id: user?.id ?? user?.user_id,
+        username: user?.username || '我',
+        avatar_url: user?.avatar_url || '',
+        view_count: 0,
+        like_count: 0,
+        favorite_count: 0,
+        comment_count: 0,
+        participant_count: 0,
+        hot_score: 0,
+        is_official: false,
+        is_owner: true,
+        is_liked: false,
+        is_favorited: false,
+        participation_status: null,
+        created_at: new Date().toISOString(),
+    });
+    return tempId;
+}
+export function removePostFromList(postId) {
+    const id = Number(postId);
+    if (!id) return;
+    invalidatePartnerListCache();
+    partnerStore.allPartnersData = partnerStore.allPartnersData.filter((p) => p.id !== id);
+    partnerStore.partnersData = partnerStore.allPartnersData;
+
+    document.querySelectorAll(`.partner-card[data-id="${id}"]`).forEach((el) => el.remove());
+    const container = document.getElementById('partnerWaterfall');
+    if (container && !partnerStore.allPartnersData.length) {
+        const q = partnerStore.searchQuery;
+        container.innerHTML = q
+            ? `<div class="partner-empty-state">未找到与「${escapeHtml(q)}」相关的帖子，试试换个关键词</div>`
+            : '<div class="partner-empty-state">暂无组局，快来发起第一个吧~</div>';
+    }
+
+    _writeListCache(
+        partnerStore.allPartnersData,
+        partnerStore.hasMore,
+        partnerStore.currentPage,
+    );
+    refreshPreviewMarkers();
+}
+
+function _isPostNotFoundError(err) {
+    const msg = err?.message || '';
+    return msg === '帖子不存在' || msg.includes('post_not_found') || msg.includes('404');
+}
+
+async function _deletePostCard(postId) {
+    if (!confirm('确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
+
+    const snapshot = partnerStore.allPartnersData.slice();
+    removePostFromList(postId);
+
+    try {
+        await deletePost(postId, { silent: true });
+        showToast('已删除');
+    } catch (err) {
+        if (_isPostNotFoundError(err)) {
+            showToast('该帖子已不存在，已从列表移除');
+            return;
+        }
+        partnerStore.allPartnersData = snapshot;
+        partnerStore.partnersData = snapshot;
+        renderWaterfall();
+        refreshPreviewMarkers();
+        showToast('删除失败: ' + err.message);
+    }
+}
+
 function _filterPostsByCategory(posts, category) {
     if (category === 'all') return posts;
     return posts.filter(p => p.tags.includes(category));
@@ -150,10 +297,10 @@ export function prefetchPartnerList() {
 }
 
 /** 根据当前分类加载指定页码的数据，append=true 时追加到缓存并追加渲染，否则重置 */
-export async function loadPostsByPage(page, append = false, { background = false } = {}) {
+export async function loadPostsByPage(page, append = false, { background = false, forceRefresh = false } = {}) {
     if (partnerStore.isLoading && !background) return [];
 
-    if (!append && page === 1 && !background) {
+    if (!append && page === 1 && !background && !forceRefresh) {
         const cached = _readListCache();
         if (cached?.posts) {
             partnerStore.allPartnersData = cached.posts;
@@ -204,7 +351,11 @@ export async function loadPostsByPage(page, append = false, { background = false
                 : '';
             partnerStore.allPartnersData = newPosts;
             partnerStore.partnersData = partnerStore.allPartnersData;
-            if (!background || prevIds !== newPosts.map(p => p.id).join(',')) {
+            const nextIds = newPosts.map(p => p.id).join(',');
+            // 后台刷新：仅当帖子集合变化时才整页重绘，避免冲掉刚发布/删除的乐观更新
+            if (!background) {
+                renderWaterfall();
+            } else if (prevIds !== nextIds) {
                 renderWaterfall();
             }
             _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, page);
@@ -644,21 +795,6 @@ export async function silentRefreshCurrentPage() {
         console.warn('静默刷新失败', err);
     } finally {
         partnerStore.isLoading = false;
-    }
-}
-
-async function _deletePostCard(postId) {
-    if (!confirm('确定要删除这条组局吗？\n\n此操作不可撤销，所有评论和报名数据将被永久删除。')) return;
-    try {
-        await deletePost(postId);
-        showToast('已删除');
-        // 重置分页并重新加载第一页
-        partnerStore.currentPage = 1;
-        partnerStore.hasMore = true;
-        await loadPostsByPage(1, false);
-        refreshPreviewMarkers();
-    } catch (err) {
-        showToast('删除失败: ' + err.message);
     }
 }
 

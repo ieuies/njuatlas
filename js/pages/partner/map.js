@@ -1,5 +1,5 @@
 import { escapeHtml, isMobileViewport } from '../../utils.js';
-import { loadAmapScript } from '../../config.js';
+import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
 import { getMapCenter, categoryStyle } from './shared.js';
 
@@ -7,15 +7,6 @@ let _sharedMap = null;
 let _sharedMapContainer = null;
 let _previewMapPending = false;
 let _previewMapInFlight = false;
-
-function _runWhenIdle(fn) {
-    if (window.requestIdleCallback) {
-        requestIdleCallback(fn, { timeout: 3000 });
-    } else {
-        setTimeout(fn, 50);
-    }
-}
-
 async function _initPreviewMapCore() {
     await ensureAMap();
     const map = getOrCreateSharedMap('preview');
@@ -30,7 +21,11 @@ function _queuePreviewMapInit() {
     if (_previewMapInFlight) return;
     _previewMapInFlight = true;
     _previewMapPending = false;
-    _runWhenIdle(() => {
+
+    // 组局已就绪后再加载地图；复用全局预拉，下一帧初始化
+    prefetchAmapScript().catch(() => {});
+
+    requestAnimationFrame(() => {
         _initPreviewMapCore()
             .catch((err) => console.warn('预览地图初始化失败:', err))
             .finally(() => {
@@ -52,7 +47,7 @@ export function schedulePreviewMapAfterPosts() {
 async function ensureAMap() {
     if (window.AMap) return window.AMap;
     try {
-        await loadAmapScript();
+        await prefetchAmapScript();
         if (window.AMap) return window.AMap;
         throw new Error('AMap SDK 加载后 window.AMap 仍然不可用');
     } catch (err) {
@@ -228,25 +223,11 @@ export async function initFullMapMarkers() {
         if (!container || container.offsetWidth === 0) {
             await new Promise(r => setTimeout(r, 200));
         }
-        await new Promise((resolve) => {
-            const doInit = () => {
-                try {
-                    const map = getOrCreateSharedMap('full');
-                    if (map) {
-                        addMarkersToMap(map, partnerStore.partnersData);
-                        setTimeout(() => map.resize(), 100);
-                    }
-                } catch (e) {
-                    console.warn('全屏地图渲染失败:', e);
-                }
-                resolve();
-            };
-            if (window.requestIdleCallback) {
-                requestIdleCallback(doInit, { timeout: 3000 });
-            } else {
-                setTimeout(doInit, 50);
-            }
-        });
+        const map = getOrCreateSharedMap('full');
+        if (map) {
+            addMarkersToMap(map, partnerStore.partnersData);
+            requestAnimationFrame(() => map.resize());
+        }
     } catch (err) {
         console.warn('全屏地图初始化失败:', err);
     }

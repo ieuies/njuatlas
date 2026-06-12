@@ -1,5 +1,5 @@
 # app/errors.py
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 
 from flask import jsonify
@@ -60,10 +60,22 @@ def register_error_handlers(app):
         log_event(app.logger, "config_error", level="error", error=str(error))
         return _json_error("服务配置错误，请检查环境变量。", 500, code="config_error")
 
+    @app.errorhandler(IntegrityError)
+    def handle_integrity_error(error):
+        db.session.rollback()
+        log_event(app.logger, "integrity_error", level="warning", error=str(error))
+        return _json_error("操作冲突，请刷新后重试。", 409, code="conflict")
+
     @app.errorhandler(SQLAlchemyError)
     def handle_database_error(error):
         db.session.rollback()
-        log_event(app.logger, "database_error", level="error", error=str(error))
+        log_event(
+            app.logger,
+            "database_error",
+            level="error",
+            error=str(error),
+            error_type=type(error).__name__,
+        )
         return _json_error("数据库操作失败。", 500, code="database_error")
 
     @app.errorhandler(HTTPException)

@@ -3,7 +3,7 @@ import { isLoggedIn } from '../../auth.js';
 import { createPost, updatePost } from '../../api.js';
 import { API_BASE } from '../../config.js';
 import { partnerStore, debounce } from './shared.js';
-import { loadPostsByPage } from './list.js';
+import { applyPostFromApi, applyOptimisticPost, removePostFromList } from './list.js';
 import { refreshPreviewMarkers } from './map.js';
 
 function _pad2(n) { return String(n).padStart(2, '0'); }
@@ -119,6 +119,23 @@ export function initPartnerModal() {
 
     if (!modal || modal.dataset.ready === '1') return;
     modal.dataset.ready = '1';
+
+    modal.querySelectorAll('.scheduled-time-picker-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const input = btn.parentElement?.querySelector('input[type="date"], input[type="time"]');
+            if (!input) return;
+            if (typeof input.showPicker === 'function') {
+                try {
+                    input.showPicker();
+                    return;
+                } catch (_) { /* 部分浏览器需已聚焦 */ }
+            }
+            input.focus();
+            input.click();
+        });
+    });
 
     const scheduledRow = document.getElementById('scheduledTimeRow');
     const timeModeRow = document.getElementById('timeModeRow');
@@ -330,52 +347,56 @@ export function initPartnerModal() {
         submitBtn.disabled = true;
         submitBtn.innerText = btnText;
 
+        let tempId = null;
         try {
-            let finalLocationCoords = partnerStore.modalLocationCoords || null;
-            if (location && !finalLocationCoords) {
-                showToast('正在自动匹配地点坐标...');
-                finalLocationCoords = await resolveLocationCoords(location);
-                if (finalLocationCoords) {
-                    partnerStore.modalLocationCoords = finalLocationCoords;
-                    showToast('已自动匹配地点，可在地图中显示');
-                } else {
-                    showToast('未匹配到地点坐标，发布后可能不会显示在地图上');
-                }
+            const payload = {
+                type: partnerStore.modalDuration === 'long' ? 'forum' : 'event',
+                title, content: description || title, tags,
+                location: partnerStore.modalLocationCoords || null,
+                location_name: location || null,
+                urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
+                event_time: partnerStore.modalDuration === 'long' ? null : event_time,
+                event_end_time: partnerStore.modalDuration === 'long' ? null : event_end_time,
+                slots, budget, contact,
+            };
+
+            closeModal();
+
+            if (!editId) {
+                tempId = applyOptimisticPost(payload);
+                refreshPreviewMarkers();
             }
 
+            let savedPost;
             if (editId) {
-                await updatePost(parseInt(editId), {
-                    type: partnerStore.modalDuration === 'long' ? 'forum' : 'event',
-                    title, content: description || title, tags,
-                    location: finalLocationCoords,
-                    location_name: location || null,
-                    urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
-                    event_time: partnerStore.modalDuration === 'long' ? null : event_time,
-                    event_end_time: partnerStore.modalDuration === 'long' ? null : event_end_time,
-                    slots, budget, contact,
-                });
+                savedPost = await updatePost(parseInt(editId), payload);
                 modal.removeAttribute('data-edit-id');
+                applyPostFromApi(savedPost);
                 showToast('组局已更新');
+                refreshPreviewMarkers();
             } else {
-                await createPost({
-                    type: partnerStore.modalDuration === 'long' ? 'forum' : 'event',
-                    title, content: description || title, tags,
-                    location: finalLocationCoords,
-                    location_name: location || null,
-                    urgency: partnerStore.modalDuration === 'long' ? 'long_term' : partnerStore.modalUrgency,
-                    event_time: partnerStore.modalDuration === 'long' ? null : event_time,
-                    event_end_time: partnerStore.modalDuration === 'long' ? null : event_end_time,
-                    slots, budget, contact,
-                });
+                savedPost = await createPost(payload);
+                if (tempId) removePostFromList(tempId);
+                applyPostFromApi(savedPost);
                 showToast('发布成功');
+                refreshPreviewMarkers();
+                // 坐标后台补全，不阻塞发布
+                if (location && !payload.location) {
+                    resolveLocationCoords(location).then(async (coords) => {
+                        if (!coords || !savedPost?.id) return;
+                        try {
+                            const updated = await updatePost(savedPost.id, {
+                                location: coords,
+                                location_name: location,
+                            });
+                            applyPostFromApi(updated);
+                            refreshPreviewMarkers();
+                        } catch (_) { /* 坐标补全失败不影响已发布内容 */ }
+                    });
+                }
             }
-            closeModal();
-            // 重置分页并重新加载第一页
-            partnerStore.currentPage = 1;
-            partnerStore.hasMore = true;
-            await loadPostsByPage(1, false);
-            refreshPreviewMarkers();
         } catch (err) {
+            if (tempId) removePostFromList(tempId);
             showToast('发布失败: ' + err.message);
         } finally {
             submitBtn.disabled = false;

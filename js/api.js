@@ -214,8 +214,8 @@ export async function getPost(postId) {
 export async function updatePost(postId, data) {
     return request(`/posts/${postId}`, 'PUT', data);
 }
-export async function deletePost(postId) {
-    return request(`/posts/${postId}`, 'DELETE');
+export async function deletePost(postId, { silent = false } = {}) {
+    return request(`/posts/${postId}`, 'DELETE', null, true, undefined, silent);
 }
 export async function togglePostLike(postId) {
     return request(`/posts/${postId}/like`, 'POST');

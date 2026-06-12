@@ -1,3 +1,4 @@
+import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
 import { loadPostsByPage, handleScroll, handleParticipate, prefetchPartnerList } from './list.js';
 import {
@@ -38,6 +39,8 @@ export async function loadPartnerData() {
     }
 
     partnerStore.partnerDataLoaded = true;
+    // 与帖子请求并行预拉高德 SDK，地图仍在帖子完成后再初始化
+    prefetchAmapScript();
     await loadPostsByPage(1, false);
     schedulePreviewMapAfterPaint();
 }

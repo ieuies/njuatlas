@@ -5,7 +5,7 @@ import {
 } from '../../api.js';
 import { partnerStore } from './shared.js';
 import { formatPostTime, isCurrentUserOwner, safeHtmlWithBreaks } from './shared.js';
-import { loadPostsByPage, applyParticipationResult, silentRefreshCurrentPage } from './list.js';
+import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList } from './list.js';
 import { refreshPreviewMarkers } from './map.js';
 import { openEditPostModal } from './partner-form.js';
 
@@ -202,18 +202,25 @@ export function initPostDetailModal() {
     document.getElementById('detailDeleteBtn')?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
         if (!confirm('确定要删除这条组局吗？此操作不可撤销。')) return;
+        const postId = currentDetailPost.id;
+        const snapshot = partnerStore.allPartnersData.slice();
+        document.getElementById('postDetailModal').style.display = 'none';
+        currentDetailPost = null;
+        removePostFromList(postId);
         try {
-            await deletePost(currentDetailPost.id);
+            await deletePost(postId, { silent: true });
             showToast('已删除');
-            document.getElementById('postDetailModal').style.display = 'none';
-            currentDetailPost = null;
-            partnerStore.currentPage = 1;
-            partnerStore.hasMore = true;
-            await loadPostsByPage(1, false);
-            refreshPreviewMarkers();
         } catch (err) {
-            showToast('删除失败: ' + err.message);
+            const msg = err?.message || '';
+            if (msg !== '帖子不存在' && !msg.includes('404')) {
+                partnerStore.allPartnersData = snapshot;
+                partnerStore.partnersData = snapshot;
+                showToast('删除失败: ' + msg);
+                return;
+            }
+            showToast('该帖子已不存在，已从列表移除');
         }
+        refreshPreviewMarkers();
     });
 }
 

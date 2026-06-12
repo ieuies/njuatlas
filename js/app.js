@@ -93,6 +93,7 @@ function prefetchPageModule(pageId) {
 }
 
 function prefetchPartnerOnIntent() {
+    prefetchAmapScript();
     _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
 }
 
@@ -126,10 +127,14 @@ async function switchPage(pageId) {
         return;
     }
 
-    await Promise.all([
+    const pageBootTasks = [
         ensurePageStyles(pageId),
         prefetchPageModule(pageId),
-    ]);
+    ];
+    if (pageId === 'partner' || pageId === 'fullMap') {
+        pageBootTasks.push(prefetchAmapScript());
+    }
+    await Promise.all(pageBootTasks);
 
     // 隐藏所有页面
     document.querySelectorAll('.content-area .page').forEach(page => {
