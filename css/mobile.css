@@ -28,6 +28,34 @@
         overflow: visible;
     }
 
+    /* 关闭 enhance 层在触摸端的昂贵渲染 */
+    html {
+        text-rendering: auto;
+    }
+    body {
+        scroll-behavior: auto;
+    }
+    html .modal {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    html .partner-brief-card,
+    html .guide-card,
+    html .home-feat-card,
+    html .guide-card .guide-img,
+    html .primary-btn,
+    html .ai-send-btn,
+    html .secondary-btn,
+    html .home-brand-btn {
+        transition: none !important;
+    }
+    html .partner-brief-card:hover,
+    html .guide-card:hover,
+    html .home-feat-card:hover {
+        transform: none !important;
+        box-shadow: var(--atlas-shadow) !important;
+    }
+
     /* backdrop-filter 在移动端 GPU 开销极大 */
     .top-bar,
     .bottom-tab-bar,
@@ -44,6 +72,7 @@
     }
     .bottom-tab-bar {
         background: var(--atlas-card) !important;
+        transition: transform 0.22s ease, opacity 0.18s ease !important;
     }
 
     /* 页面切换动画：移动端直接显示，减少 compositor 压力 */
@@ -51,29 +80,31 @@
         animation: none !important;
     }
 
-    /* 首页：关闭粒子画布 */
+    /* 首页：关闭粒子画布；背景网格去 mask、减图片并发 */
     .home-particles {
         display: none !important;
     }
-
-    /* 轻量图片网格（6×5，30 格不重复） */
     .home-mobile-grid {
+        -webkit-mask-image: none !important;
+        mask-image: none !important;
         grid-template-rows: repeat(5, 1fr);
         height: 42vh;
         min-height: 240px;
     }
+    .home-mobile-grid .mg-cell {
+        background-color: var(--bg-tertiary);
+    }
 
-    /* 列表长内容：跳过屏外绘制（guide 页 content-visibility 会导致 WebKit 滚动高度异常） */
+    /* contain / content-visibility 在 WebKit 上易致滚动掉帧 */
+    .partner-waterfall {
+        contain: none;
+    }
     .partner-card,
     .msg-convo-item,
     .msg-friend-item,
     .msg-notif-item {
-        content-visibility: auto;
-        contain-intrinsic-size: auto 120px;
-    }
-
-    .partner-waterfall {
-        contain: layout style;
+        content-visibility: visible;
+        contain-intrinsic-size: auto;
     }
 
     /* 减少 hover/transform 过渡在触摸设备上的误触发 */

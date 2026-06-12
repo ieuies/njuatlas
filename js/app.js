@@ -117,13 +117,15 @@ function bindPartnerPrefetchIntent() {
 }
 
 function prefetchCommonAssets() {
-    const mobile = isMobileViewport();
-    if (!mobile) {
-        setTimeout(() => prefetchAmapScript(), 500);
-    } else {
-        setTimeout(() => prefetchAmapScript(), 2000);
-    }
     bindPartnerPrefetchIntent();
+    const mobile = isMobileViewport();
+    const delay = mobile ? 1200 : 500;
+    setTimeout(() => prefetchAmapScript(), delay);
+    if (mobile) {
+        document.querySelectorAll('[data-page="guide"]').forEach((el) => {
+            el.addEventListener('touchstart', () => _loadGuide().catch(() => {}), { once: true, passive: true });
+        });
+    }
 }
 
 async function switchPage(pageId) {
@@ -597,6 +599,34 @@ function buildGridImages(pool, count) {
     return cells;
 }
 
+const MOBILE_GRID_LAZY_ROWS = 2;
+
+function _lazyLoadMobileGridCells(grid) {
+    const pending = grid.querySelectorAll('.mg-cell[data-src]');
+    if (!pending.length) return;
+
+    if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                const el = entry.target;
+                const src = el.dataset.src;
+                if (!src) return;
+                el.style.backgroundImage = `url('${src}')`;
+                delete el.dataset.src;
+                io.unobserve(el);
+            });
+        }, { rootMargin: '120px 0px' });
+        pending.forEach((el) => io.observe(el));
+        return;
+    }
+
+    pending.forEach((el) => {
+        el.style.backgroundImage = `url('${el.dataset.src}')`;
+        delete el.dataset.src;
+    });
+}
+
 // ========== 移动端首页图片网格（6×5） ==========
 function initMobileGrid() {
     const grid = document.getElementById('homeMobileGrid');
@@ -606,15 +636,21 @@ function initMobileGrid() {
     const imgs = LANDMARK_IMAGES;
     const cellCount = Math.min(MOBILE_GRID_CELLS, imgs.length);
     const cells = buildGridImages(imgs, cellCount);
+    const eagerCount = MOBILE_GRID_COLS * MOBILE_GRID_LAZY_ROWS;
 
     const frag = document.createDocumentFragment();
-    cells.forEach(src => {
+    cells.forEach((src, index) => {
         const div = document.createElement('div');
         div.className = 'mg-cell';
-        div.style.backgroundImage = `url('${src}')`;
+        if (index < eagerCount) {
+            div.style.backgroundImage = `url('${src}')`;
+        } else {
+            div.dataset.src = src;
+        }
         frag.appendChild(div);
     });
     grid.appendChild(frag);
+    _lazyLoadMobileGridCells(grid);
 }
 
 // ========== 首页分层入场（每次进入首页） ==========
