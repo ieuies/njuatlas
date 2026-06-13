@@ -24,7 +24,7 @@ import {
     getAuthToken,
 } from '../api.js';
 import { API_BASE } from '../config.js';
-import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief, atlasInlineSpinnerHtml } from '../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief, formatChatDividerTime, parseApiDate, atlasInlineSpinnerHtml } from '../utils.js';
 import { t } from '../i18n.js';
 import { DEFAULT_BUBBLE_STYLE, bubbleThemeCssVars, normalizeBubbleStyle } from '../bubbleThemes.js';
 import {
@@ -37,7 +37,10 @@ import {
 
 const CACHE_TTL_MS = 30000;
 const CHAT_PAGE_SIZE = 50;
+const CHAT_TIME_GAP_MS = 5 * 60 * 1000;
 const SESSION_CONV_KEY = 'njuatlas_msg_conv_v1';
+/** 列表项头像懒加载，减少首屏并发请求 */
+const LIST_AVATAR_OPTS = { lazy: true };
 
 let currentTab = 'chats';
 let openChatPeerId = null;
@@ -245,7 +248,7 @@ function convoListHtml(items) {
     }
     return items.map((c) => `
         <button class="msg-convo-item" data-chat="${c.peer_id}" type="button">
-            ${avatarHtmlForUser(c.peer, 48)}
+            ${avatarHtmlForUser(c.peer, 48, LIST_AVATAR_OPTS)}
             <div class="msg-convo-main">
                 <div class="msg-convo-top">
                     <span class="msg-convo-name">${escapeHtml(c.peer?.username || t('messages.user'))}</span>
@@ -365,19 +368,122 @@ function bubbleRowHtml(m, { pending = false } = {}) {
         </div>`;
 }
 
+function createBubbleRowElement(message, { pending = false } = {}) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = bubbleRowHtml(message, { pending });
+    return wrap.firstElementChild;
+}
+
+function messageTimestampMs(m) {
+    if (!m?.created_at) return null;
+    const d = parseApiDate(m.created_at);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    return d.getTime();
+}
+
+/** 两条消息之间是否需要插入居中时间条 */
+function needsChatTimeDivider(prevMsg, currMsg) {
+    const currMs = messageTimestampMs(currMsg);
+    if (currMs == null) return false;
+    if (!prevMsg) return true;
+    const prevMs = messageTimestampMs(prevMsg);
+    if (prevMs == null) return true;
+    return currMs - prevMs > CHAT_TIME_GAP_MS;
+}
+
+function createChatTimeDividerElement(iso) {
+    const text = formatChatDividerTime(iso);
+    if (!text) return null;
+    const el = document.createElement('div');
+    el.className = 'msg-time-divider';
+    el.setAttribute('role', 'separator');
+    el.textContent = text;
+    return el;
+}
+
+function getPreviousChatMessage(message) {
+    const idx = chatState.messages.indexOf(message);
+    if (idx > 0) return chatState.messages[idx - 1];
+    if (idx === 0) return null;
+    const len = chatState.messages.length;
+    return len ? chatState.messages[len - 1] : null;
+}
+
+/** 将消息行（含 QQ 式时间条）追加到 fragment */
+function appendChatRowsToFragment(frag, messages, { startPrev = null } = {}) {
+    let prev = startPrev;
+    for (const m of messages) {
+        if (needsChatTimeDivider(prev, m)) {
+            const divider = createChatTimeDividerElement(m.created_at);
+            if (divider) frag.appendChild(divider);
+        }
+        const row = createBubbleRowElement(m);
+        if (row) frag.appendChild(row);
+        if (messageTimestampMs(m) != null) prev = m;
+    }
+    return prev;
+}
+
+function syncBoundaryTimeDivider(lastOlder, nextExisting, firstRow) {
+    if (!nextExisting || !firstRow) return;
+    const body = firstRow.parentElement;
+    if (!body) return;
+    let prevEl = firstRow.previousElementSibling;
+    if (prevEl?.id === 'msgLoadMoreHint') prevEl = prevEl.previousElementSibling;
+    const need = needsChatTimeDivider(lastOlder, nextExisting);
+    if (need) {
+        const divider = createChatTimeDividerElement(nextExisting.created_at);
+        if (!divider) return;
+        if (prevEl?.classList.contains('msg-time-divider')) {
+            prevEl.textContent = divider.textContent;
+        } else {
+            body.insertBefore(divider, firstRow);
+        }
+    } else if (prevEl?.classList.contains('msg-time-divider')) {
+        prevEl.remove();
+    }
+}
+
+function syncLoadMoreHint(body = document.getElementById('msgChatBody')) {
+    if (!body) return;
+    const hint = body.querySelector('#msgLoadMoreHint');
+    if (chatState.hasMoreOlder) {
+        if (hint) return;
+        const el = document.createElement('div');
+        el.className = 'msg-load-hint';
+        el.id = 'msgLoadMoreHint';
+        el.textContent = t('messages.loadOlder');
+        body.insertBefore(el, body.firstChild);
+    } else {
+        hint?.remove();
+    }
+}
+
+function prependOlderBubbles(olderMessages, nextExistingMsg = null) {
+    const body = document.getElementById('msgChatBody');
+    if (!body || !olderMessages?.length) return;
+
+    body.querySelector('.msg-empty-sm')?.remove();
+
+    const frag = document.createDocumentFragment();
+    appendChatRowsToFragment(frag, olderMessages);
+
+    const firstRow = body.querySelector('.msg-bubble-row');
+    if (firstRow) {
+        body.insertBefore(frag, firstRow);
+        syncBoundaryTimeDivider(olderMessages[olderMessages.length - 1], nextExistingMsg, firstRow);
+    } else {
+        const hint = body.querySelector('#msgLoadMoreHint');
+        if (hint) hint.after(frag);
+        else body.prepend(frag);
+    }
+}
+
 function paintChatMessages({ scrollToBottom = true } = {}) {
     const body = document.getElementById('msgChatBody');
     if (!body) return;
 
     const frag = document.createDocumentFragment();
-
-    if (chatState.hasMoreOlder) {
-        const hint = document.createElement('div');
-        hint.className = 'msg-load-hint';
-        hint.id = 'msgLoadMoreHint';
-        hint.textContent = t('messages.loadOlder');
-        frag.appendChild(hint);
-    }
 
     if (!chatState.messages.length) {
         const empty = document.createElement('div');
@@ -385,14 +491,11 @@ function paintChatMessages({ scrollToBottom = true } = {}) {
         empty.textContent = t('messages.startChat');
         frag.appendChild(empty);
     } else {
-        chatState.messages.forEach((m) => {
-            const wrap = document.createElement('div');
-            wrap.innerHTML = bubbleRowHtml(m);
-            frag.appendChild(wrap.firstElementChild);
-        });
+        appendChatRowsToFragment(frag, chatState.messages);
     }
 
     body.replaceChildren(frag);
+    syncLoadMoreHint(body);
     applyChatBackground(body, chatState.peerId);
     if (scrollToBottom) body.scrollTop = body.scrollHeight;
 }
@@ -682,7 +785,12 @@ function reconcileOwnOutgoingMessage(message, { tempId = null } = {}) {
         pendingRow.querySelector('.msg-send-spinner')?.remove();
         pendingRow.removeAttribute('data-temp-id');
         pendingRow.setAttribute('data-msg-id', String(message.id));
-        if (!chatState.messages.some((x) => x.id === message.id)) {
+        const stateIdx = tempId
+            ? chatState.messages.findIndex((x) => x._tempId === tempId)
+            : chatState.messages.findIndex((x) => x.is_mine && !x.id && x.content === message.content);
+        if (stateIdx >= 0) {
+            chatState.messages[stateIdx] = { ...chatState.messages[stateIdx], ...message };
+        } else if (!chatState.messages.some((x) => x.id === message.id)) {
             chatState.messages.push(message);
         }
         return true;
@@ -785,6 +893,19 @@ async function fetchChatThread(peerId) {
     return { peer, messages, hasMoreOlder };
 }
 
+/** 打开聊天时本地清零未读，返回列表时再 force 刷新会话 */
+function clearLocalConvoUnread(peerId) {
+    const items = tabCache.chats.items;
+    if (!Array.isArray(items)) return;
+    const idx = items.findIndex((c) => Number(c.peer_id) === Number(peerId));
+    if (idx < 0 || !items[idx].unread_count) return;
+    const next = items.slice();
+    next[idx] = { ...next[idx], unread_count: 0 };
+    tabCache.chats.items = next;
+    tabCache.chats.at = Date.now();
+    _persistSessionConversations(next);
+}
+
 async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     const view = document.getElementById('msgChatsView');
     if (!view) return;
@@ -833,15 +954,13 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         updateChatHeader();
         paintChatMessages({ scrollToBottom: true });
         document.getElementById('msgChatText')?.focus();
-        invalidateCache('chats');
-        fetchConversations().catch(() => {});
+        clearLocalConvoUnread(peerId);
         markDmThreadRead(peerId)
             .then(() => {
                 invalidateUnreadCache();
                 return refreshAllBadges(null, { force: true });
             })
             .catch(() => {});
-        startRealtimeSync();
     } catch (e) {
         if (body) body.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;
     }
@@ -866,12 +985,14 @@ async function loadOlderMessages() {
             const existingIds = new Set(chatState.messages.map((m) => m.id));
             const uniqueOlder = older.filter((m) => m.id && !existingIds.has(m.id));
             if (uniqueOlder.length) {
+                const firstExisting = chatState.messages[0];
                 chatState.messages = [...uniqueOlder, ...chatState.messages];
-                paintChatMessages({ scrollToBottom: false });
+                prependOlderBubbles(uniqueOlder, firstExisting);
                 if (body) body.scrollTop = body.scrollHeight - prevHeight;
             }
         }
         chatState.hasMoreOlder = Boolean(data.has_more);
+        syncLoadMoreHint(body);
         if (chatState.hasMoreOlder) chatState.page += 1;
         else chatState.page = 1;
     } catch { /* 静默 */ }
@@ -885,9 +1006,15 @@ function appendChatBubble(message, { pending = false, scroll = true } = {}) {
     const empty = body.querySelector('.msg-empty-sm');
     if (empty) empty.remove();
 
-    const row = document.createElement('div');
-    row.innerHTML = bubbleRowHtml(message, { pending });
-    body.appendChild(row.firstElementChild);
+    const prevMsg = getPreviousChatMessage(message);
+    if (needsChatTimeDivider(prevMsg, message)) {
+        const divider = createChatTimeDividerElement(message.created_at);
+        if (divider) body.appendChild(divider);
+    }
+
+    const row = createBubbleRowElement(message, { pending });
+    if (!row) return;
+    body.appendChild(row);
     if (scroll) body.scrollTop = body.scrollHeight;
 }
 
@@ -941,8 +1068,10 @@ function enqueueSendChatMessage(text) {
         sender_id: me?.id,
         content: text,
         is_mine: true,
+        created_at: new Date().toISOString(),
     };
 
+    chatState.messages.push(optimistic);
     appendChatBubble(optimistic, { pending: true });
     bumpLocalConvoPreview(peerId, text);
 
@@ -967,7 +1096,14 @@ async function sendChatMessageOnce(peerId, tempId, text) {
         }
         scheduleConvoListSync();
     } catch (err) {
-        document.querySelector(`[data-temp-id="${tempId}"]`)?.remove();
+        const row = document.querySelector(`[data-temp-id="${tempId}"]`);
+        const dividerBefore = row?.previousElementSibling?.classList?.contains('msg-time-divider')
+            ? row.previousElementSibling
+            : null;
+        row?.remove();
+        const failIdx = chatState.messages.findIndex((x) => x._tempId === tempId);
+        if (failIdx >= 0) chatState.messages.splice(failIdx, 1);
+        if (dividerBefore && failIdx === 0) dividerBefore.remove();
         showToast(err.message || t('messages.sendFail'));
     }
 }
@@ -977,7 +1113,7 @@ async function sendChatMessageOnce(peerId, tempId, text) {
 function friendRequestRowHtml(r) {
     return `
         <div class="msg-friend-item" data-request-id="${r.id}">
-            ${avatarHtmlForUser(r.requester, 44)}
+            ${avatarHtmlForUser(r.requester, 44, LIST_AVATAR_OPTS)}
             <div class="msg-friend-main">
                 <span class="msg-friend-name">${escapeHtml(r.requester?.username || '')}</span>
                 <span class="msg-friend-bio">${escapeHtml(r.requester?.campus ? campusLabel(r.requester.campus) : t('messages.friendRequestBio'))}</span>
@@ -992,7 +1128,7 @@ function friendRequestRowHtml(r) {
 function sentRequestRowHtml(r) {
     return `
         <div class="msg-friend-item" data-sent-id="${r.id}">
-            ${avatarHtmlForUser(r.addressee, 44)}
+            ${avatarHtmlForUser(r.addressee, 44, LIST_AVATAR_OPTS)}
             <div class="msg-friend-main">
                 <span class="msg-friend-name">${escapeHtml(r.addressee?.username || '')}</span>
                 <span class="msg-friend-bio">${escapeHtml(r.addressee?.campus ? campusLabel(r.addressee.campus) : t('messages.waitPending'))}</span>
@@ -1006,7 +1142,7 @@ function sentRequestRowHtml(r) {
 function friendRowHtml(u) {
     return `
         <div class="msg-friend-item" data-friend-id="${u.id}">
-            ${avatarHtmlForUser(u, 44)}
+            ${avatarHtmlForUser(u, 44, LIST_AVATAR_OPTS)}
             <div class="msg-friend-main">
                 <span class="msg-friend-name">${escapeHtml(u.username || '')}</span>
                 <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus ? `${u.campus || ''} ${u.bio || ''}`.trim() : '')}</span>
@@ -1022,7 +1158,7 @@ function friendRowHtml(u) {
 function searchResultRowHtml(u) {
     return `
         <div class="msg-friend-item">
-            ${avatarHtmlForUser(u, 40)}
+            ${avatarHtmlForUser(u, 40, LIST_AVATAR_OPTS)}
             <div class="msg-friend-main">
                 <span class="msg-friend-name">${escapeHtml(u.username)}</span>
                 <span class="msg-friend-bio">${escapeHtml(u.bio || u.campus || '')}</span>
@@ -1109,9 +1245,11 @@ function paintFriendsData({ friends = [], requests = [], sent = [] } = {}) {
 }
 
 async function fetchFriendsData() {
-    const friendsData = await listFriends();
-    const reqData = await listFriendRequests();
-    const sentReqData = await listSentFriendRequests();
+    const [friendsData, reqData, sentReqData] = await Promise.all([
+        listFriends(),
+        listFriendRequests(),
+        listSentFriendRequests(),
+    ]);
     const payload = {
         friends: friendsData.items || [],
         requests: reqData.items || [],
@@ -1203,7 +1341,7 @@ async function searchAndRender(q) {
 function notifListHtml(items) {
     return items.map((n) => `
         <div class="msg-notif-item ${n.is_read ? '' : 'unread'}" data-notif="${n.id}" data-type="${n.type}" data-post="${n.post_id || ''}" data-friendship="${n.friendship_id || ''}" role="button" tabindex="0">
-            ${avatarHtmlForUser(n.actor, 40)}
+            ${avatarHtmlForUser(n.actor, 40, LIST_AVATAR_OPTS)}
             <div class="msg-notif-main">
                 <div class="msg-notif-text">${escapeHtml(notifText(n))}</div>
                 ${n.post_title ? `<div class="msg-notif-sub">${escapeHtml(n.post_title)}</div>` : ''}

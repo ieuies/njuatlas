@@ -149,6 +149,34 @@ export function formatTimeBrief(iso) {
     return md;
 }
 
+/** 聊天气泡之间的居中时间条（QQ 风格，北京时间） */
+export function formatChatDividerTime(iso) {
+    const d = parseApiDate(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+    const now = new Date();
+    const todayKey = beijingDateKey(now);
+    const dateKey = beijingDateKey(d);
+    const time = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+    const yesterday = new Date(now.getTime() - 86400000);
+    const yesterdayKey = beijingDateKey(yesterday);
+    if (dateKey === todayKey) return time;
+    if (dateKey === yesterdayKey) return `昨天 ${time}`;
+    const year = d.toLocaleString('zh-CN', { timeZone: BEIJING_TZ, year: 'numeric' });
+    const currentYear = now.toLocaleString('zh-CN', { timeZone: BEIJING_TZ, year: 'numeric' });
+    const md = d.toLocaleString('zh-CN', {
+        timeZone: BEIJING_TZ,
+        month: 'numeric',
+        day: 'numeric',
+    });
+    if (year === currentYear) return `${md} ${time}`;
+    return `${year}年${md} ${time}`;
+}
+
 // ============================================================
 // 用户头像：优先服务端 avatar_url（跨设备一致），本人无服务端头像时回退 localStorage
 // ============================================================

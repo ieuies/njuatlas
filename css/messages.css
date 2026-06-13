@@ -257,6 +257,26 @@
 @media (max-width: 768px) {
     .msg-chat-bg-swatches { grid-template-columns: repeat(4, 1fr); }
 }
+.msg-load-hint {
+    align-self: center;
+    width: 100%;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    padding: 6px 0 10px;
+}
+.msg-time-divider {
+    align-self: center;
+    width: 100%;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    padding: 4px 8px;
+    user-select: none;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
 .msg-bubble-row {
     display: flex;
     align-items: flex-end;
@@ -498,12 +518,6 @@
 .msg-send-spinner {
     align-self: center;
     margin-bottom: 1px;
-}
-.msg-load-hint {
-    text-align: center;
-    font-size: 0.72rem;
-    color: var(--text-tertiary);
-    padding: 6px 0 10px;
 }
 .msg-section-highlight {
     color: var(--btn-primary-bg);
