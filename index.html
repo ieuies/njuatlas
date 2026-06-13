@@ -30,8 +30,15 @@
     });
     // 本地联调 Flask：window.NJUATLAS_CONFIG.USE_LOCAL_API = true;
     // 本地覆盖 Key（不提交 git）：复制 js/amap.local.example.js → js/amap.local.js
+    (function () {
+        var h = location.hostname;
+        if (h !== 'localhost' && h !== '127.0.0.1') return;
+        var s = document.createElement('script');
+        s.src = 'js/amap.local.js';
+        s.defer = true;
+        document.head.appendChild(s);
+    })();
     </script>
-    <script src="js/amap.local.js" defer onerror=""></script>
     <!-- 首页分层入场：首屏绘制前标记，避免未动画层闪一下 -->
     <script>
     (function () {
