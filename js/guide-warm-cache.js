@@ -64,6 +64,38 @@ export function stripGuideUserStateFromStorageCache() {
     } catch { /* ignore */ }
 }
 
+/** 点赞入库后清掉相关榜单缓存，避免其他账号仍读到旧赞数 */
+export function invalidateLeaderboardCacheKeys(keys) {
+    const drop = new Set(keys.filter(Boolean));
+    if (!drop.size) return;
+    try {
+        const map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
+        let changed = false;
+        for (const key of drop) {
+            if (map[key]) {
+                delete map[key];
+                changed = true;
+            }
+        }
+        if (changed) sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+        const warm = window.__njuatlasGuideLbWarm;
+        if (warm?.key && drop.has(warm.key)) {
+            delete window.__njuatlasGuideLbWarm;
+        }
+        window.dispatchEvent(new CustomEvent('njuatlas:guide-lb-invalidate', { detail: { keys: [...drop] } }));
+    }
+}
+
+export function leaderboardKeysForGuideItem(campus, category) {
+    const cat = category || GUIDE_ENTRY_CATEGORY;
+    const keys = new Set([entryCacheKey('all', cat)]);
+    const c = (campus && campus !== 'all') ? campus : GUIDE_ENTRY_CAMPUS;
+    keys.add(entryCacheKey(c, cat));
+    return [...keys];
+}
+
 export function persistLeaderboardToStorage(key, data) {
     const at = Date.now();
     const sanitized = stripGuideUserState(data);

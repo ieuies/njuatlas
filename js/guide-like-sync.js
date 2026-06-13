@@ -10,7 +10,7 @@ import {
     syncGuideLikeToServer,
 } from './api.js';
 
-const SYNC_DELAY_MS = 2000;
+const SYNC_DELAY_MS = 300;
 const MAX_SYNC_RETRIES = 3;
 const SYNC_STORAGE_PREFIX = 'njuatlas_guide_like_sync_v1';
 const SYNC_OWNER_KEY = 'njuatlas_guide_like_sync_owner_v1';
@@ -173,7 +173,7 @@ export function seedGuideLikeSyncFromItems(items) {
         }
         _rememberSynced(key, {
             liked: serverLiked || prev.liked,
-            likes: Math.max(serverLikes, prev.likes),
+            likes: serverLikes,
             place_id: placeId || prev.place_id,
         });
     }

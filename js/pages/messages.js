@@ -8,6 +8,7 @@ import {
     getDmMessages,
     sendDmMessage,
     listFriends,
+    listFriendsBundle,
     listFriendRequests,
     listSentFriendRequests,
     sendFriendRequest,
@@ -1109,16 +1110,29 @@ function paintFriendsData({ friends = [], requests = [], sent = [] } = {}) {
 }
 
 async function fetchFriendsData() {
-    const friendsData = await listFriends();
-    const reqData = await listFriendRequests();
-    const sentReqData = await listSentFriendRequests();
-    const payload = {
-        friends: friendsData.items || [],
-        requests: reqData.items || [],
-        sent: sentReqData.items || [],
-    };
-    tabCache.friends = { ...payload, at: Date.now() };
-    return payload;
+    try {
+        const bundle = await listFriendsBundle();
+        const payload = {
+            friends: bundle.friends || [],
+            requests: bundle.requests || [],
+            sent: bundle.sent || [],
+        };
+        tabCache.friends = { ...payload, at: Date.now() };
+        return payload;
+    } catch {
+        const [friendsData, reqData, sentReqData] = await Promise.all([
+            listFriends(),
+            listFriendRequests(),
+            listSentFriendRequests(),
+        ]);
+        const payload = {
+            friends: friendsData.items || [],
+            requests: reqData.items || [],
+            sent: sentReqData.items || [],
+        };
+        tabCache.friends = { ...payload, at: Date.now() };
+        return payload;
+    }
 }
 
 async function renderFriends({ force = false } = {}) {

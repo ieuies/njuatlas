@@ -27,6 +27,8 @@ import {
     GUIDE_CACHE_TTL_MS,
     GUIDE_LB_CACHE_KEY,
     GUIDE_LAZY_IMAGE_EAGER_COUNT,
+    invalidateLeaderboardCacheKeys,
+    leaderboardKeysForGuideItem,
     persistLeaderboardToStorage,
     readLeaderboardRow,
     stripGuideUserState,
@@ -51,6 +53,12 @@ if (typeof window !== 'undefined') {
         if (!key || !data) return;
         _leaderboardCache[key] = data;
         _leaderboardCacheAt[key] = at || Date.now();
+    });
+    window.addEventListener('njuatlas:guide-lb-invalidate', (e) => {
+        for (const key of e.detail?.keys || []) {
+            delete _leaderboardCache[key];
+            delete _leaderboardCacheAt[key];
+        }
     });
     window.addEventListener('njuatlas:auth-change', async () => {
         if (!isLoggedIn()) resetGuideLikeSync();
@@ -516,6 +524,15 @@ function _applyGuideLikeUi(item, btnEl) {
     }
 }
 
+function _invalidateLeaderboardAfterLike(campus, category) {
+    const keys = leaderboardKeysForGuideItem(campus, category);
+    invalidateLeaderboardCacheKeys(keys);
+    for (const key of keys) {
+        delete _leaderboardCache[key];
+        delete _leaderboardCacheAt[key];
+    }
+}
+
 function handleGuideLike(item, btnEl) {
     if (!isLoggedIn()) {
         document.getElementById('authModal').style.display = 'flex';
@@ -543,6 +560,10 @@ function handleGuideLike(item, btnEl) {
         onSynced: (_result, synced) => {
             if (synced?.place_id) item.place_id = synced.place_id;
             _applyGuideLikeState(item, btnEl, synced.liked, synced.likes);
+            _invalidateLeaderboardAfterLike(campus, category);
+            if (_guideViewMode === 'leaderboard') {
+                loadLeaderboard({ force: true }).catch(() => {});
+            }
         },
         onReverted: (synced) => {
             if (!synced) return;
@@ -553,6 +574,8 @@ function handleGuideLike(item, btnEl) {
             if (err.message !== 'UNAUTHORIZED') showToast(err.message || '点赞同步失败');
         },
     });
+
+    flushGuideLikeQueue().catch(() => {});
 }
 
 function _refreshSearchItemLikeState(item) {

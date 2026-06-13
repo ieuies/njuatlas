@@ -265,15 +265,14 @@ def mark_orphan_dms_read(user_id):
 
 def unread_interact_count(user_id):
     """未读互动通知（排除好友请求；与互动 Tab 可见项一致）。"""
-    rows = (
+    return (
         Notification.query.filter(
             Notification.user_id == user_id,
             Notification.is_read.is_(False),
             Notification.type != "friend_request",
         )
-        .all()
+        .count()
     )
-    return sum(1 for n in rows if should_show_notification(n))
 
 
 def unread_counts(user_id):

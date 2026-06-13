@@ -398,15 +398,8 @@ def _place_row_to_item(place, cat, campus, like_count=0, review_count=0):
 
 
 def fetch_db_leaderboard_candidates(campus, cat):
-    """站内已收录、有点赞的店铺可冲入排行榜（优先 Redis ZSET，回退 SQL）。"""
-    from app.services.guide_rank_cache import fetch_ranked_places, warm_rank_cache
-
-    cached_rows = fetch_ranked_places(campus, cat)
-    if cached_rows is not None:
-        return [
-            _place_row_to_item(place, cat, campus, like_count=likes, review_count=review_count)
-            for place, likes, review_count in cached_rows
-        ]
+    """站内已收录、有点赞的店铺可冲入排行榜（likes 表为真源，Redis 仅作回填）。"""
+    from app.services.guide_rank_cache import warm_rank_cache
 
     q = (
         db.session.query(Place, func.count(Like.id).label("likes"))
@@ -616,7 +609,7 @@ def place_from_guide_item(item, campus, guide_category, user_id=None):
         "location": item.get("location") or "",
         "poi_id": poi_id or None,
         "category": cfg.get("types", ""),
-        "campus": campus if campus != "all" else (item.get("campus") or ""),
+        "campus": campus if campus not in ("", "all") else (item.get("campus") or "鼓楼"),
         "guide_category": guide_category,
         "photos": json.dumps(photos, ensure_ascii=False) if photos else None,
     }

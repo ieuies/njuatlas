@@ -117,6 +117,37 @@ def get_user_profile(user_id):
 
 # ── 好友 ──────────────────────────────────────────────────────
 
+@social_bp.route("/friends/bundle", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def list_friends_bundle():
+    """好友列表 + 收到/发出的请求，单次往返（减少跨域 RTT）。"""
+    user_id = g.current_user_id
+    ids = list_friend_ids(user_id)
+    users = User.query.filter(User.id.in_(ids)).all() if ids else []
+    incoming = Friendship.query.filter_by(addressee_id=user_id, status="pending").all()
+    outgoing = Friendship.query.filter_by(requester_id=user_id, status="pending").all()
+    return jsonify({
+        "friends": [public_user_brief(u) for u in users],
+        "requests": [
+            {
+                "id": row.id,
+                "requester": public_user_brief(row.requester),
+                "created_at": _dt(row.created_at),
+            }
+            for row in incoming
+        ],
+        "sent": [
+            {
+                "id": row.id,
+                "addressee": public_user_brief(row.addressee),
+                "created_at": _dt(row.created_at),
+            }
+            for row in outgoing
+        ],
+    })
+
+
 @social_bp.route("/friends", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")

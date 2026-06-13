@@ -53,14 +53,15 @@ def _redis():
 
 def sync_place_rank(place, like_count=None):
     """将店铺点赞数写入 ZSET；0 赞时移除。"""
-    if not place or not place.campus or not place.guide_category:
+    if not place or not place.guide_category:
         return
+    campus = (place.campus or "鼓楼").strip() or "鼓楼"
     client = _redis()
     if client is None:
         return
     if like_count is None:
         like_count = Like.query.filter_by(place_id=place.id).count()
-    key = rank_key(place.campus, place.guide_category)
+    key = rank_key(campus, place.guide_category)
     member = str(place.id)
     try:
         if like_count <= 0:
