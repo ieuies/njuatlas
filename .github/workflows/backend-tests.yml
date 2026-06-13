@@ -1,0 +1,40 @@
+name: Backend Tests
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        env:
+          SECRET_KEY: test-secret-key-at-least-32-characters-long
+          GAODE_API_KEY: test-gaode-api-key
+          BAILIAN_API_KEY: test-bailian-api-key
+          LLM_PROVIDER: bailian
+          REGISTER_EMAIL_RESTRICTION_ENABLED: "false"
+          RATELIMIT_STORAGE_URI: memory://
+        run: pytest -q --cov=app --cov-report=term-missing
