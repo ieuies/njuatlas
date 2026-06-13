@@ -17,10 +17,8 @@ import {
 import { getUser, isLoggedIn } from '../auth.js';
 import { showToast } from '../utils.js';
 import {
-    holdGuidePrefetch,
     hydrateAllLeaderboardsFromStorage,
     prefetchAllGuideLeaderboards,
-    releaseGuidePrefetch,
 } from '../guide-prefetch.js';
 import {
     ALL_GUIDE_CAMPUSES,
@@ -44,6 +42,14 @@ let _leaderboardCache = {};
 let _leaderboardCacheAt = {};
 let _loadLeaderboardSeq = 0;
 hydrateAllLeaderboardsFromStorage(_leaderboardCache, _leaderboardCacheAt);
+if (typeof window !== 'undefined') {
+    window.addEventListener('njuatlas:guide-lb-cache', (e) => {
+        const { key, data, at } = e.detail || {};
+        if (!key || !data) return;
+        _leaderboardCache[key] = data;
+        _leaderboardCacheAt[key] = at || Date.now();
+    });
+}
 let _isRefreshing = false;
 let _detailItem = null;
 let _explorePage = 1;
@@ -380,35 +386,43 @@ function renderLeaderboard(payload, cacheKey) {
     _bindGuideLazyImages(container);
 }
 
+function _showLeaderboardFromCache(key) {
+    const cached = _getCachedLeaderboard(key);
+    if (!cached) return false;
+    renderLeaderboard(cached, key);
+    return true;
+}
+
 async function loadLeaderboard({ force = false, shuffle = false } = {}) {
     const campus = currentGuideCampus;
     const cat = currentGuideCat;
     const key = _cacheKey(campus, cat);
     const container = document.getElementById('guideGrid');
     const seq = ++_loadLeaderboardSeq;
-    const gridMatches = container?.dataset.guideKey === key;
     const cached = _getCachedLeaderboard(key);
     const fresh = Boolean(cached && _isCacheFresh(key));
 
-    if (!force && !shuffle && fresh && gridMatches) {
-        if (!_leaderboardCache[key]) _rememberLeaderboard(key, cached);
-        renderLeaderboard(cached, key);
+    if (shuffle) {
+        if (!cached) _showGuideLoading(container);
+        await _fetchLeaderboard(key, campus, cat, shuffle, seq);
         return;
     }
 
-    if (cached && !gridMatches) {
-        if (!_leaderboardCache[key]) _rememberLeaderboard(key, cached);
-        renderLeaderboard(cached, key);
-    } else if (!gridMatches || (force && !cached)) {
+    if (cached) {
+        const gridMatches = container?.dataset.guideKey === key;
+        if (!gridMatches) renderLeaderboard(cached, key);
+    } else {
         _showGuideLoading(container);
     }
 
-    if (!force && !shuffle && cached && gridMatches && fresh) {
-        _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq);
+    if (!force && cached && fresh) {
+        _fetchLeaderboardInBackground(key, campus, cat, false, seq);
         return;
     }
 
-    await _fetchLeaderboard(key, campus, cat, shuffle, seq);
+    if (force || !cached || !fresh) {
+        await _fetchLeaderboard(key, campus, cat, false, seq);
+    }
 }
 
 function _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq) {
@@ -416,7 +430,6 @@ function _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq) {
 }
 
 async function _fetchLeaderboard(key, campus, cat, shuffle, seq) {
-    holdGuidePrefetch();
     try {
         const data = await getGuideLeaderboard(campus, cat, { shuffle });
         if (seq !== _loadLeaderboardSeq) return;
@@ -438,8 +451,6 @@ async function _fetchLeaderboard(key, campus, cat, shuffle, seq) {
             container.dataset.guideKey = '';
         }
         showToast('排行榜加载失败');
-    } finally {
-        releaseGuidePrefetch();
     }
 }
 
@@ -964,7 +975,12 @@ function filterGuideCategory(cat) {
     if (_guideViewMode === 'search') {
         runGuideSearch(1, { keyword: _guideSearchQuery });
     } else {
-        loadLeaderboard({ force: true });
+        const key = _cacheKey(currentGuideCampus, cat);
+        const grid = document.getElementById('guideGrid');
+        if (!_showLeaderboardFromCache(key)) {
+            _showGuideLoading(grid);
+        }
+        loadLeaderboard();
     }
 }
 
@@ -978,13 +994,10 @@ function filterGuideCampus(campus) {
     } else {
         const key = _cacheKey(campus, currentGuideCat);
         const grid = document.getElementById('guideGrid');
-        const cached = _getCachedLeaderboard(key);
-        if (cached) {
-            renderLeaderboard(cached, key);
-        } else {
+        if (!_showLeaderboardFromCache(key)) {
             _showGuideLoading(grid);
         }
-        loadLeaderboard({ force: true });
+        loadLeaderboard();
     }
 }
 

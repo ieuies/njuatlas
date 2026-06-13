@@ -42,30 +42,41 @@ export function readLeaderboardFromStorage(key) {
 export function persistLeaderboardToStorage(key, data) {
     const at = Date.now();
     const row = { at, data };
-
-    const writeMap = (map) => {
-        map[key] = row;
-        sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
-    };
-
+    let map;
     try {
-        writeMap(JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}'));
+        map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
     } catch {
+        map = {};
+    }
+    map[key] = row;
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
         try {
-            const map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
-            const dropKeys = Object.keys(map)
-                .filter((k) => !k.startsWith('all\x1f') && k !== entryCacheKey())
-                .sort((a, b) => (map[a]?.at || 0) - (map[b]?.at || 0));
-            for (const k of dropKeys.slice(0, Math.max(dropKeys.length - 8, 0))) {
-                delete map[k];
-            }
-            writeMap(map);
-        } catch { /* quota */ }
+            sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
+            break;
+        } catch {
+            const dropKey = _pickLeaderboardEvictionKey(map, key);
+            if (!dropKey) break;
+            delete map[dropKey];
+        }
     }
 
     if (typeof window !== 'undefined') {
         window.__njuatlasGuideLbWarm = { key, data, at };
+        window.dispatchEvent(new CustomEvent('njuatlas:guide-lb-cache', { detail: { key, data, at } }));
     }
+}
+
+function _pickLeaderboardEvictionKey(map, keepKey) {
+    const candidates = Object.keys(map).filter((k) => k !== keepKey && k !== entryCacheKey());
+    const singleCampus = candidates
+        .filter((k) => !k.startsWith('all\x1f'))
+        .sort((a, b) => (map[a]?.at || 0) - (map[b]?.at || 0));
+    if (singleCampus.length) return singleCampus[0];
+    const allCampus = candidates
+        .filter((k) => k.startsWith('all\x1f'))
+        .sort((a, b) => (map[a]?.at || 0) - (map[b]?.at || 0));
+    return allCampus[0] || null;
 }
 
 export function readWarmLeaderboard(key) {

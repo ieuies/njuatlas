@@ -17,16 +17,6 @@ const PREFETCH_429_BASE_MS = 2000;
 const PREFETCH_MAX_ATTEMPTS = 4;
 
 let _fullPrefetchPromise = null;
-let _userHoldCount = 0;
-
-/** 用户正在拉当前页榜单时暂停后台预取，避免与预取争抢限流配额 */
-export function holdGuidePrefetch() {
-    _userHoldCount += 1;
-}
-
-export function releaseGuidePrefetch() {
-    _userHoldCount = Math.max(0, _userHoldCount - 1);
-}
 
 export function listGuidePrefetchTasks() {
     const tasks = [];
@@ -48,17 +38,10 @@ function _isRateLimitError(err) {
     return msg.includes('过于频繁') || msg.includes('429');
 }
 
-async function _waitIfUserHold() {
-    while (_userHoldCount > 0) {
-        await new Promise((r) => setTimeout(r, 120));
-    }
-}
-
 async function _fetchOnePrefetchTask(task) {
     if (readLeaderboardRow(task.key)) return;
 
     for (let attempt = 0; attempt < PREFETCH_MAX_ATTEMPTS; attempt += 1) {
-        await _waitIfUserHold();
         try {
             const data = await getGuideLeaderboard(task.campus, task.category);
             persistLeaderboardToStorage(task.key, data);
