@@ -16,21 +16,21 @@ import {
 } from '../guide-like-sync.js';
 import { getUser, isLoggedIn } from '../auth.js';
 import { showToast } from '../utils.js';
+import { hydrateAllLeaderboardsFromStorage, prefetchAllGuideLeaderboards, prefetchGuideAllCampusLeaderboards } from '../guide-prefetch.js';
 import {
+    ALL_GUIDE_CAMPUSES,
     entryCacheKey,
     GUIDE_CACHE_TTL_MS,
     GUIDE_LB_CACHE_KEY,
-    hydrateMemoryLeaderboardCache,
+    paintGuideGridFromCache,
     persistLeaderboardToStorage,
-    readLeaderboardFromStorage,
     readLeaderboardRow,
 } from '../guide-warm-cache.js';
 
 const DEFAULT_CAMPUS = '鼓楼';
-const ALL_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州'];
+const ALL_CAMPUSES = ALL_GUIDE_CAMPUSES.filter((c) => c !== 'all');
 const GUIDE_IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
 const GUIDE_LAZY_IMAGE_EAGER_COUNT = 3;
-const GUIDE_OTHER_CATEGORIES = ['咖啡饮品', '休闲娱乐', '运动健身', '购物商圈', '景点公园'];
 
 let _guideConfig = null;
 let currentGuideCat = '美食';
@@ -39,10 +39,7 @@ let _guideRenderItems = [];
 let _leaderboardCache = {};
 let _leaderboardCacheAt = {};
 let _loadLeaderboardSeq = 0;
-hydrateMemoryLeaderboardCache(_leaderboardCache, entryCacheKey(DEFAULT_CAMPUS, '美食'));
-if (_leaderboardCache[entryCacheKey(DEFAULT_CAMPUS, '美食')]) {
-    _leaderboardCacheAt[entryCacheKey(DEFAULT_CAMPUS, '美食')] = Date.now();
-}
+hydrateAllLeaderboardsFromStorage(_leaderboardCache, _leaderboardCacheAt);
 let _isRefreshing = false;
 let _detailItem = null;
 let _explorePage = 1;
@@ -126,22 +123,6 @@ function initGuideShellHandlers() {
     document.getElementById('guideSearchBtn')?.addEventListener('click', focusSearch, { once: true });
 }
 
-async function _prefetchOtherLeaderboards() {
-    if (currentGuideCampus === 'all') return;
-    for (const cat of GUIDE_OTHER_CATEGORIES) {
-        if (cat === currentGuideCat) continue;
-        const key = _cacheKey(currentGuideCampus, cat);
-        if (_getCachedLeaderboard(key)) continue;
-        try {
-            const data = await getGuideLeaderboard(currentGuideCampus, cat);
-            _rememberLeaderboard(key, data);
-        } catch {
-            break;
-        }
-        await new Promise((r) => setTimeout(r, 400));
-    }
-}
-
 function _scheduleGuidePageExtras() {
     if (_guidePageExtrasScheduled) return;
     _guidePageExtrasScheduled = true;
@@ -158,7 +139,8 @@ function _scheduleGuidePageExtras() {
             const key = _cacheKey(currentGuideCampus, currentGuideCat);
             if (_leaderboardCache[key]) renderLeaderboard(_leaderboardCache[key], key);
         }
-        await _prefetchOtherLeaderboards();
+        prefetchAllGuideLeaderboards().catch(() => {});
+        prefetchGuideAllCampusLeaderboards().catch(() => {});
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -989,6 +971,11 @@ function filterGuideCampus(campus) {
     if (_guideViewMode === 'search') {
         runGuideSearch(1, { keyword: _guideSearchQuery });
     } else {
+        const key = _cacheKey(campus, currentGuideCat);
+        const grid = document.getElementById('guideGrid');
+        if (!paintGuideGridFromCache(grid, key)) {
+            _showGuideLoading(grid);
+        }
         loadLeaderboard({ force: true });
     }
 }
@@ -1123,13 +1110,9 @@ export function onGuidePageHidden() {
     flushGuideLikeQueue();
 }
 
-export async function prefetchGuideData() {
-    const key = entryCacheKey(DEFAULT_CAMPUS, '美食');
-    if (_getCachedLeaderboard(key) && _isCacheFresh(key)) return;
-    try {
-        const data = await getGuideLeaderboard(DEFAULT_CAMPUS, '美食');
-        _rememberLeaderboard(key, data);
-    } catch { /* ignore */ }
+export function prefetchGuideData() {
+    prefetchGuideAllCampusLeaderboards();
+    return prefetchAllGuideLeaderboards();
 }
 
 export function initGuidePage() {

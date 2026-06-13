@@ -1,14 +1,13 @@
 import { isLoggedIn, getUser, doLogout, syncUserMediaFromServer } from './auth.js';
 import { showToast, renderAvatarInto, isMobileViewport } from './utils.js';
-import { getUnreadCounts, getGuideLeaderboard, listDmConversations } from './api.js';
+import { getUnreadCounts, listDmConversations } from './api.js';
 import {
     entryCacheKey,
     GUIDE_ENTRY_CAMPUS,
     GUIDE_ENTRY_CATEGORY,
-    paintGuideEntryGrid,
-    persistLeaderboardToStorage,
-    readLeaderboardFromStorage,
+    paintGuideGridFromCache,
 } from './guide-warm-cache.js';
+import { prefetchAllGuideLeaderboards, prefetchGuideAllCampusLeaderboards } from './guide-prefetch.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
@@ -107,30 +106,9 @@ function prefetchPartnerOnIntent() {
     _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
 }
 
-let _guideEntryPrefetchPromise = null;
-
-/** 冷启动只预取首屏排行榜（鼓楼·美食），不加载 guide.js 模块 */
-function prefetchGuideEntryLeaderboard() {
-    if (_guideEntryPrefetchPromise) return _guideEntryPrefetchPromise;
-    _guideEntryPrefetchPromise = (async () => {
-        const key = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
-        const cached = readLeaderboardFromStorage(key);
-        if (cached) {
-            persistLeaderboardToStorage(key, cached);
-            return;
-        }
-        try {
-            const data = await getGuideLeaderboard(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
-            persistLeaderboardToStorage(key, data);
-        } catch { /* ignore */ }
-    })().finally(() => {
-        _guideEntryPrefetchPromise = null;
-    });
-    return _guideEntryPrefetchPromise;
-}
-
 function prefetchGuideOnIntent() {
-    prefetchGuideEntryLeaderboard();
+    prefetchGuideAllCampusLeaderboards();
+    prefetchAllGuideLeaderboards();
 }
 
 const MSG_CONV_CACHE_KEY = 'njuatlas_msg_conv_v1';
@@ -210,17 +188,18 @@ function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
     bindGuidePrefetchIntent();
     bindMessagesPrefetchIntent();
-    prefetchGuideEntryLeaderboard();
+    prefetchGuideAllCampusLeaderboards();
+    prefetchAllGuideLeaderboards();
     const mobile = isMobileViewport();
     const delay = mobile ? 1200 : 500;
     setTimeout(() => prefetchAmapScript(), delay);
-    setTimeout(() => prefetchGuideEntryLeaderboard(), mobile ? 2000 : 4000);
     if (isLoggedIn()) {
         setTimeout(() => prefetchMessagesEntryData(), mobile ? 1100 : 2400);
     }
     if (mobile) {
         const idlePrefetch = () => {
-            prefetchGuideEntryLeaderboard();
+            prefetchGuideAllCampusLeaderboards();
+            prefetchAllGuideLeaderboards();
             if (isLoggedIn()) prefetchMessagesEntryData();
         };
         if (typeof requestIdleCallback === 'function') {
@@ -315,10 +294,11 @@ async function switchPage(pageId) {
     }
 
     if (pageId === 'guide') {
-        prefetchGuideEntryLeaderboard();
+        prefetchAllGuideLeaderboards();
+        prefetchGuideAllCampusLeaderboards();
         const grid = document.getElementById('guideGrid');
         if (grid && !grid.dataset.guideKey) {
-            paintGuideEntryGrid(grid);
+            paintGuideGridFromCache(grid, entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY));
         }
         const mod = await _loadGuide();
         if (!_guidePageInited) {
