@@ -16,13 +16,18 @@ import {
 } from '../guide-like-sync.js';
 import { getUser, isLoggedIn } from '../auth.js';
 import { showToast } from '../utils.js';
-import { hydrateAllLeaderboardsFromStorage, prefetchAllGuideLeaderboards, prefetchGuideAllCampusLeaderboards } from '../guide-prefetch.js';
+import {
+    holdGuidePrefetch,
+    hydrateAllLeaderboardsFromStorage,
+    prefetchAllGuideLeaderboards,
+    releaseGuidePrefetch,
+} from '../guide-prefetch.js';
 import {
     ALL_GUIDE_CAMPUSES,
     entryCacheKey,
     GUIDE_CACHE_TTL_MS,
     GUIDE_LB_CACHE_KEY,
-    paintGuideGridFromCache,
+    GUIDE_LAZY_IMAGE_EAGER_COUNT,
     persistLeaderboardToStorage,
     readLeaderboardRow,
 } from '../guide-warm-cache.js';
@@ -30,7 +35,6 @@ import {
 const DEFAULT_CAMPUS = '鼓楼';
 const ALL_CAMPUSES = ALL_GUIDE_CAMPUSES.filter((c) => c !== 'all');
 const GUIDE_IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
-const GUIDE_LAZY_IMAGE_EAGER_COUNT = 3;
 
 let _guideConfig = null;
 let currentGuideCat = '美食';
@@ -140,7 +144,6 @@ function _scheduleGuidePageExtras() {
             if (_leaderboardCache[key]) renderLeaderboard(_leaderboardCache[key], key);
         }
         prefetchAllGuideLeaderboards().catch(() => {});
-        prefetchGuideAllCampusLeaderboards().catch(() => {});
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -373,7 +376,6 @@ function renderLeaderboard(payload, cacheKey) {
     _guideRenderItems = flat;
     container.innerHTML = html;
     if (cacheKey) container.dataset.guideKey = cacheKey;
-    container.dataset.guideBound = 'true';
     _bindGuideGridDelegation(container);
     _bindGuideLazyImages(container);
 }
@@ -414,6 +416,7 @@ function _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq) {
 }
 
 async function _fetchLeaderboard(key, campus, cat, shuffle, seq) {
+    holdGuidePrefetch();
     try {
         const data = await getGuideLeaderboard(campus, cat, { shuffle });
         if (seq !== _loadLeaderboardSeq) return;
@@ -435,6 +438,8 @@ async function _fetchLeaderboard(key, campus, cat, shuffle, seq) {
             container.dataset.guideKey = '';
         }
         showToast('排行榜加载失败');
+    } finally {
+        releaseGuidePrefetch();
     }
 }
 
@@ -973,7 +978,10 @@ function filterGuideCampus(campus) {
     } else {
         const key = _cacheKey(campus, currentGuideCat);
         const grid = document.getElementById('guideGrid');
-        if (!paintGuideGridFromCache(grid, key)) {
+        const cached = _getCachedLeaderboard(key);
+        if (cached) {
+            renderLeaderboard(cached, key);
+        } else {
             _showGuideLoading(grid);
         }
         loadLeaderboard({ force: true });
@@ -1111,11 +1119,12 @@ export function onGuidePageHidden() {
 }
 
 export function prefetchGuideData() {
-    prefetchGuideAllCampusLeaderboards();
     return prefetchAllGuideLeaderboards();
 }
 
 export function initGuidePage() {
     initGuideShellHandlers();
+    const grid = document.getElementById('guideGrid');
+    if (grid) _bindGuideGridDelegation(grid);
     loadGuideData();
 }

@@ -7,7 +7,7 @@ import {
     GUIDE_ENTRY_CATEGORY,
     paintGuideGridFromCache,
 } from './guide-warm-cache.js';
-import { prefetchAllGuideLeaderboards, prefetchGuideAllCampusLeaderboards } from './guide-prefetch.js';
+import { prefetchAllGuideLeaderboards } from './guide-prefetch.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
@@ -107,7 +107,6 @@ function prefetchPartnerOnIntent() {
 }
 
 function prefetchGuideOnIntent() {
-    prefetchGuideAllCampusLeaderboards();
     prefetchAllGuideLeaderboards();
 }
 
@@ -188,7 +187,6 @@ function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
     bindGuidePrefetchIntent();
     bindMessagesPrefetchIntent();
-    prefetchGuideAllCampusLeaderboards();
     prefetchAllGuideLeaderboards();
     const mobile = isMobileViewport();
     const delay = mobile ? 1200 : 500;
@@ -198,7 +196,6 @@ function prefetchCommonAssets() {
     }
     if (mobile) {
         const idlePrefetch = () => {
-            prefetchGuideAllCampusLeaderboards();
             prefetchAllGuideLeaderboards();
             if (isLoggedIn()) prefetchMessagesEntryData();
         };
@@ -295,7 +292,6 @@ async function switchPage(pageId) {
 
     if (pageId === 'guide') {
         prefetchAllGuideLeaderboards();
-        prefetchGuideAllCampusLeaderboards();
         const grid = document.getElementById('guideGrid');
         if (grid && !grid.dataset.guideKey) {
             paintGuideGridFromCache(grid, entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY));

@@ -6,6 +6,8 @@ export const GUIDE_ENTRY_CAMPUS = '鼓楼';
 export const GUIDE_ENTRY_CATEGORY = '美食';
 export const ALL_GUIDE_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州', 'all'];
 export const ALL_GUIDE_CATEGORIES = ['美食', '咖啡饮品', '休闲娱乐', '运动健身', '购物商圈', '景点公园'];
+/** 每页首屏直接加载的封面图数量（其余滚动进入视口再加载） */
+export const GUIDE_LAZY_IMAGE_EAGER_COUNT = 10;
 const IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
 
 export function entryCacheKey(campus = GUIDE_ENTRY_CAMPUS, category = GUIDE_ENTRY_CATEGORY) {
@@ -94,7 +96,7 @@ function cardHtml(item, idx) {
     const dist = item.distance_label || (item.distance_m != null ? `${item.distance_m}m` : '');
     const topClass = rank <= 3 ? ` guide-waterfall-card--top${rank}` : '';
     const imgSrc = secureImageUrl(item.image) || IMG_PLACEHOLDER;
-    const eager = idx < 3 && imgSrc !== IMG_PLACEHOLDER;
+    const eager = idx < GUIDE_LAZY_IMAGE_EAGER_COUNT && imgSrc !== IMG_PLACEHOLDER;
     const imgTag = eager
         ? `<img class="guide-card-cover-img" src="${imgSrc}" alt="${esc(item.name)}" loading="eager" decoding="async" fetchpriority="high">`
         : `<img class="guide-card-cover-img" src="${IMG_PLACEHOLDER}" data-src="${imgSrc}" alt="${esc(item.name)}" loading="lazy" decoding="async">`;

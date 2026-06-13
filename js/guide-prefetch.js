@@ -1,26 +1,36 @@
 /**
- * 吃喝玩乐全量冷加载：进站后后台拉取全部校区 × 分类排行榜。
- * 含四校区 + 「全部」（campus=all，返回 sections 结构）。
+ * 吃喝玩乐冷加载：严格串行，按校区 × 分类逐个预取，避免触发 429。
+ * 顺序：鼓楼(6 分类) → 全部(6) → 仙林(6) → 浦口(6) → 苏州(6)
  */
 import { getGuideLeaderboard } from './api.js';
 import {
-    ALL_GUIDE_CAMPUSES,
     ALL_GUIDE_CATEGORIES,
-    GUIDE_ENTRY_CAMPUS,
-    GUIDE_ENTRY_CATEGORY,
     entryCacheKey,
     persistLeaderboardToStorage,
     readLeaderboardRow,
 } from './guide-warm-cache.js';
 
-const PREFETCH_CONCURRENCY = 3;
-const PREFETCH_GAP_MS = 60;
+/** 预取校区顺序（与 UI Tab 顺序无关） */
+const PREFETCH_CAMPUS_ORDER = ['鼓楼', 'all', '仙林', '浦口', '苏州'];
+const PREFETCH_GAP_MS = 280;
+const PREFETCH_429_BASE_MS = 2000;
+const PREFETCH_MAX_ATTEMPTS = 4;
 
 let _fullPrefetchPromise = null;
+let _userHoldCount = 0;
+
+/** 用户正在拉当前页榜单时暂停后台预取，避免与预取争抢限流配额 */
+export function holdGuidePrefetch() {
+    _userHoldCount += 1;
+}
+
+export function releaseGuidePrefetch() {
+    _userHoldCount = Math.max(0, _userHoldCount - 1);
+}
 
 export function listGuidePrefetchTasks() {
     const tasks = [];
-    for (const campus of ALL_GUIDE_CAMPUSES) {
+    for (const campus of PREFETCH_CAMPUS_ORDER) {
         for (const category of ALL_GUIDE_CATEGORIES) {
             tasks.push({ campus, category, key: entryCacheKey(campus, category) });
         }
@@ -33,43 +43,44 @@ export function listGuideAllCampusTasks() {
     return listGuidePrefetchTasks().filter((task) => task.campus === 'all');
 }
 
-function _sortSingleCampusTasks(tasks) {
-    const entryKey = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
-    return [...tasks].sort((a, b) => {
-        const score = (task) => {
-            if (task.key === entryKey) return 0;
-            if (task.campus === GUIDE_ENTRY_CAMPUS) return 1;
-            return 2;
-        };
-        const diff = score(a) - score(b);
-        return diff !== 0 ? diff : a.key.localeCompare(b.key, 'zh-CN');
-    });
+function _isRateLimitError(err) {
+    const msg = String(err?.message || '');
+    return msg.includes('过于频繁') || msg.includes('429');
+}
+
+async function _waitIfUserHold() {
+    while (_userHoldCount > 0) {
+        await new Promise((r) => setTimeout(r, 120));
+    }
+}
+
+async function _fetchOnePrefetchTask(task) {
+    if (readLeaderboardRow(task.key)) return;
+
+    for (let attempt = 0; attempt < PREFETCH_MAX_ATTEMPTS; attempt += 1) {
+        await _waitIfUserHold();
+        try {
+            const data = await getGuideLeaderboard(task.campus, task.category);
+            persistLeaderboardToStorage(task.key, data);
+            return;
+        } catch (err) {
+            if (_isRateLimitError(err) && attempt < PREFETCH_MAX_ATTEMPTS - 1) {
+                const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
+                await new Promise((r) => setTimeout(r, delay));
+                continue;
+            }
+            return;
+        }
+    }
 }
 
 async function _runPrefetchTasks(tasks) {
-    if (!tasks.length) return;
-    let cursor = 0;
-
-    async function worker() {
-        while (cursor < tasks.length) {
-            const task = tasks[cursor];
-            cursor += 1;
-            if (readLeaderboardRow(task.key)) continue;
-            try {
-                const data = await getGuideLeaderboard(task.campus, task.category);
-                persistLeaderboardToStorage(task.key, data);
-            } catch {
-                /* 单项失败不影响其余预取 */
-            }
-            if (PREFETCH_GAP_MS > 0) {
-                await new Promise((r) => setTimeout(r, PREFETCH_GAP_MS));
-            }
+    for (const task of tasks) {
+        await _fetchOnePrefetchTask(task);
+        if (PREFETCH_GAP_MS > 0) {
+            await new Promise((r) => setTimeout(r, PREFETCH_GAP_MS));
         }
     }
-
-    await Promise.all(
-        Array.from({ length: PREFETCH_CONCURRENCY }, () => worker()),
-    );
 }
 
 /** 将 sessionStorage 中已预取的榜单灌入 guide 页内存缓存 */
@@ -82,31 +93,20 @@ export function hydrateAllLeaderboardsFromStorage(target, timestamps = {}) {
     }
 }
 
-/** 全量预取：首屏 → 全部校区×分类 → 四校区其余组合（共 30 项） */
+/** 全量串行预取（共 30 项，已有缓存则跳过） */
 export function prefetchAllGuideLeaderboards() {
     if (_fullPrefetchPromise) return _fullPrefetchPromise;
 
-    _fullPrefetchPromise = (async () => {
-        const entryKey = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
-        const entryTask = listGuidePrefetchTasks().find((t) => t.key === entryKey);
-        const allCampusTasks = listGuideAllCampusTasks();
-        const singleCampusTasks = listGuidePrefetchTasks().filter(
-            (t) => t.campus !== 'all' && t.key !== entryKey,
-        );
-
-        if (entryTask) await _runPrefetchTasks([entryTask]);
-        await _runPrefetchTasks(allCampusTasks);
-        await _runPrefetchTasks(_sortSingleCampusTasks(singleCampusTasks));
-    })().finally(() => {
+    _fullPrefetchPromise = _runPrefetchTasks(listGuidePrefetchTasks()).finally(() => {
         _fullPrefetchPromise = null;
     });
 
     return _fullPrefetchPromise;
 }
 
-/** 仅补拉「全部校区」榜单（6 分类） */
+/** 兼容旧调用：并入全量串行队列 */
 export function prefetchGuideAllCampusLeaderboards() {
-    return _runPrefetchTasks(listGuideAllCampusTasks().filter((t) => !readLeaderboardRow(t.key)));
+    return prefetchAllGuideLeaderboards();
 }
 
 export function isGuidePrefetchComplete() {
