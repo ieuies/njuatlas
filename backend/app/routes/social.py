@@ -21,6 +21,7 @@ from app.services.social import (
     dm_tail_messages,
     dm_thread_message_count,
     mark_dm_thread_read,
+    mark_orphan_dms_read,
     count_friends,
     count_likes_received,
     count_user_posts,
@@ -390,10 +391,24 @@ def _dm_sync_after(base_q, peer_id, current_user_id, after_id):
     return rows
 
 
+@social_bp.route("/inbox/bootstrap", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def inbox_bootstrap():
+    """会话列表 + 未读角标，单次往返（减少消息页冷启动 RTT）。"""
+    user_id = g.current_user_id
+    mark_orphan_dms_read(user_id)
+    return jsonify({
+        "unread": fetch_unread_counts(user_id),
+        "conversations": {"items": conversation_summaries(user_id)},
+    })
+
+
 @social_bp.route("/messages/conversations", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")
 def list_conversations():
+    mark_orphan_dms_read(g.current_user_id)
     return jsonify({"items": conversation_summaries(g.current_user_id)})
 
 

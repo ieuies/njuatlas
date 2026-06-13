@@ -1,7 +1,7 @@
 /** 吃喝玩乐首屏 warm cache：app 预取与 guide 页共用，进页前即可同步绘制 */
 
 export const GUIDE_LB_CACHE_KEY = 'njuatlas_guide_lb_v1';
-export const GUIDE_CACHE_TTL_MS = 3 * 60 * 1000;
+export const GUIDE_CACHE_TTL_MS = 45 * 1000;
 export const GUIDE_ENTRY_CAMPUS = '鼓楼';
 export const GUIDE_ENTRY_CATEGORY = '美食';
 export const ALL_GUIDE_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州', 'all'];

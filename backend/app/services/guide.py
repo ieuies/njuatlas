@@ -68,7 +68,7 @@ GUIDE_EXCLUDED_NAME_KEYWORDS = (
 _GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
     r"\([^)]*(南京大学|南大)[^)]*店\)"
 )
-_LB_RESPONSE_CACHE_TTL_SEC = 45
+_LB_RESPONSE_CACHE_TTL_SEC = 10
 _lb_response_cache = {}
 
 
@@ -353,6 +353,16 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
         platform_rating = None
         if place:
             like_count = like_counts.get(place.id, 0)
+            # 历史重复 Place 行：同名同址合并赞数，避免分裂
+            name_key = _name_addr_key(row.get("name"), row.get("address"))
+            if name_key and name_key in places_by_name and places_by_name[name_key].id != place.id:
+                dup_ids = [
+                    p.id for p in places_by_name.values()
+                    if _name_addr_key(p.name, p.address) == name_key
+                ]
+                if place.id not in dup_ids:
+                    dup_ids.append(place.id)
+                like_count = sum(like_counts.get(pid, 0) for pid in dup_ids)
             review_count = review_counts.get(place.id, 0)
             if place.avg_rating is not None:
                 platform_rating = round(float(place.avg_rating), 1)
@@ -595,10 +605,34 @@ def _build_single_campus_leaderboard(campus, cat, random_order=False, user_id=No
     )
 
 
+def _find_existing_guide_place(item, campus, guide_category):
+    """按 poi_id 或 名称+校区+分类 查找已有 Place，避免重复入库导致赞数分裂。"""
+    poi_id = (item.get("poi_id") or "").strip()
+    if poi_id:
+        existing = Place.query.filter_by(poi_id=poi_id).first()
+        if existing:
+            return existing
+
+    name = (item.get("name") or "").strip()
+    if not name:
+        return None
+
+    effective_campus = campus if campus not in ("", "all") else (item.get("campus") or "鼓楼")
+    address = (item.get("address") or "").strip()
+    q = Place.query.filter(
+        Place.guide_category == guide_category,
+        Place.name == name,
+        Place.campus == effective_campus,
+    )
+    if address:
+        q = q.filter(Place.address == address)
+    return q.order_by(Place.id.asc()).first()
+
+
 def place_from_guide_item(item, campus, guide_category, user_id=None):
     """将指南 POI 转为 Place 行（点赞前 ensure）。"""
+    existing = _find_existing_guide_place(item, campus, guide_category)
     poi_id = (item.get("poi_id") or "").strip()
-    existing = Place.query.filter_by(poi_id=poi_id).first() if poi_id else None
     photos = []
     if item.get("image"):
         photos = [item["image"]]
