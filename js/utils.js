@@ -243,6 +243,9 @@ function handleAvatarImgError(img) {
             img.src = saved;
             return;
         }
+        if (/\/users\/\d+\/avatar/.test(img.src || '')) {
+            import('./auth.js').then(({ clearSelfCanonicalAvatarUrl }) => clearSelfCanonicalAvatarUrl()).catch(() => {});
+        }
     }
     img.style.display = 'none';
     img.removeAttribute('src');

@@ -3,7 +3,7 @@
 // ================================================================
 
 import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
-import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin } from '../auth.js';
+import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin, clearSelfCanonicalAvatarUrl } from '../auth.js';
 import { showToast, escapeHtml, formatDate, avatarStorageKey, resolveApiAssetUrl, getAvatarInitial, bumpAvatarVersion, renderAvatarInto } from '../utils.js';
 import { t } from '../i18n.js';
 import { BUBBLE_THEME_PRESETS, DEFAULT_BUBBLE_STYLE, normalizeBubbleStyle } from '../bubbleThemes.js';
@@ -375,7 +375,12 @@ function _applyAvatarToElement(el, candidates, user, fontSize = '2rem') {
         img.onerror = () => {
             idx += 1;
             if (idx < candidates.length) tryLoad();
-            else showInitial();
+            else {
+                if (idx > 0 && /\/users\/\d+\/avatar/.test(candidates[0] || '')) {
+                    clearSelfCanonicalAvatarUrl();
+                }
+                showInitial();
+            }
         };
         img.src = src;
         el.appendChild(img);
@@ -431,13 +436,14 @@ async function saveCoverFromCropped(canvas, originalDataUrl) {
         if (res?.cover_url) {
             updateUserFromLogin({ ...getUser(), cover_url: res.cover_url });
             setProfileCover(res.cover_url, fallback, { userId: user.id, cacheBust: true });
-            return;
+            return true;
         }
         throw new Error('服务器未返回封面地址');
     } catch (e) {
         console.warn('封面上传服务端失败，已保存本地:', e?.message);
         updateUserFromLogin({ ...getUser(), cover_url: '' });
         showToast(t('profile.coverLocalOnly'));
+        return false;
     }
 }
 
@@ -460,14 +466,17 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
             bumpAvatarVersion(user.id);
             setProfileAvatar(res.avatar_url, { userId: user.id, username: user.username || '', cacheBust: true });
             if (typeof window.updateNavBar === 'function') window.updateNavBar();
-            return;
+            showToast(t('profile.avatarSynced'));
+            return true;
         }
         throw new Error('服务器未返回头像地址');
     } catch (e) {
         console.warn('头像上传服务端失败，已保存本地:', e?.message);
+        updateUserFromLogin({ ...getUser(), avatar_url: '' });
         showToast(t('profile.avatarLocalOnly'));
         setProfileAvatar(base64, { userId: user.id, username: user.username || '' });
         if (typeof window.updateNavBar === 'function') window.updateNavBar();
+        return false;
     }
 }
 
@@ -562,8 +571,8 @@ function openCropModal(file, mode = 'cover') {
                 return;
             }
             try {
-                await (CROP_SAVERS[mode] || saveCoverFromCropped)(canvas, originalDataUrl);
-                showToast(preset.successMsg);
+                const synced = await (CROP_SAVERS[mode] || saveCoverFromCropped)(canvas, originalDataUrl);
+                if (synced !== false && mode === 'cover') showToast(preset.successMsg);
                 resolve();
             } catch (err) {
                 reject(err);
@@ -901,16 +910,14 @@ async function renderProfileHeader() {
         _profileBioCache = profile;
         _applyProfileBio(profile);
         document.getElementById('friendCount').innerText = profile.friend_count ?? 0;
-        if (profile.avatar_url || profile.cover_url) {
-            const nextUser = {
-                ...user,
-                avatar_url: profile.avatar_url || user.avatar_url || '',
-                cover_url: profile.cover_url || user.cover_url || '',
-            };
-            updateUserFromLogin(nextUser);
-            loadProfileAvatar(nextUser);
-            loadProfileCover(nextUser);
-        }
+        const nextUser = {
+            ...user,
+            avatar_url: profile.avatar_url ?? '',
+            cover_url: profile.cover_url ?? '',
+        };
+        updateUserFromLogin(nextUser);
+        loadProfileAvatar(nextUser);
+        loadProfileCover(nextUser);
     } catch (e) { /* 静默 */ }
 }
 

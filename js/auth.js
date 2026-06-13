@@ -43,8 +43,8 @@ function userFromAuthPayload(data, fallback = {}) {
         username: data.username ?? fallback.username ?? '',
         email_verified: Boolean(data.email_verified ?? fallback.email_verified),
         campus: data.campus ?? fallback.campus ?? '',
-        avatar_url: data.avatar_url ?? fallback.avatar_url ?? '',
-        cover_url: data.cover_url ?? fallback.cover_url ?? '',
+        avatar_url: data.avatar_url !== undefined ? (data.avatar_url || '') : (fallback.avatar_url || ''),
+        cover_url: data.cover_url !== undefined ? (data.cover_url || '') : (fallback.cover_url || ''),
         bubble_style: data.bubble_style ?? fallback.bubble_style ?? 'atlas-classic',
     };
 }
@@ -128,6 +128,15 @@ export async function resendVerificationEmail() {
 
 export function updateUserFromLogin(data) {
     persistUser(userFromAuthPayload(data, currentUser || {}));
+}
+
+/** 服务端 canonical 头像 404 时，清掉本地 session 里的空壳 avatar_url */
+export function clearSelfCanonicalAvatarUrl() {
+    const u = getUser();
+    if (!u?.id) return;
+    if (!/\/users\/\d+\/avatar/.test(u.avatar_url || '')) return;
+    updateUserFromLogin({ ...u, avatar_url: '' });
+    if (typeof window.updateNavBar === 'function') window.updateNavBar();
 }
 
 /** 从服务端拉取最新头像/封面，保证手机与电脑等设备显示一致 */
