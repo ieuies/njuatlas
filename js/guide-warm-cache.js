@@ -39,9 +39,35 @@ export function readLeaderboardFromStorage(key) {
     return readLeaderboardRow(key)?.data ?? null;
 }
 
+/** 排行榜缓存不含用户态 liked，避免换号后从 sessionStorage 串赞 */
+export function stripGuideUserState(data) {
+    if (!data) return data;
+    const next = JSON.parse(JSON.stringify(data));
+    const stripItems = (items) => {
+        for (const item of items || []) item.liked = false;
+    };
+    stripItems(next.items);
+    for (const section of next.sections || []) stripItems(section.items);
+    return next;
+}
+
+export function stripGuideUserStateFromStorageCache() {
+    try {
+        const map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
+        let changed = false;
+        for (const row of Object.values(map)) {
+            if (!row?.data) continue;
+            row.data = stripGuideUserState(row.data);
+            changed = true;
+        }
+        if (changed) sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+}
+
 export function persistLeaderboardToStorage(key, data) {
     const at = Date.now();
-    const row = { at, data };
+    const sanitized = stripGuideUserState(data);
+    const row = { at, data: sanitized };
     let map;
     try {
         map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
@@ -62,8 +88,8 @@ export function persistLeaderboardToStorage(key, data) {
     }
 
     if (typeof window !== 'undefined') {
-        window.__njuatlasGuideLbWarm = { key, data, at };
-        window.dispatchEvent(new CustomEvent('njuatlas:guide-lb-cache', { detail: { key, data, at } }));
+        window.__njuatlasGuideLbWarm = { key, data: sanitized, at };
+        window.dispatchEvent(new CustomEvent('njuatlas:guide-lb-cache', { detail: { key, data: sanitized, at } }));
     }
 }
 

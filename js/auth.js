@@ -1,4 +1,5 @@
 import { setAuthToken, getAuthToken, login, register, logout, requestEmailVerification, getMyProfile } from './api.js';
+import { resetGuideLikeSync, refreshUserGuideLikes } from './guide-like-sync.js';
 import { showToast, bumpAvatarVersion } from './utils.js';
 
 let currentUser = readStoredUser();
@@ -76,10 +77,21 @@ export function getUser() {
     return currentUser;
 }
 
+async function notifyAuthSessionChange() {
+    resetGuideLikeSync();
+    if (getAuthToken()) {
+        await refreshUserGuideLikes({ force: true }).catch(() => {});
+    }
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('njuatlas:auth-change'));
+    }
+}
+
 export async function doLogin(email, password) {
     const data = await login(email, password);
     setAuthToken(data.access_token);
     persistUser(userFromAuthPayload(data, { email }));
+    await notifyAuthSessionChange();
     return currentUser;
 }
 
@@ -96,6 +108,7 @@ export async function doRegister(username, email, password, code) {
 
     setAuthToken(data.access_token);
     persistUser(userFromAuthPayload(data, { email, username }));
+    await notifyAuthSessionChange();
     return currentUser;
 }
 
@@ -105,6 +118,7 @@ export async function doLogout() {
     } catch(e) {}
     setAuthToken(null);
     persistUser(null);
+    await notifyAuthSessionChange();
 }
 
 export async function resendVerificationEmail() {

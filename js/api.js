@@ -5,6 +5,21 @@ let authToken = localStorage.getItem('access_token') || null;
 const DEFAULT_TIMEOUT_MS = 12000;
 const LOGIN_TIMEOUT_MS = 10000;
 
+function _emitAuthChange() {
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('njuatlas:auth-change'));
+    }
+}
+
+function _clearAuthSession() {
+    authToken = null;
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('current_user');
+    if (typeof window.clearNavUnreadBadges === 'function') window.clearNavUnreadBadges();
+    if (typeof window.clearMessagesTabBadges === 'function') window.clearMessagesTabBadges();
+    _emitAuthChange();
+}
+
 export function setAuthToken(token) {
     authToken = token;
     if (token) localStorage.setItem('access_token', token);
@@ -42,11 +57,7 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
         }
         if (!res.ok) {
             if (res.status === 401 && needAuth) {
-                authToken = null;
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('current_user');
-                if (typeof window.clearNavUnreadBadges === 'function') window.clearNavUnreadBadges();
-                if (typeof window.clearMessagesTabBadges === 'function') window.clearMessagesTabBadges();
+                _clearAuthSession();
                 throw new Error('UNAUTHORIZED');
             }
             throw new Error(data.message || `请求失败: ${res.status}`);
@@ -87,9 +98,7 @@ async function requestOptionalAuth(endpoint, method = 'GET', body = null, timeou
         }
         if (!res.ok) {
             if (res.status === 401 && authToken) {
-                authToken = null;
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('current_user');
+                _clearAuthSession();
                 throw new Error('UNAUTHORIZED');
             }
             throw new Error(data.message || `请求失败: ${res.status}`);
@@ -722,9 +731,7 @@ export async function chatRecommendStream(message, sessionId = null, city = '南
 
     if (!res.ok) {
         if (res.status === 401) {
-            authToken = null;
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('current_user');
+            _clearAuthSession();
             throw new Error('UNAUTHORIZED');
         }
         let messageText = `请求失败: ${res.status}`;

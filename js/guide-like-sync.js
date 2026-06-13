@@ -12,7 +12,8 @@ import {
 
 const SYNC_DELAY_MS = 2000;
 const MAX_SYNC_RETRIES = 3;
-const SYNC_STORAGE_KEY = 'njuatlas_guide_like_sync_v1';
+const SYNC_STORAGE_PREFIX = 'njuatlas_guide_like_sync_v1';
+const SYNC_OWNER_KEY = 'njuatlas_guide_like_sync_owner_v1';
 const USER_LIKES_TTL_MS = 60 * 1000;
 
 const _syncedState = new Map();
@@ -30,9 +31,26 @@ function _nameAddrKey(name, address = '') {
     return n ? `${n}|${a}` : '';
 }
 
-function _loadSyncedStateFromStorage() {
+function _currentUserId() {
     try {
-        const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+        const user = JSON.parse(localStorage.getItem('current_user') || 'null');
+        return user?.id != null ? String(user.id) : null;
+    } catch {
+        return null;
+    }
+}
+
+function _syncStorageKey(userId = _currentUserId()) {
+    return userId ? `${SYNC_STORAGE_PREFIX}_${userId}` : `${SYNC_STORAGE_PREFIX}_guest`;
+}
+
+function _loadSyncedStateFromStorage() {
+    const uid = _currentUserId();
+    if (!uid) return;
+    const owner = localStorage.getItem(SYNC_OWNER_KEY);
+    if (owner && owner !== uid) return;
+    try {
+        const raw = localStorage.getItem(_syncStorageKey(uid));
         if (!raw) return;
         for (const [key, value] of JSON.parse(raw)) {
             if (value?.liked) _syncedState.set(key, value);
@@ -41,9 +59,33 @@ function _loadSyncedStateFromStorage() {
 }
 
 function _persistSyncedState() {
+    const uid = _currentUserId();
+    if (!uid) return;
     try {
         const likedOnly = [..._syncedState.entries()].filter(([, v]) => v?.liked);
-        localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(likedOnly));
+        localStorage.setItem(SYNC_OWNER_KEY, uid);
+        localStorage.setItem(_syncStorageKey(uid), JSON.stringify(likedOnly));
+        localStorage.removeItem(`${SYNC_STORAGE_PREFIX}_guest`);
+        localStorage.removeItem(SYNC_STORAGE_PREFIX);
+    } catch { /* ignore */ }
+}
+
+/** 登出 / 换号时清空本机点赞同步状态，避免串号 */
+export function resetGuideLikeSync() {
+    _syncedState.clear();
+    _pending.clear();
+    _userLikedPlaceIds.clear();
+    _userLikedPoiIds.clear();
+    _userLikedNameKeys.clear();
+    _userLikesFetchedAt = 0;
+    if (_flushTimer) {
+        clearTimeout(_flushTimer);
+        _flushTimer = null;
+    }
+    try {
+        localStorage.removeItem(SYNC_OWNER_KEY);
+        localStorage.removeItem(SYNC_STORAGE_PREFIX);
+        localStorage.removeItem(`${SYNC_STORAGE_PREFIX}_guest`);
     } catch { /* ignore */ }
 }
 
@@ -117,12 +159,12 @@ export async function refreshUserGuideLikes({ force = false } = {}) {
 
 /** 排行榜/搜索渲染后合并服务端数据（不覆盖 pending 项） */
 export function seedGuideLikeSyncFromItems(items) {
-    if (!items?.length) return;
+    if (!items?.length || !getAuthToken()) return;
     for (const item of items) {
         const key = getGuideLikeKey(item);
         if (_pending.has(key)) continue;
         const prev = _syncedState.get(key);
-        const serverLiked = Boolean(item.liked) || _itemMatchesUserLikes(item);
+        const serverLiked = _itemMatchesUserLikes(item);
         const serverLikes = Number(item.like_count || 0);
         const placeId = item.place_id || resolveGuidePlaceId(item) || prev?.place_id || null;
         if (!prev) {
@@ -140,6 +182,10 @@ export function seedGuideLikeSyncFromItems(items) {
 /** 用本地已同步/待同步状态覆盖列表项 */
 export function overlayGuideLikeStateOnItems(items) {
     if (!items?.length) return items;
+    if (!getAuthToken()) {
+        for (const item of items) item.liked = false;
+        return items;
+    }
     for (const item of items) {
         const key = getGuideLikeKey(item);
         const pending = _pending.get(key);
@@ -295,4 +341,7 @@ if (typeof document !== 'undefined') {
         if (document.visibilityState === 'hidden') flushGuideLikeQueue();
     });
     window.addEventListener('pagehide', () => flushGuideLikeQueue());
+    window.addEventListener('njuatlas:auth-change', () => {
+        if (!getAuthToken()) resetGuideLikeSync();
+    });
 }

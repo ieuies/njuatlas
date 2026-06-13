@@ -12,6 +12,7 @@ import {
     overlayGuideLikeStateOnItems,
     queueGuideLikeChange,
     refreshUserGuideLikes,
+    resetGuideLikeSync,
     seedGuideLikeSyncFromItems,
 } from '../guide-like-sync.js';
 import { getUser, isLoggedIn } from '../auth.js';
@@ -28,6 +29,8 @@ import {
     GUIDE_LAZY_IMAGE_EAGER_COUNT,
     persistLeaderboardToStorage,
     readLeaderboardRow,
+    stripGuideUserState,
+    stripGuideUserStateFromStorageCache,
 } from '../guide-warm-cache.js';
 
 const DEFAULT_CAMPUS = '鼓楼';
@@ -48,6 +51,17 @@ if (typeof window !== 'undefined') {
         if (!key || !data) return;
         _leaderboardCache[key] = data;
         _leaderboardCacheAt[key] = at || Date.now();
+    });
+    window.addEventListener('njuatlas:auth-change', async () => {
+        if (!isLoggedIn()) resetGuideLikeSync();
+        stripGuideUserStateFromStorageCache();
+        for (const key of Object.keys(_leaderboardCache)) {
+            _leaderboardCache[key] = stripGuideUserState(_leaderboardCache[key]);
+        }
+        if (isLoggedIn()) await refreshUserGuideLikes({ force: true }).catch(() => {});
+        if (document.getElementById('guidePage')?.classList.contains('active-page')) {
+            refreshGuideView();
+        }
     });
 }
 let _isRefreshing = false;
