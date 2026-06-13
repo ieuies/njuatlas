@@ -567,6 +567,9 @@ async function handleGuideLike(item, btnEl) {
         const likes = result.likes != null ? Number(result.likes) : targetCount;
         _applyGuideLikeState(item, btnEl, Boolean(result.liked), likes);
         _invalidateLeaderboardAfterLike(campus, category);
+        if (_guideViewMode === 'leaderboard') {
+            loadLeaderboard({ force: true }).catch(() => {});
+        }
     } catch (err) {
         _applyGuideLikeState(item, btnEl, prevLiked, prevCount);
         if (err.message !== 'UNAUTHORIZED') showToast(err.message || '点赞失败，请重试');
