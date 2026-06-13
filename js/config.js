@@ -21,13 +21,21 @@ export const IS_CROSS_ORIGIN_API = (() => {
         return true;
     }
 })();
-export const AMAP_KEY = runtimeConfig.AMAP_KEY || '97ac6e711cde17463af06c10b8b05f42';
-export const AMAP_SECURITY_CODE = runtimeConfig.AMAP_SECURITY_CODE || '';
+/** 高德 Web JS API Key：仅通过 index.html / amap.local.js 的 NJUATLAS_CONFIG 注入，勿写死 fallback */
+export const AMAP_KEY = (runtimeConfig.AMAP_KEY || '').trim();
+export const AMAP_SECURITY_CODE = (runtimeConfig.AMAP_SECURITY_CODE || '').trim();
+
+function applyAmapSecurityConfig() {
+    if (!AMAP_SECURITY_CODE) return;
+    window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_CODE };
+}
+
+applyAmapSecurityConfig();
 
 export function loadAmapScript() {
     if (window.AMap) return Promise.resolve(window.AMap);
-    if (!AMAP_KEY || AMAP_KEY === 'YOUR_AMAP_KEY') {
-        console.warn('AMAP_KEY is not configured. Map view will wait until a valid key is set.');
+    if (!AMAP_KEY) {
+        console.warn('AMAP_KEY 未配置：请在 index.html 的 NJUATLAS_CONFIG 或 js/amap.local.js 中设置。');
         return Promise.resolve(null);
     }
 
@@ -44,11 +52,7 @@ export function loadAmapScript() {
     }
 
     return new Promise((resolve, reject) => {
-        if (AMAP_SECURITY_CODE) {
-            window._AMapSecurityConfig = {
-                securityJsCode: AMAP_SECURITY_CODE
-            };
-        }
+        applyAmapSecurityConfig();
         const script = document.createElement('script');
         script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(AMAP_KEY)}`;
         script.async = true;

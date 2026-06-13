@@ -23,5 +23,8 @@ __pycache__/
 # 前端打包产物
 js/bundle.js
 
+# 本地高德 Key 覆盖（见 js/amap.local.example.js）
+js/amap.local.js
+
 # 备份文件
 *.bak

@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>NJUATLAS · 南大图谱</title>
-    <!-- 高德地图预连接 -->
+    <!-- 高德地图预连接（不在 URL 中携带 Key，由 js/config.js 按需加载 SDK） -->
     <link rel="dns-prefetch" href="https://webapi.amap.com">
     <link rel="preconnect" href="https://webapi.amap.com" crossorigin>
-    <link rel="prefetch" href="https://webapi.amap.com/maps?v=2.0&key=97ac6e711cde17463af06c10b8b05f42" as="script">
     <link rel="modulepreload" href="js/pages/partner.js">
     <link rel="modulepreload" href="js/pages/guide.js">
     <link rel="modulepreload" href="js/pages/profile.js">
@@ -24,8 +23,15 @@
 
     <script>
     window.NJUATLAS_CONFIG = window.NJUATLAS_CONFIG || {};
-    // 本地联调 Flask 时取消下一行注释：window.NJUATLAS_CONFIG.USE_LOCAL_API = true;
+    Object.assign(window.NJUATLAS_CONFIG, {
+        AMAP_KEY: '8cd622fd3666046f80f3217c9f2a29db',
+        // 高德控制台若启用了「安全密钥」，取消下一行注释并填入 securityJsCode：
+        // AMAP_SECURITY_CODE: '',
+    });
+    // 本地联调 Flask：window.NJUATLAS_CONFIG.USE_LOCAL_API = true;
+    // 本地覆盖 Key（不提交 git）：复制 js/amap.local.example.js → js/amap.local.js
     </script>
+    <script src="js/amap.local.js" defer onerror=""></script>
     <!-- 首页分层入场：首屏绘制前标记，避免未动画层闪一下 -->
     <script>
     (function () {
@@ -35,9 +41,6 @@
             if (l === 'en') document.documentElement.lang = 'en';
         } catch (e) {}
     })();
-    </script>
-    <script type="text/javascript">
-        window._AMapSecurityConfig = { securityJsCode: "367ebc1de103bfdca104452e48447318" };
     </script>
     <!-- Cropper.js 在 profile 更换封面时按需加载 -->
     <!-- Font Awesome -->
