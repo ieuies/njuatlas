@@ -237,9 +237,10 @@ def unread_dm_count(user_id):
     return unread_friend_dm_count(user_id)
 
 
-def unread_friend_dm_count(user_id):
+def unread_friend_dm_count(user_id, friend_ids=None):
     """仅统计来自好友的未读私信，与会话列表可见范围一致。"""
-    friend_ids = list_friend_ids(user_id)
+    if friend_ids is None:
+        friend_ids = list_friend_ids(user_id)
     if not friend_ids:
         return 0
     return (
@@ -251,9 +252,10 @@ def unread_friend_dm_count(user_id):
     )
 
 
-def mark_orphan_dms_read(user_id):
+def mark_orphan_dms_read(user_id, friend_ids=None):
     """非好友/已删好友的未读私信无法进入会话列表，静默标为已读避免红点残留。"""
-    friend_ids = list_friend_ids(user_id)
+    if friend_ids is None:
+        friend_ids = list_friend_ids(user_id)
     q = DirectMessage.query.filter_by(receiver_id=user_id, is_read=False)
     if friend_ids:
         q = q.filter(~DirectMessage.sender_id.in_(friend_ids))
@@ -265,21 +267,22 @@ def mark_orphan_dms_read(user_id):
 
 def unread_interact_count(user_id):
     """未读互动通知（排除好友请求；与互动 Tab 可见项一致）。"""
-    rows = (
+    return (
         Notification.query.filter(
             Notification.user_id == user_id,
             Notification.is_read.is_(False),
             Notification.type != "friend_request",
         )
-        .all()
+        .count()
     )
-    return sum(1 for n in rows if should_show_notification(n))
 
 
-def unread_counts(user_id):
+def unread_counts(user_id, *, mark_orphans=False):
     """一次往返返回各 Tab 未读数（好友请求与互动通知分开，避免重复计数）。"""
-    mark_orphan_dms_read(user_id)
-    messages = unread_friend_dm_count(user_id)
+    friend_ids = list_friend_ids(user_id)
+    if mark_orphans:
+        mark_orphan_dms_read(user_id, friend_ids)
+    messages = unread_friend_dm_count(user_id, friend_ids)
     interact = unread_interact_count(user_id)
     friend_requests = Friendship.query.filter_by(
         addressee_id=user_id, status="pending"

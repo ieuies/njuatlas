@@ -434,6 +434,9 @@ async function saveCoverFromCropped(canvas, originalDataUrl) {
     try {
         const res = await uploadCover(base64);
         if (res?.cover_url) {
+            const probeUrl = resolveApiAssetUrl(res.cover_url, { cacheBust: true });
+            const probe = await fetch(probeUrl, { method: 'GET', cache: 'no-store' });
+            if (!probe.ok) throw new Error('封面已上传但服务器读取失败');
             updateUserFromLogin({ ...getUser(), cover_url: res.cover_url });
             setProfileCover(res.cover_url, fallback, { userId: user.id, cacheBust: true });
             return true;
@@ -462,6 +465,9 @@ async function saveAvatarFromCropped(canvas, originalDataUrl) {
     try {
         const res = await uploadAvatar(base64);
         if (res?.avatar_url) {
+            const probeUrl = resolveApiAssetUrl(res.avatar_url, { cacheBust: true });
+            const probe = await fetch(probeUrl, { method: 'GET', cache: 'no-store' });
+            if (!probe.ok) throw new Error('头像已上传但服务器读取失败');
             updateUserFromLogin({ ...getUser(), avatar_url: res.avatar_url });
             bumpAvatarVersion(user.id);
             setProfileAvatar(res.avatar_url, { userId: user.id, username: user.username || '', cacheBust: true });

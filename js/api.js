@@ -646,21 +646,19 @@ async function _ensureGuidePlaceWithFallback({ campus, category, item }) {
 export async function syncGuideLikeToServer({ campus, category, item, liked }) {
     const targetLiked = Boolean(liked);
 
-    if (!IS_CROSS_ORIGIN_API) {
-        try {
-            const result = await request(
-                '/places/guide/like',
-                'POST',
-                { campus, category, item, liked: targetLiked },
-                true,
-                DEFAULT_TIMEOUT_MS,
-                true,
-            );
-            _rememberGuidePlaceId(item, result.place_id);
-            return _formatGuideLikeResult(result);
-        } catch (err) {
-            if (!_isRecoverableGuideApiError(err)) throw err;
-        }
+    try {
+        const result = await request(
+            '/places/guide/like',
+            'POST',
+            { campus, category, item, liked: targetLiked },
+            true,
+            DEFAULT_TIMEOUT_MS,
+            true,
+        );
+        _rememberGuidePlaceId(item, result.place_id);
+        return _formatGuideLikeResult(result);
+    } catch (err) {
+        if (!_isRecoverableGuideApiError(err)) throw err;
     }
 
     let placeId = _resolveGuidePlaceId(item);
@@ -864,6 +862,9 @@ export async function searchUsers(q) {
 export async function listFriends() {
     return request('/social/friends', 'GET');
 }
+export async function listFriendsBundle() {
+    return request('/social/friends/bundle', 'GET');
+}
 export async function listFriendRequests() {
     return request('/social/friends/requests', 'GET');
 }
@@ -907,6 +908,9 @@ export async function sendDmMessage(peerId, content) {
 }
 export function markDmThreadRead(peerId) {
     return request(`/social/messages/${peerId}/read`, 'POST', null, true, DEFAULT_TIMEOUT_MS, true);
+}
+export async function getInboxBootstrap() {
+    return request('/social/inbox/bootstrap', 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
 }
 export async function listNotifications({ page = 1, page_size = 30 } = {}) {
     return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');

@@ -1,7 +1,7 @@
 /** 吃喝玩乐首屏 warm cache：app 预取与 guide 页共用，进页前即可同步绘制 */
 
 export const GUIDE_LB_CACHE_KEY = 'njuatlas_guide_lb_v1';
-export const GUIDE_CACHE_TTL_MS = 3 * 60 * 1000;
+export const GUIDE_CACHE_TTL_MS = 45 * 1000;
 export const GUIDE_ENTRY_CAMPUS = '鼓楼';
 export const GUIDE_ENTRY_CATEGORY = '美食';
 export const ALL_GUIDE_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州', 'all'];
@@ -62,6 +62,38 @@ export function stripGuideUserStateFromStorageCache() {
         }
         if (changed) sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
     } catch { /* ignore */ }
+}
+
+/** 点赞入库后清掉相关榜单缓存，避免其他账号仍读到旧赞数 */
+export function invalidateLeaderboardCacheKeys(keys) {
+    const drop = new Set(keys.filter(Boolean));
+    if (!drop.size) return;
+    try {
+        const map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
+        let changed = false;
+        for (const key of drop) {
+            if (map[key]) {
+                delete map[key];
+                changed = true;
+            }
+        }
+        if (changed) sessionStorage.setItem(GUIDE_LB_CACHE_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+    if (typeof window !== 'undefined') {
+        const warm = window.__njuatlasGuideLbWarm;
+        if (warm?.key && drop.has(warm.key)) {
+            delete window.__njuatlasGuideLbWarm;
+        }
+        window.dispatchEvent(new CustomEvent('njuatlas:guide-lb-invalidate', { detail: { keys: [...drop] } }));
+    }
+}
+
+export function leaderboardKeysForGuideItem(campus, category) {
+    const cat = category || GUIDE_ENTRY_CATEGORY;
+    const keys = new Set([entryCacheKey('all', cat)]);
+    const c = (campus && campus !== 'all') ? campus : GUIDE_ENTRY_CAMPUS;
+    keys.add(entryCacheKey(c, cat));
+    return [...keys];
 }
 
 export function persistLeaderboardToStorage(key, data) {

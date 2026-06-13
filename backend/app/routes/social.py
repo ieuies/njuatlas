@@ -9,6 +9,7 @@ from sqlalchemy import or_
 from app import db
 from app.auth_utils import jwt_required, resolve_user_from_token, extract_bearer_token
 from app.errors import error_response
+from app.logging_utils import log_event
 from app.models import DirectMessage, Friendship, Notification, User
 from app.rate_limit import limiter
 from app.realtime import hub as realtime_hub, publish_dm_event, publish_unread_refresh
@@ -20,6 +21,7 @@ from app.services.social import (
     dm_tail_messages,
     dm_thread_message_count,
     mark_dm_thread_read,
+    mark_orphan_dms_read,
     count_friends,
     count_likes_received,
     count_user_posts,
@@ -115,6 +117,37 @@ def get_user_profile(user_id):
 
 
 # ── 好友 ──────────────────────────────────────────────────────
+
+@social_bp.route("/friends/bundle", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def list_friends_bundle():
+    """好友列表 + 收到/发出的请求，单次往返（减少跨域 RTT）。"""
+    user_id = g.current_user_id
+    ids = list_friend_ids(user_id)
+    users = User.query.filter(User.id.in_(ids)).all() if ids else []
+    incoming = Friendship.query.filter_by(addressee_id=user_id, status="pending").all()
+    outgoing = Friendship.query.filter_by(requester_id=user_id, status="pending").all()
+    return jsonify({
+        "friends": [public_user_brief(u) for u in users],
+        "requests": [
+            {
+                "id": row.id,
+                "requester": public_user_brief(row.requester),
+                "created_at": _dt(row.created_at),
+            }
+            for row in incoming
+        ],
+        "sent": [
+            {
+                "id": row.id,
+                "addressee": public_user_brief(row.addressee),
+                "created_at": _dt(row.created_at),
+            }
+            for row in outgoing
+        ],
+    })
+
 
 @social_bp.route("/friends", methods=["GET"])
 @jwt_required
@@ -358,10 +391,24 @@ def _dm_sync_after(base_q, peer_id, current_user_id, after_id):
     return rows
 
 
+@social_bp.route("/inbox/bootstrap", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def inbox_bootstrap():
+    """会话列表 + 未读角标，单次往返（减少消息页冷启动 RTT）。"""
+    user_id = g.current_user_id
+    mark_orphan_dms_read(user_id)
+    return jsonify({
+        "unread": fetch_unread_counts(user_id),
+        "conversations": {"items": conversation_summaries(user_id)},
+    })
+
+
 @social_bp.route("/messages/conversations", methods=["GET"])
 @jwt_required
 @limiter.limit("60 per minute")
 def list_conversations():
+    mark_orphan_dms_read(g.current_user_id)
     return jsonify({"items": conversation_summaries(g.current_user_id)})
 
 
@@ -594,6 +641,32 @@ def _image_response(blob, mime):
     )
 
 
+def _disk_user_image_name(image_dir, user_id):
+    """兼容历史上传写入 UPLOAD_ROOT 的文件（user_{id}.jpg 等）。"""
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        name = f"user_{user_id}.{ext}"
+        if os.path.isfile(os.path.join(image_dir, name)):
+            return name
+    return None
+
+
+def _clear_orphan_media_url(user, url_attr):
+    """avatar_data 已丢失时清掉 DB 里的 canonical URL，避免前端一直 404。"""
+    if not user:
+        return
+    url = (getattr(user, url_attr, None) or "").strip()
+    if not url:
+        return
+    marker = f"/users/{user.id}/"
+    if marker not in url:
+        return
+    setattr(user, url_attr, None)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def _serve_user_image_by_id(user, data_attr, url_attr, image_dir, not_found_code="image_not_found", mime_default="image/jpeg"):
     if not user:
         return error_response("图片不存在", 404, code=not_found_code)
@@ -604,12 +677,17 @@ def _serve_user_image_by_id(user, data_attr, url_attr, image_dir, not_found_code
         resp = _image_response(blob, mime)
         if resp:
             return resp
+    disk_name = _disk_user_image_name(image_dir, user.id)
+    if disk_name:
+        return send_from_directory(image_dir, disk_name)
     legacy_url = getattr(user, url_attr, None) or ""
     if legacy_url:
         safe_name = os.path.basename(legacy_url)
-        filepath = os.path.join(image_dir, safe_name)
-        if os.path.isfile(filepath):
-            return send_from_directory(image_dir, safe_name)
+        if safe_name and safe_name not in ("avatar", "cover"):
+            filepath = os.path.join(image_dir, safe_name)
+            if os.path.isfile(filepath):
+                return send_from_directory(image_dir, safe_name)
+    _clear_orphan_media_url(user, url_attr)
     return error_response("图片不存在", 404, code=not_found_code)
 
 
@@ -700,7 +778,10 @@ def upload_avatar():
     if len(binary) > 2 * 1024 * 1024:
         return error_response("图片不能超过 2MB", 400, code="too_large")
 
-    user = g.current_user
+    user = db.session.get(User, g.current_user_id)
+    if not user:
+        return error_response("用户不存在", 404, code="user_not_found")
+
     filename = f"user_{g.current_user_id}.{ext}"
     mime = _avatar_mime(ext)
 
@@ -708,16 +789,46 @@ def upload_avatar():
     user.avatar_mime = mime
     user.avatar_url = f"/api/social/users/{g.current_user_id}/avatar"
 
-    # Render 免费版以 Postgres avatar_data 为准；磁盘写入仅作可选兼容
+    # Render 以 Postgres avatar_data 为准；磁盘写入仅作可选兼容
     filepath = os.path.join(_avatar_dir(), filename)
     try:
         with open(filepath, "wb") as f:
             f.write(binary)
-    except OSError:
-        pass
+    except OSError as exc:
+        log_event(
+            current_app.logger,
+            "avatar_disk_write_skipped",
+            level="warning",
+            user_id=g.current_user_id,
+            error=str(exc),
+        )
 
-    db.session.commit()
-    return jsonify({"avatar_url": user.avatar_url})
+    try:
+        db.session.commit()
+        db.session.refresh(user)
+    except Exception as exc:
+        db.session.rollback()
+        log_event(
+            current_app.logger,
+            "avatar_upload_failed",
+            level="error",
+            user_id=g.current_user_id,
+            error=str(exc),
+        )
+        return error_response("头像保存失败", 500, code="avatar_persist_failed")
+
+    if not _as_image_bytes(user.avatar_data):
+        user.avatar_url = None
+        db.session.commit()
+        return error_response("头像保存失败", 500, code="avatar_persist_failed")
+
+    log_event(
+        current_app.logger,
+        "avatar_uploaded",
+        user_id=g.current_user_id,
+        bytes=len(binary),
+    )
+    return jsonify({"avatar_url": user_avatar_url(user)})
 
 
 @social_bp.route("/me/cover", methods=["POST"])
@@ -740,7 +851,10 @@ def upload_cover():
     if len(binary) > 5 * 1024 * 1024:
         return error_response("封面图片不能超过 5MB", 400, code="too_large")
 
-    user = g.current_user
+    user = db.session.get(User, g.current_user_id)
+    if not user:
+        return error_response("用户不存在", 404, code="user_not_found")
+
     filename = f"user_{g.current_user_id}.{ext}"
     mime = _image_mime(ext)
 
@@ -752,8 +866,38 @@ def upload_cover():
     try:
         with open(filepath, "wb") as f:
             f.write(binary)
-    except OSError:
-        pass
+    except OSError as exc:
+        log_event(
+            current_app.logger,
+            "cover_disk_write_skipped",
+            level="warning",
+            user_id=g.current_user_id,
+            error=str(exc),
+        )
 
-    db.session.commit()
-    return jsonify({"cover_url": user.cover_url})
+    try:
+        db.session.commit()
+        db.session.refresh(user)
+    except Exception as exc:
+        db.session.rollback()
+        log_event(
+            current_app.logger,
+            "cover_upload_failed",
+            level="error",
+            user_id=g.current_user_id,
+            error=str(exc),
+        )
+        return error_response("封面保存失败", 500, code="cover_persist_failed")
+
+    if not _as_image_bytes(user.cover_data):
+        user.cover_url = None
+        db.session.commit()
+        return error_response("封面保存失败", 500, code="cover_persist_failed")
+
+    log_event(
+        current_app.logger,
+        "cover_uploaded",
+        user_id=g.current_user_id,
+        bytes=len(binary),
+    )
+    return jsonify({"cover_url": user_cover_url(user)})

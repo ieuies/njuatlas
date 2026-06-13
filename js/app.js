@@ -913,9 +913,7 @@ async function init() {
     seedLoadedStyles();
     updateNavBar();
     if (isLoggedIn()) {
-        setTimeout(() => {
-            syncUserMediaFromServer().then(() => updateNavBar()).catch(() => {});
-        }, 3000);
+        syncUserMediaFromServer().then(() => updateNavBar()).catch(() => {});
     }
 
     // 初始化各模块

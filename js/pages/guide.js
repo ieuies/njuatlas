@@ -1,22 +1,23 @@
 import { API_BASE } from '../config.js';
 import {
-    getGuideLeaderboard,
-    getPlaceSuggestions,
-    getGuideLikeKey,
-    resolveGuidePlaceId,
-    searchGuidePlaces,
-} from '../api.js';
-import {
     flushGuideLikeQueue,
     hasPendingGuideLikes,
     overlayGuideLikeStateOnItems,
-    queueGuideLikeChange,
+    recordGuideLikeSyncResult,
     refreshUserGuideLikes,
     resetGuideLikeSync,
     seedGuideLikeSyncFromItems,
 } from '../guide-like-sync.js';
 import { getUser, isLoggedIn } from '../auth.js';
 import { showToast } from '../utils.js';
+import {
+    getGuideLeaderboard,
+    getPlaceSuggestions,
+    getGuideLikeKey,
+    resolveGuidePlaceId,
+    searchGuidePlaces,
+    syncGuideLikeToServer,
+} from '../api.js';
 import {
     hydrateAllLeaderboardsFromStorage,
     prefetchAllGuideLeaderboards,
@@ -27,6 +28,8 @@ import {
     GUIDE_CACHE_TTL_MS,
     GUIDE_LB_CACHE_KEY,
     GUIDE_LAZY_IMAGE_EAGER_COUNT,
+    invalidateLeaderboardCacheKeys,
+    leaderboardKeysForGuideItem,
     persistLeaderboardToStorage,
     readLeaderboardRow,
     stripGuideUserState,
@@ -51,6 +54,12 @@ if (typeof window !== 'undefined') {
         if (!key || !data) return;
         _leaderboardCache[key] = data;
         _leaderboardCacheAt[key] = at || Date.now();
+    });
+    window.addEventListener('njuatlas:guide-lb-invalidate', (e) => {
+        for (const key of e.detail?.keys || []) {
+            delete _leaderboardCache[key];
+            delete _leaderboardCacheAt[key];
+        }
     });
     window.addEventListener('njuatlas:auth-change', async () => {
         if (!isLoggedIn()) resetGuideLikeSync();
@@ -516,11 +525,22 @@ function _applyGuideLikeUi(item, btnEl) {
     }
 }
 
-function handleGuideLike(item, btnEl) {
+function _invalidateLeaderboardAfterLike(campus, category) {
+    const keys = leaderboardKeysForGuideItem(campus, category);
+    invalidateLeaderboardCacheKeys(keys);
+    for (const key of keys) {
+        delete _leaderboardCache[key];
+        delete _leaderboardCacheAt[key];
+    }
+}
+
+async function handleGuideLike(item, btnEl) {
     if (!isLoggedIn()) {
         document.getElementById('authModal').style.display = 'flex';
         return;
     }
+    if (btnEl?.disabled) return;
+
     const cachedPlaceId = resolveGuidePlaceId(item);
     if (cachedPlaceId) item.place_id = cachedPlaceId;
 
@@ -532,27 +552,30 @@ function handleGuideLike(item, btnEl) {
     const targetLiked = !prevLiked;
     const targetCount = targetLiked ? prevCount + 1 : Math.max(0, prevCount - 1);
 
+    if (btnEl) btnEl.disabled = true;
     _applyGuideLikeState(item, btnEl, targetLiked, targetCount);
 
-    queueGuideLikeChange({
-        key,
-        campus,
-        category,
-        item,
-        targetLiked,
-        onSynced: (_result, synced) => {
-            if (synced?.place_id) item.place_id = synced.place_id;
-            _applyGuideLikeState(item, btnEl, synced.liked, synced.likes);
-        },
-        onReverted: (synced) => {
-            if (!synced) return;
-            if (synced.place_id) item.place_id = synced.place_id;
-            _applyGuideLikeState(item, btnEl, synced.liked, synced.likes);
-        },
-        onError: (err) => {
-            if (err.message !== 'UNAUTHORIZED') showToast(err.message || '点赞同步失败');
-        },
-    });
+    try {
+        const result = await syncGuideLikeToServer({
+            campus,
+            category,
+            item,
+            liked: targetLiked,
+        });
+        recordGuideLikeSyncResult(key, item, result);
+        if (result.place_id) item.place_id = result.place_id;
+        const likes = result.likes != null ? Number(result.likes) : targetCount;
+        _applyGuideLikeState(item, btnEl, Boolean(result.liked), likes);
+        _invalidateLeaderboardAfterLike(campus, category);
+        if (_guideViewMode === 'leaderboard') {
+            loadLeaderboard({ force: true }).catch(() => {});
+        }
+    } catch (err) {
+        _applyGuideLikeState(item, btnEl, prevLiked, prevCount);
+        if (err.message !== 'UNAUTHORIZED') showToast(err.message || '点赞失败，请重试');
+    } finally {
+        if (btnEl) btnEl.disabled = false;
+    }
 }
 
 function _refreshSearchItemLikeState(item) {

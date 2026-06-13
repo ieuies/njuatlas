@@ -5,9 +5,11 @@
 import { getUser } from '../auth.js';
 import {
     listDmConversations,
+    getInboxBootstrap,
     getDmMessages,
     sendDmMessage,
     listFriends,
+    listFriendsBundle,
     listFriendRequests,
     listSentFriendRequests,
     sendFriendRequest,
@@ -269,7 +271,16 @@ function paintConvoList(items) {
 }
 paintConvoList._lastSig = '';
 
-async function fetchConversations({ silent = false } = {}) {
+async function fetchConversations({ silent = false, useBootstrap = false } = {}) {
+    if (useBootstrap) {
+        const data = await getInboxBootstrap();
+        const items = data.conversations?.items || [];
+        tabCache.chats = { items, at: Date.now() };
+        _persistSessionConversations(items);
+        invalidateUnreadCache();
+        refreshAllBadges(data.unread);
+        return items;
+    }
     const data = await listDmConversations(silent);
     const items = data.items || [];
     tabCache.chats = { items, at: Date.now() };
@@ -328,10 +339,11 @@ async function renderChats({ force = false } = {}) {
         return;
     }
 
+    const useBootstrap = !cached || force;
     try {
-        const items = await fetchConversations({ silent: true });
+        const items = await fetchConversations({ silent: true, useBootstrap });
         paintConvoList(items);
-        updateTabBadges();
+        if (!useBootstrap) updateTabBadges();
         startRealtimeSync();
     } catch {
         const list = document.getElementById('msgConvoList');
@@ -569,6 +581,10 @@ let _streamStartTimer = null;
 
 async function ensureBackendRealtimeMode() {
     if (_backendRealtimeMode !== null) return _backendRealtimeMode;
+    if (API_BASE.includes('api.njuatlas.cn') || API_BASE.includes('onrender.com')) {
+        _backendRealtimeMode = 'redis';
+        return _backendRealtimeMode;
+    }
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     try {
@@ -654,7 +670,7 @@ function handleStreamPayload(raw) {
                 markDmThreadRead(peerId)
                     .then(() => {
                         invalidateUnreadCache();
-                        refreshAllBadges(null, { force: true });
+                        refreshAllBadges(null);
                     })
                     .catch(() => {});
             }
@@ -664,12 +680,12 @@ function handleStreamPayload(raw) {
                 fetchConversations().then(paintConvoList).catch(() => {});
             }
         }
-        refreshAllBadges(null, { force: true });
+        refreshAllBadges(null);
         return;
     }
     if (payload.type === 'unread') {
         invalidateUnreadCache();
-        refreshAllBadges(null, { force: true });
+        refreshAllBadges(null);
         scheduleSocialTabRefresh();
     }
 }
@@ -754,7 +770,7 @@ function startRealtimeSync() {
         const mode = await ensureBackendRealtimeMode();
         if (mode === 'redis') startMessageStream();
         if (!_sseConnected) schedulePollingFallback();
-    }, 2000);
+    }, 0);
 }
 
 /** 将 SSE/轮询到的自己发出的消息与乐观气泡合并，避免重复显示 */
@@ -867,7 +883,7 @@ async function pollConvoOnce() {
     try {
         const items = await fetchConversations({ silent: true });
         paintConvoList(items);
-        refreshAllBadges(null, { force: true });
+        refreshAllBadges(null);
     } catch { /* 静默 */ } finally {
         _convoSyncInFlight = false;
     }
@@ -1245,18 +1261,29 @@ function paintFriendsData({ friends = [], requests = [], sent = [] } = {}) {
 }
 
 async function fetchFriendsData() {
-    const [friendsData, reqData, sentReqData] = await Promise.all([
-        listFriends(),
-        listFriendRequests(),
-        listSentFriendRequests(),
-    ]);
-    const payload = {
-        friends: friendsData.items || [],
-        requests: reqData.items || [],
-        sent: sentReqData.items || [],
-    };
-    tabCache.friends = { ...payload, at: Date.now() };
-    return payload;
+    try {
+        const bundle = await listFriendsBundle();
+        const payload = {
+            friends: bundle.friends || [],
+            requests: bundle.requests || [],
+            sent: bundle.sent || [],
+        };
+        tabCache.friends = { ...payload, at: Date.now() };
+        return payload;
+    } catch {
+        const [friendsData, reqData, sentReqData] = await Promise.all([
+            listFriends(),
+            listFriendRequests(),
+            listSentFriendRequests(),
+        ]);
+        const payload = {
+            friends: friendsData.items || [],
+            requests: reqData.items || [],
+            sent: sentReqData.items || [],
+        };
+        tabCache.friends = { ...payload, at: Date.now() };
+        return payload;
+    }
 }
 
 async function renderFriends({ force = false } = {}) {
@@ -1292,20 +1319,23 @@ async function renderFriends({ force = false } = {}) {
     }
 }
 
-async function reloadFriendsPreserveSearch() {
+async function reloadFriendsPreserveSearch({ refetchFriends = true } = {}) {
     const input = document.getElementById('msgAddInput');
     const keyword = input?.value?.trim() || '';
     const selStart = input?.selectionStart;
     const selEnd = input?.selectionEnd;
 
-    invalidateCache('friends');
-    try {
-        const data = await fetchFriendsData();
-        paintFriendsData(data);
-        updateTabBadges();
-    } catch {
-        showToast(t('messages.loadFail'));
+    if (refetchFriends) {
+        invalidateCache('friends');
+        try {
+            const data = await fetchFriendsData();
+            paintFriendsData(data);
+        } catch {
+            showToast(t('messages.loadFail'));
+        }
     }
+
+    updateTabBadges();
 
     if (input && keyword) {
         input.value = keyword;
@@ -1375,13 +1405,16 @@ async function renderInteract({ force = false } = {}) {
 
     if (fresh) {
         fetchNotifications()
-            .then(async (items) => {
+            .then((items) => {
                 view.innerHTML = items.length
                     ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
                     : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
-                await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
-                invalidateUnreadCache();
-                await refreshAllBadges(null, { force: true });
+                markNotificationsRead(null, { excludeTypes: ['friend_request'] })
+                    .then(() => {
+                        invalidateUnreadCache();
+                        updateTabBadges();
+                    })
+                    .catch(() => {});
             })
             .catch(() => {});
         return;
@@ -1392,9 +1425,12 @@ async function renderInteract({ force = false } = {}) {
         view.innerHTML = items.length
             ? `<div class="msg-notif-list">${notifListHtml(items)}</div>`
             : `<div class="msg-empty"><i class="fas fa-bell"></i><p>${t('messages.noInteract')}</p></div>`;
-        await markNotificationsRead(null, { excludeTypes: ['friend_request'] });
-        invalidateUnreadCache();
-        await refreshAllBadges(null, { force: true });
+        markNotificationsRead(null, { excludeTypes: ['friend_request'] })
+            .then(() => {
+                invalidateUnreadCache();
+                updateTabBadges();
+            })
+            .catch(() => {});
     } catch {
         view.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
     }
@@ -1527,10 +1563,10 @@ function bindEvents() {
                 await acceptFriendRequest(Number(accept.dataset.accept));
                 showToast(t('messages.friendAdded'));
                 invalidateCache('friends', 'chats', 'interact');
-                if (currentTab === 'interact') await renderInteract({ force: true });
-                else await reloadFriendsPreserveSearch();
+                if (currentTab === 'interact') renderInteract({ force: true });
+                else reloadFriendsPreserveSearch({ refetchFriends: currentTab === 'friends' });
                 invalidateUnreadCache();
-                await refreshAllBadges(null, { force: true });
+                updateTabBadges();
             } catch (err) {
                 showToast(err.message);
                 accept.disabled = false;
@@ -1544,10 +1580,10 @@ function bindEvents() {
                 await rejectFriendRequest(Number(reject.dataset.reject));
                 showToast(t('messages.requestRejected'));
                 invalidateCache('friends', 'interact');
-                if (currentTab === 'interact') await renderInteract({ force: true });
-                else await reloadFriendsPreserveSearch();
+                if (currentTab === 'interact') renderInteract({ force: true });
+                else reloadFriendsPreserveSearch({ refetchFriends: currentTab === 'friends' });
                 invalidateUnreadCache();
-                await refreshAllBadges(null, { force: true });
+                updateTabBadges();
             } catch (err) {
                 showToast(err.message);
                 reject.disabled = false;
@@ -1560,7 +1596,10 @@ function bindEvents() {
                 add.disabled = true;
                 await sendFriendRequest(Number(add.dataset.add));
                 showToast(t('messages.requestSent'));
-                await reloadFriendsPreserveSearch();
+                invalidateCache('friends');
+                const keyword = document.getElementById('msgAddInput')?.value?.trim();
+                if (keyword) await searchAndRender(keyword);
+                updateTabBadges();
             } catch (err) {
                 showToast(err.message);
                 add.disabled = false;
@@ -1753,7 +1792,7 @@ export async function prefetchMessagesEntryData() {
     if (!getAuthToken()) return;
     if (_readSessionConversations()) return;
     try {
-        await fetchConversations({ silent: true });
+        await fetchConversations({ silent: true, useBootstrap: true });
     } catch { /* ignore */ }
 }
 

@@ -10,7 +10,7 @@ import {
     syncGuideLikeToServer,
 } from './api.js';
 
-const SYNC_DELAY_MS = 2000;
+const SYNC_DELAY_MS = 300;
 const MAX_SYNC_RETRIES = 3;
 const SYNC_STORAGE_PREFIX = 'njuatlas_guide_like_sync_v1';
 const SYNC_OWNER_KEY = 'njuatlas_guide_like_sync_owner_v1';
@@ -173,7 +173,7 @@ export function seedGuideLikeSyncFromItems(items) {
         }
         _rememberSynced(key, {
             liked: serverLiked || prev.liked,
-            likes: Math.max(serverLikes, prev.likes),
+            likes: serverLikes,
             place_id: placeId || prev.place_id,
         });
     }
@@ -222,6 +222,27 @@ export function overlayGuideLikeStateOnItems(items) {
         }
     }
     return items;
+}
+
+/** 点赞成功后的本地状态（供 guide.js 直接同步路径使用） */
+export function recordGuideLikeSyncResult(key, item, result) {
+    const synced = {
+        liked: Boolean(result.liked),
+        likes: result.likes != null ? Number(result.likes) : 0,
+        place_id: result.place_id ?? item.place_id ?? null,
+    };
+    _rememberSynced(key, synced);
+    if (synced.liked) {
+        if (synced.place_id) _userLikedPlaceIds.add(Number(synced.place_id));
+        if (item.poi_id) _userLikedPoiIds.add(String(item.poi_id).trim());
+        const nameKey = _nameAddrKey(item.name, item.address);
+        if (nameKey) _userLikedNameKeys.add(nameKey);
+    } else {
+        if (synced.place_id) _userLikedPlaceIds.delete(Number(synced.place_id));
+        if (item.poi_id) _userLikedPoiIds.delete(String(item.poi_id).trim());
+        const nameKey = _nameAddrKey(item.name, item.address);
+        if (nameKey) _userLikedNameKeys.delete(nameKey);
+    }
 }
 
 export function queueGuideLikeChange({

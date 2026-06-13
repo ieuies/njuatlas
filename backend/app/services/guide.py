@@ -68,7 +68,7 @@ GUIDE_EXCLUDED_NAME_KEYWORDS = (
 _GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
     r"\([^)]*(南京大学|南大)[^)]*店\)"
 )
-_LB_RESPONSE_CACHE_TTL_SEC = 45
+_LB_RESPONSE_CACHE_TTL_SEC = 10
 _lb_response_cache = {}
 
 
@@ -264,6 +264,7 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
             places_by_id[place.id] = place
 
     places_by_name = {}
+    name_key_place_ids = {}
     if category and items:
         item_names = list({
             (item.get("name") or "").strip()
@@ -283,6 +284,7 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
                     places_by_poi.setdefault(place.poi_id, place)
                 name_key = _name_addr_key(place.name, place.address)
                 if name_key:
+                    name_key_place_ids.setdefault(name_key, []).append(place.id)
                     places_by_name.setdefault(name_key, place)
 
     if user_id:
@@ -340,6 +342,13 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
                 .all()
             }
 
+    name_key_like_sum = {}
+    for name_key, pids in name_key_place_ids.items():
+        name_key_like_sum[name_key] = sum(like_counts.get(pid, 0) for pid in pids)
+        if len(pids) > 1:
+            best_id = max(pids, key=lambda pid: like_counts.get(pid, 0))
+            places_by_name[name_key] = places_by_id.get(best_id) or places_by_name.get(name_key)
+
     enriched = []
     for item in items:
         row = dict(item)
@@ -352,7 +361,8 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
         review_count = 0
         platform_rating = None
         if place:
-            like_count = like_counts.get(place.id, 0)
+            name_key = _name_addr_key(row.get("name"), row.get("address"))
+            like_count = name_key_like_sum.get(name_key, like_counts.get(place.id, 0))
             review_count = review_counts.get(place.id, 0)
             if place.avg_rating is not None:
                 platform_rating = round(float(place.avg_rating), 1)
@@ -362,7 +372,13 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
 
         row["like_count"] = like_count
         row["review_count"] = review_count
-        row["liked"] = bool(place and place.id in user_liked)
+        row["liked"] = bool(
+            place
+            and (
+                place.id in user_liked
+                or any(pid in user_liked for pid in name_key_place_ids.get(name_key, [place.id]))
+            )
+        )
         if platform_rating is not None:
             row["platform_rating"] = platform_rating
             display = effective_rating(row)
@@ -398,15 +414,8 @@ def _place_row_to_item(place, cat, campus, like_count=0, review_count=0):
 
 
 def fetch_db_leaderboard_candidates(campus, cat):
-    """站内已收录、有点赞的店铺可冲入排行榜（优先 Redis ZSET，回退 SQL）。"""
-    from app.services.guide_rank_cache import fetch_ranked_places, warm_rank_cache
-
-    cached_rows = fetch_ranked_places(campus, cat)
-    if cached_rows is not None:
-        return [
-            _place_row_to_item(place, cat, campus, like_count=likes, review_count=review_count)
-            for place, likes, review_count in cached_rows
-        ]
+    """站内已收录、有点赞的店铺可冲入排行榜（likes 表为真源，Redis 仅作回填）。"""
+    from app.services.guide_rank_cache import warm_rank_cache
 
     q = (
         db.session.query(Place, func.count(Like.id).label("likes"))
@@ -602,10 +611,34 @@ def _build_single_campus_leaderboard(campus, cat, random_order=False, user_id=No
     )
 
 
+def _find_existing_guide_place(item, campus, guide_category):
+    """按 poi_id 或 名称+校区+分类 查找已有 Place，避免重复入库导致赞数分裂。"""
+    poi_id = (item.get("poi_id") or "").strip()
+    if poi_id:
+        existing = Place.query.filter_by(poi_id=poi_id).first()
+        if existing:
+            return existing
+
+    name = (item.get("name") or "").strip()
+    if not name:
+        return None
+
+    effective_campus = campus if campus not in ("", "all") else (item.get("campus") or "鼓楼")
+    address = (item.get("address") or "").strip()
+    q = Place.query.filter(
+        Place.guide_category == guide_category,
+        Place.name == name,
+        Place.campus == effective_campus,
+    )
+    if address:
+        q = q.filter(Place.address == address)
+    return q.order_by(Place.id.asc()).first()
+
+
 def place_from_guide_item(item, campus, guide_category, user_id=None):
     """将指南 POI 转为 Place 行（点赞前 ensure）。"""
+    existing = _find_existing_guide_place(item, campus, guide_category)
     poi_id = (item.get("poi_id") or "").strip()
-    existing = Place.query.filter_by(poi_id=poi_id).first() if poi_id else None
     photos = []
     if item.get("image"):
         photos = [item["image"]]
@@ -616,7 +649,7 @@ def place_from_guide_item(item, campus, guide_category, user_id=None):
         "location": item.get("location") or "",
         "poi_id": poi_id or None,
         "category": cfg.get("types", ""),
-        "campus": campus if campus != "all" else (item.get("campus") or ""),
+        "campus": campus if campus not in ("", "all") else (item.get("campus") or "鼓楼"),
         "guide_category": guide_category,
         "photos": json.dumps(photos, ensure_ascii=False) if photos else None,
     }
