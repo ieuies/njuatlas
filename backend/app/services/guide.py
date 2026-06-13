@@ -170,10 +170,17 @@ def effective_rating(item):
     return platform_rating or amap_rating
 
 
+def _normalize_like_count(item):
+    try:
+        return max(0, int(item.get("like_count") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def leaderboard_sort_key(item):
     return (
-        -(item.get("like_count") or 0),
-        -(item.get("review_count") or 0),
+        -_normalize_like_count(item),
+        -(int(item.get("review_count") or 0)),
         -effective_rating(item),
         item.get("distance_m") if item.get("distance_m") is not None else 999999,
     )
@@ -238,7 +245,7 @@ def _name_addr_key(name, address=""):
     return f"{name}|{address}"
 
 
-def enrich_guide_items(items, user_id=None):
+def enrich_guide_items(items, user_id=None, campus=None, category=None):
     if not items:
         return items
 
@@ -255,6 +262,18 @@ def enrich_guide_items(items, user_id=None):
             places_by_id[place.id] = place
 
     places_by_name = {}
+    if category:
+        place_q = Place.query.filter(Place.guide_category == category)
+        if campus and campus not in ("", "all"):
+            place_q = place_q.filter(Place.campus == campus)
+        for place in place_q.all():
+            places_by_id[place.id] = place
+            if place.poi_id:
+                places_by_poi.setdefault(place.poi_id, place)
+            name_key = _name_addr_key(place.name, place.address)
+            if name_key:
+                places_by_name.setdefault(name_key, place)
+
     if user_id:
         for place in (
             db.session.query(Place)
@@ -264,12 +283,16 @@ def enrich_guide_items(items, user_id=None):
         ):
             places_by_id[place.id] = place
             if place.poi_id:
-                places_by_poi[place.poi_id] = place
+                places_by_poi.setdefault(place.poi_id, place)
             name_key = _name_addr_key(place.name, place.address)
             if name_key:
-                places_by_name[name_key] = place
+                places_by_name.setdefault(name_key, place)
 
-    place_ids = list({place.id for place in places_by_poi.values()} | set(places_by_id.keys()))
+    place_ids = list(
+        {place.id for place in places_by_poi.values()}
+        | set(places_by_id.keys())
+        | {place.id for place in places_by_name.values()}
+    )
     like_counts = {}
     review_counts = {}
     review_avg = {}
@@ -393,7 +416,8 @@ def fetch_db_leaderboard_candidates(campus, cat):
 
 def merge_leaderboard_candidates(seed_items, db_items):
     merged = {}
-    for item in seed_items + db_items:
+    # 数据库条目优先，避免高德种子覆盖已有赞数
+    for item in db_items + seed_items:
         key = _dedupe_key(item)
         if key not in merged:
             merged[key] = dict(item)
@@ -407,26 +431,38 @@ def merge_leaderboard_candidates(seed_items, db_items):
     return list(merged.values())
 
 
-def rank_leaderboard(items, limit=None, random_order=False, user_id=None):
+def _shuffle_same_like_tier(items):
+    if not items:
+        return items
+    grouped = []
+    i = 0
+    while i < len(items):
+        score = leaderboard_sort_key(items[i])[:1]
+        j = i + 1
+        while j < len(items) and leaderboard_sort_key(items[j])[:1] == score:
+            j += 1
+        bucket = items[i:j]
+        random.shuffle(bucket)
+        grouped.extend(bucket)
+        i = j
+    return grouped
+
+
+def rank_leaderboard(items, limit=None, random_order=False, user_id=None, campus=None, category=None):
     limit = limit or GUIDE_LEADERBOARD_LIMIT
     items = dedupe_guide_items(filter_guide_items(items))
-    items = enrich_guide_items(items, user_id=user_id)
-    items.sort(key=leaderboard_sort_key)
+    items = enrich_guide_items(items, user_id=user_id, campus=campus, category=category)
+
+    liked = [item for item in items if _normalize_like_count(item) > 0]
+    unliked = [item for item in items if _normalize_like_count(item) == 0]
+    liked.sort(key=leaderboard_sort_key)
+    unliked.sort(key=leaderboard_sort_key)
+
     if random_order:
-        # 仅在相同赞数内打乱，避免 0 赞随机排到 TOP 1
-        grouped = []
-        i = 0
-        while i < len(items):
-            score = leaderboard_sort_key(items[i])[:1]
-            j = i + 1
-            while j < len(items) and leaderboard_sort_key(items[j])[:1] == score:
-                j += 1
-            bucket = items[i:j]
-            random.shuffle(bucket)
-            grouped.extend(bucket)
-            i = j
-        items = grouped
-    items = items[:limit]
+        liked = _shuffle_same_like_tier(liked)
+        unliked = _shuffle_same_like_tier(unliked)
+
+    items = (liked + unliked)[:limit]
     for idx, item in enumerate(items, start=1):
         item["rank"] = idx
     return items
@@ -471,7 +507,12 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
             continue
         items.append(item)
 
-    items = enrich_guide_items(dedupe_guide_items(items), user_id=user_id)
+    items = enrich_guide_items(
+        dedupe_guide_items(items),
+        user_id=user_id,
+        campus=effective_campus,
+        category=category,
+    )
     try:
         total = int(result.get("count") or 0)
     except (TypeError, ValueError):
@@ -511,11 +552,15 @@ def build_leaderboard(campus, cat, random_order=False, user_id=None):
 
     db_items = fetch_db_leaderboard_candidates(campus, cat)
     if len(db_items) >= GUIDE_LEADERBOARD_LIMIT:
-        return rank_leaderboard(db_items, random_order=random_order, user_id=user_id)
+        return rank_leaderboard(
+            db_items, random_order=random_order, user_id=user_id, campus=campus, category=cat,
+        )
 
     seed = fetch_guide_category(campus, cat)
     merged = merge_leaderboard_candidates(seed, db_items)
-    return rank_leaderboard(merged, random_order=random_order, user_id=user_id)
+    return rank_leaderboard(
+        merged, random_order=random_order, user_id=user_id, campus=campus, category=cat,
+    )
 
 
 def place_from_guide_item(item, campus, guide_category, user_id=None):

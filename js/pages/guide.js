@@ -159,6 +159,30 @@ function _bindGuideGridDelegation(container) {
     });
 }
 
+function _sortGuideItemsByLikes(items) {
+    if (!items?.length) return items;
+    const liked = [];
+    const unliked = [];
+    for (const item of items) {
+        if ((Number(item.like_count) || 0) > 0) liked.push(item);
+        else unliked.push(item);
+    }
+    const cmp = (a, b) => {
+        const likeDiff = (Number(b.like_count) || 0) - (Number(a.like_count) || 0);
+        if (likeDiff !== 0) return likeDiff;
+        const reviewDiff = (Number(b.review_count) || 0) - (Number(a.review_count) || 0);
+        if (reviewDiff !== 0) return reviewDiff;
+        return (Number(a.rank) || 999) - (Number(b.rank) || 999);
+    };
+    liked.sort(cmp);
+    unliked.sort(cmp);
+    const sorted = liked.concat(unliked);
+    sorted.forEach((item, idx) => {
+        item.rank = idx + 1;
+    });
+    return sorted;
+}
+
 function renderLeaderboard(payload) {
     const container = document.getElementById('guideGrid');
     if (!container) return;
@@ -180,6 +204,20 @@ function renderLeaderboard(payload) {
 
     seedGuideLikeSyncFromItems(flat);
     overlayGuideLikeStateOnItems(flat);
+
+    if (payload.sections) {
+        for (const section of payload.sections) {
+            if (section.items?.length) {
+                section.items = _sortGuideItemsByLikes(section.items);
+            }
+        }
+        flat = [];
+        for (const section of payload.sections) {
+            flat = flat.concat(section.items || []);
+        }
+    } else {
+        flat = _sortGuideItemsByLikes(flat);
+    }
 
     let html = '';
     if (payload.sections) {
