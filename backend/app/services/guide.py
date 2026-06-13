@@ -264,6 +264,7 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
             places_by_id[place.id] = place
 
     places_by_name = {}
+    name_key_place_ids = {}
     if category and items:
         item_names = list({
             (item.get("name") or "").strip()
@@ -283,6 +284,7 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
                     places_by_poi.setdefault(place.poi_id, place)
                 name_key = _name_addr_key(place.name, place.address)
                 if name_key:
+                    name_key_place_ids.setdefault(name_key, []).append(place.id)
                     places_by_name.setdefault(name_key, place)
 
     if user_id:
@@ -340,6 +342,13 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
                 .all()
             }
 
+    name_key_like_sum = {}
+    for name_key, pids in name_key_place_ids.items():
+        name_key_like_sum[name_key] = sum(like_counts.get(pid, 0) for pid in pids)
+        if len(pids) > 1:
+            best_id = max(pids, key=lambda pid: like_counts.get(pid, 0))
+            places_by_name[name_key] = places_by_id.get(best_id) or places_by_name.get(name_key)
+
     enriched = []
     for item in items:
         row = dict(item)
@@ -352,17 +361,8 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
         review_count = 0
         platform_rating = None
         if place:
-            like_count = like_counts.get(place.id, 0)
-            # 历史重复 Place 行：同名同址合并赞数，避免分裂
             name_key = _name_addr_key(row.get("name"), row.get("address"))
-            if name_key and name_key in places_by_name and places_by_name[name_key].id != place.id:
-                dup_ids = [
-                    p.id for p in places_by_name.values()
-                    if _name_addr_key(p.name, p.address) == name_key
-                ]
-                if place.id not in dup_ids:
-                    dup_ids.append(place.id)
-                like_count = sum(like_counts.get(pid, 0) for pid in dup_ids)
+            like_count = name_key_like_sum.get(name_key, like_counts.get(place.id, 0))
             review_count = review_counts.get(place.id, 0)
             if place.avg_rating is not None:
                 platform_rating = round(float(place.avg_rating), 1)
@@ -372,7 +372,13 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
 
         row["like_count"] = like_count
         row["review_count"] = review_count
-        row["liked"] = bool(place and place.id in user_liked)
+        row["liked"] = bool(
+            place
+            and (
+                place.id in user_liked
+                or any(pid in user_liked for pid in name_key_place_ids.get(name_key, [place.id]))
+            )
+        )
         if platform_rating is not None:
             row["platform_rating"] = platform_rating
             display = effective_rating(row)
