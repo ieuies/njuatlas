@@ -54,6 +54,12 @@ export function escapeHtml(str) {
     });
 }
 
+/** 轻量 inline 转圈（消息发送中、评论加载等） */
+export function atlasInlineSpinnerHtml({ label = '加载中', className = '' } = {}) {
+    const cls = ['atlas-inline-spinner', className].filter(Boolean).join(' ');
+    return `<span class="${cls}" role="status" aria-label="${escapeHtml(label)}"></span>`;
+}
+
 export const BEIJING_TZ = 'Asia/Shanghai';
 
 /** 解析 API 返回的时间：无时区的 ISO 字符串按 UTC 处理（SQLite 存 UTC） */

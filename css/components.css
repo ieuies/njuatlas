@@ -373,6 +373,12 @@
     color: var(--text-tertiary);
     padding: 20px;
 }
+.detail-comments-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
 
 /* ========== 评论输入框 ========== */
 .post-detail-comment-input {

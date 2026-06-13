@@ -140,10 +140,9 @@
         animation: none !important;
     }
 
-    /* 聊天 / 消息：减少滤镜类效果 */
+    /* 聊天发送中：不用 opacity/filter 整泡变暗，转圈样式见 messages.css */
     .msg-bubble-row.is-pending .msg-bubble {
         filter: none;
-        opacity: 0.7;
     }
 
     /* 更快点击响应 */

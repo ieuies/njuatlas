@@ -1,4 +1,4 @@
-import { showToast, formatDate, escapeHtml, avatarHtmlForUser } from '../../utils.js';
+import { showToast, formatDate, escapeHtml, avatarHtmlForUser, atlasInlineSpinnerHtml } from '../../utils.js';
 import { isLoggedIn, getUser } from '../../auth.js';
 import {
     getPost, deletePost, togglePostLike, togglePostFavorite, addPostComment, deletePostComment, participateEvent,
@@ -256,6 +256,12 @@ function _mapCachedToDetailFormat(cached) {
     };
 }
 
+function setDetailCommentsLoading() {
+    const el = document.getElementById('detailComments');
+    if (!el) return;
+    el.innerHTML = `<div class="detail-comments-empty detail-comments-loading">${atlasInlineSpinnerHtml({ label: '加载评论中' })}<span>加载评论中...</span></div>`;
+}
+
 export async function openPostDetail(postId) {
     initPostDetailModal();
     const modal = document.getElementById('postDetailModal');
@@ -263,12 +269,13 @@ export async function openPostDetail(postId) {
 
     modal.style.display = 'flex';
     _resetDetailUI();
+    setDetailCommentsLoading();
 
     const cached = partnerStore.allPartnersData.find(p => p.id === postId);
     if (cached) {
         const quick = _mapCachedToDetailFormat(cached);
         _renderPostDetail(quick);
-        document.getElementById('detailComments').innerHTML = '<div class="detail-comments-empty">加载评论中...</div>';
+        setDetailCommentsLoading();
     }
 
     try {

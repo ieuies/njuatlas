@@ -531,6 +531,28 @@ button { transition: background-color 0.15s ease, color 0.15s ease, border-color
     }
 }
 
+/* ========== 通用 inline 加载转圈（GPU transform，全站复用） ========== */
+.atlas-inline-spinner {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    border: 2px solid color-mix(in srgb, var(--text-tertiary) 35%, transparent);
+    border-top-color: var(--btn-primary-bg);
+    border-radius: 50%;
+    box-sizing: border-box;
+    contain: strict;
+    animation: atlasInlineSpin 0.72s linear infinite;
+}
+@keyframes atlasInlineSpin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .atlas-inline-spinner {
+        animation-duration: 1.4s;
+    }
+}
+
 /* ========== 工具类 ========== */
 .flex-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .page-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }

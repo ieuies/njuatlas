@@ -24,7 +24,7 @@ import {
     getAuthToken,
 } from '../api.js';
 import { API_BASE } from '../config.js';
-import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief } from '../utils.js';
+import { showToast, escapeHtml, avatarHtmlForUser, formatTimeBrief, atlasInlineSpinnerHtml } from '../utils.js';
 import { t } from '../i18n.js';
 import { DEFAULT_BUBBLE_STYLE, bubbleThemeCssVars, normalizeBubbleStyle } from '../bubbleThemes.js';
 import {
@@ -354,10 +354,14 @@ function bubbleRowHtml(m, { pending = false } = {}) {
     const pendingCls = pending ? ' is-pending' : '';
     const tempAttr = m._tempId ? ` data-temp-id="${m._tempId}"` : '';
     const idAttr = m.id ? ` data-msg-id="${m.id}"` : '';
+    const pendingSpinner = (m.is_mine && pending)
+        ? atlasInlineSpinnerHtml({ label: t('messages.sending'), className: 'msg-send-spinner' })
+        : '';
     return `
         <div class="msg-bubble-row ${m.is_mine ? 'me' : 'them'}${pendingCls}"${tempAttr}${idAttr}>
             ${m.is_mine ? '' : avatarHtmlForUser(peer, 32)}
             <div class="msg-bubble" style="${style}">${escapeHtml(m.content)}</div>
+            ${pendingSpinner}
         </div>`;
 }
 
@@ -675,6 +679,7 @@ function reconcileOwnOutgoingMessage(message, { tempId = null } = {}) {
 
     if (pendingRow) {
         pendingRow.classList.remove('is-pending');
+        pendingRow.querySelector('.msg-send-spinner')?.remove();
         pendingRow.removeAttribute('data-temp-id');
         pendingRow.setAttribute('data-msg-id', String(message.id));
         if (!chatState.messages.some((x) => x.id === message.id)) {
