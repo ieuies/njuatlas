@@ -33,6 +33,20 @@ def _get_int_env(name, default):
         raise ConfigError(f"{name} 必须是整数，当前值为 {value!r}") from exc
 
 
+def _get_bool_env(name, default=False):
+    """读取布尔型环境变量。"""
+    value = _get_env(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_csv_env(name, default):
+    """读取逗号分隔的环境变量，返回非空字符串列表。"""
+    raw = _get_env(name, default) or ""
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
 def _normalize_database_url(value):
     """规范化数据库连接字符串。
 
@@ -69,7 +83,7 @@ class Config:
     # auto: 自动选择（默认优先百炼）；bailian: 强制百炼；zhipu: 强制智谱
     LLM_PROVIDER = _get_env("LLM_PROVIDER", "auto").lower()
     SECRET_KEY = _get_env("SECRET_KEY")
-    JWT_EXPIRATION_SECONDS = _get_int_env("JWT_EXPIRATION_SECONDS", 60 * 60 * 24)
+    JWT_EXPIRATION_SECONDS = _get_int_env("JWT_EXPIRATION_SECONDS", 60 * 60 * 24 * 7)
     SQLALCHEMY_DATABASE_URI = _normalize_database_url(_get_env("DATABASE_URL"))
     AMAP_CACHE_TTL_SECONDS = _get_int_env("AMAP_CACHE_TTL_SECONDS", 5 * 60)
     AMAP_CACHE_MAX_ITEMS = _get_int_env("AMAP_CACHE_MAX_ITEMS", 256)
@@ -87,6 +101,11 @@ class Config:
     EMAIL_CODE_MAX_ATTEMPTS = _get_int_env("EMAIL_CODE_MAX_ATTEMPTS", 5)
     RESEND_API_KEY = _get_env("RESEND_API_KEY", "")
     MAIL_FROM = _get_env("MAIL_FROM", "今天奶龙吃什么 <no-reply@njuatlas.local>")
+    REGISTER_EMAIL_RESTRICTION_ENABLED = _get_bool_env("REGISTER_EMAIL_RESTRICTION_ENABLED", True)
+    REGISTER_EMAIL_SUFFIXES = _parse_csv_env(
+        "REGISTER_EMAIL_SUFFIX",
+        "@smail.nju.edu.cn,@nju.edu.cn",
+    )
 
     # ── 帖子热度与过期阈值（均可通过 .env 覆盖）─────────────────
     HOT_NOW_BOOST = float(_get_env("HOT_NOW_BOOST", "2.0"))

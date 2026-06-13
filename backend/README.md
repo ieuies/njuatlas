@@ -165,7 +165,7 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | 变量 | 必需 | 默认值 | 用途 |
 | --- | --- | --- | --- |
 | `SECRET_KEY` | 是 | 无 | JWT HS256 签名密钥，必须足够长且随机 |
-| `JWT_EXPIRATION_SECONDS` | 否 | `86400` | access token 有效期 |
+| `JWT_EXPIRATION_SECONDS` | 否 | `604800` | access token 有效期（默认 7 天） |
 | `DATABASE_URL` | 生产必需 | 空 | PostgreSQL 连接串；为空时本地使用 SQLite |
 | `FLASK_APP` | 迁移必需 | `app:create_app` | Flask CLI 入口 |
 | `GAODE_API_KEY` | 是 | 无 | 高德地图 Web API Key |
@@ -184,6 +184,8 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | `PASSWORD_RESET_TOKEN_SECONDS` | 否 | `1800` | 重置密码 token 有效期 |
 | `RESEND_API_KEY` | 否 | 空 | Resend API Key；为空时邮件内容写入日志 |
 | `MAIL_FROM` | 否 | `no-reply@njuatlas.local` | 发件人 |
+| `REGISTER_EMAIL_RESTRICTION_ENABLED` | 否 | `true` | 是否限制注册邮箱后缀；设为 `false` 允许任意邮箱注册 |
+| `REGISTER_EMAIL_SUFFIX` | 否 | `@smail.nju.edu.cn,@nju.edu.cn` | 注册允许的邮箱后缀，逗号分隔（仅在限制开启时生效） |
 
 ## 数据模型
 
@@ -254,6 +256,19 @@ Authorization: Bearer <access_token>
 
 ### 用户体系
 
+#### `GET /api/user/auth-config`
+
+公开接口，返回注册邮箱限制配置，供前端同步注册表单 UI 与客户端校验。
+
+响应：
+
+```json
+{
+  "registration_email_restriction_enabled": true,
+  "registration_email_suffixes": ["@smail.nju.edu.cn", "@nju.edu.cn"]
+}
+```
+
 #### `POST /api/user/register`
 
 邮箱注册。注册成功后返回 JWT，同时生成邮箱验证 token 并发送邮件；未配置 Resend 时邮件内容写入日志。
@@ -278,7 +293,7 @@ Authorization: Bearer <access_token>
   "email_verified": false,
   "access_token": "...",
   "token_type": "Bearer",
-  "expires_in": 86400
+  "expires_in": 604800
 }
 ```
 

@@ -8,7 +8,7 @@ import {
     paintGuideGridFromCache,
 } from './guide-warm-cache.js';
 import { prefetchAllGuideLeaderboards } from './guide-prefetch.js';
-import { showHomePage } from './pages/home.js';
+import { showHomePage, initAuthConfig, applyAuthConfigToRegisterForm } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
 
@@ -917,6 +917,7 @@ async function init() {
     }
 
     // 初始化各模块
+    await initAuthConfig();
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件
     initNavigation();
     initThemeToggle();
@@ -987,6 +988,7 @@ function initLocaleRefresh() {
             const mod = await _loadMessages();
             await mod.refreshMessages({ force: true });
         }
+        applyAuthConfigToRegisterForm();
     });
 }
 

@@ -114,6 +114,23 @@ async function requestOptionalAuth(endpoint, method = 'GET', body = null, timeou
 }
 
 // ── 用户认证 ──
+let _authConfig = null;
+
+export async function fetchAuthConfig() {
+    if (_authConfig) return _authConfig;
+    const data = await request('/user/auth-config', 'GET', null, false, DEFAULT_TIMEOUT_MS, true);
+    const suffixes = Array.isArray(data.registration_email_suffixes)
+        ? data.registration_email_suffixes.filter(Boolean)
+        : [];
+    _authConfig = {
+        registration_email_restriction_enabled: Boolean(data.registration_email_restriction_enabled),
+        registration_email_suffixes: suffixes.length
+            ? suffixes
+            : ['@smail.nju.edu.cn', '@nju.edu.cn'],
+    };
+    return _authConfig;
+}
+
 export async function register(username, email, password, code) {
     return request('/user/register', 'POST', { username, email, password, code }, false);
 }

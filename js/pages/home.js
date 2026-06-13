@@ -1,12 +1,85 @@
 import { showToast } from '../utils.js';
-import { t } from '../i18n.js';
+import { t, getLocale } from '../i18n.js';
+import { fetchAuthConfig } from '../api.js';
 
-const REGISTER_EMAIL_SUFFIX = '@smail.nju.edu.cn';
+const DEFAULT_REGISTER_EMAIL_SUFFIXES = ['@smail.nju.edu.cn', '@nju.edu.cn'];
 
 let currentModalTab = 'login';
+let authConfig = {
+    registration_email_restriction_enabled: true,
+    registration_email_suffixes: DEFAULT_REGISTER_EMAIL_SUFFIXES,
+};
+
+function registrationEmailSuffixes() {
+    const suffixes = authConfig.registration_email_suffixes;
+    return Array.isArray(suffixes) && suffixes.length ? suffixes : DEFAULT_REGISTER_EMAIL_SUFFIXES;
+}
+
+function registrationEmailRestrictionEnabled() {
+    return Boolean(authConfig.registration_email_restriction_enabled);
+}
+
+function formatRegistrationSuffixes(suffixes = registrationEmailSuffixes()) {
+    const joiner = getLocale() === 'en' ? ' or ' : ' 或 ';
+    return suffixes.join(joiner);
+}
+
+function formatRegistrationEmailExamples(suffixes = registrationEmailSuffixes()) {
+    const joiner = getLocale() === 'en' ? ' / ' : ' / ';
+    return suffixes.map((suffix) => `name${suffix}`).join(joiner);
+}
+
+function registrationEmailI18nParams() {
+    const suffixes = registrationEmailSuffixes();
+    return {
+        suffixes: formatRegistrationSuffixes(suffixes),
+        examples: formatRegistrationEmailExamples(suffixes),
+    };
+}
 
 function isAllowedRegistrationEmail(email) {
-    return String(email || '').trim().toLowerCase().endsWith(REGISTER_EMAIL_SUFFIX);
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return false;
+    if (!registrationEmailRestrictionEnabled()) return true;
+    return registrationEmailSuffixes().some((suffix) => normalized.endsWith(suffix));
+}
+
+function registrationEmailInvalidMessage() {
+    return t('auth.regEmailInvalid', registrationEmailI18nParams());
+}
+
+export function applyAuthConfigToRegisterForm(config = authConfig) {
+    authConfig = {
+        registration_email_restriction_enabled: Boolean(config?.registration_email_restriction_enabled),
+        registration_email_suffixes: Array.isArray(config?.registration_email_suffixes) && config.registration_email_suffixes.length
+            ? config.registration_email_suffixes
+            : DEFAULT_REGISTER_EMAIL_SUFFIXES,
+    };
+
+    const hint = document.querySelector('#registerForm .auth-email-hint');
+    const regEmailInput = document.getElementById('regEmail');
+    const enabled = registrationEmailRestrictionEnabled();
+    const i18nParams = registrationEmailI18nParams();
+
+    if (hint) {
+        hint.style.display = enabled ? '' : 'none';
+        hint.textContent = t('auth.regEmailHint', i18nParams);
+    }
+
+    if (regEmailInput) {
+        regEmailInput.placeholder = enabled
+            ? t('auth.regEmail', i18nParams)
+            : t('auth.email');
+    }
+}
+
+export async function initAuthConfig() {
+    try {
+        const config = await fetchAuthConfig();
+        applyAuthConfigToRegisterForm(config);
+    } catch {
+        applyAuthConfigToRegisterForm();
+    }
 }
 
 function startCountdown(button, seconds = 60) {
@@ -74,7 +147,7 @@ async function handleRegister() {
     const code = document.getElementById('regCode').value;
     const password = document.getElementById('regPassword').value;
     if (!username || !email || !code || !password) return showToast('请填写完整');
-    if (!isAllowedRegistrationEmail(email)) return showToast(t('auth.regEmailInvalid'));
+    if (!isAllowedRegistrationEmail(email)) return showToast(registrationEmailInvalidMessage());
     if (password.length < 8) return showToast('密码至少8位');
     const { doRegister } = await import('../auth.js');
     try {
@@ -102,7 +175,7 @@ async function handleForgot() {
 async function sendRegisterCode() {
     const email = document.getElementById('regEmail').value;
     if (!email) return showToast('请输入邮箱');
-    if (!isAllowedRegistrationEmail(email)) return showToast(t('auth.regEmailInvalid'));
+    if (!isAllowedRegistrationEmail(email)) return showToast(registrationEmailInvalidMessage());
     const button = document.getElementById('sendRegCodeBtn');
     const { requestRegisterCode } = await import('../api.js');
     await requestRegisterCode(email);

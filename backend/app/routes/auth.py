@@ -18,8 +18,8 @@ from app.validators import clean_string, get_json_body
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/user")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-REGISTER_EMAIL_SUFFIX = "@smail.nju.edu.cn"
 EMAIL_CODE_PURPOSES = {"register", "reset_password"}
+DEFAULT_REGISTER_EMAIL_SUFFIXES = ("@smail.nju.edu.cn", "@nju.edu.cn")
 
 
 def _utcnow():
@@ -40,9 +40,42 @@ def _normalize_email(value):
     return str(value).strip().lower()
 
 
+def _register_email_suffixes():
+    suffixes = current_app.config.get("REGISTER_EMAIL_SUFFIXES")
+    if suffixes:
+        return tuple(suffixes)
+    return DEFAULT_REGISTER_EMAIL_SUFFIXES
+
+
+def _registration_email_restriction_enabled():
+    return bool(current_app.config.get("REGISTER_EMAIL_RESTRICTION_ENABLED", True))
+
+
 def _is_allowed_registration_email(email):
-    """新注册须使用南大 smail 邮箱；不影响已有账号登录。"""
-    return bool(email) and email.endswith(REGISTER_EMAIL_SUFFIX)
+    """注册邮箱后缀校验；关闭限制时不影响已有账号登录。"""
+    if not _registration_email_restriction_enabled():
+        return bool(email)
+    return bool(email) and any(email.endswith(suffix) for suffix in _register_email_suffixes())
+
+
+def _format_registration_suffixes():
+    suffixes = _register_email_suffixes()
+    if len(suffixes) <= 1:
+        return suffixes[0] if suffixes else ""
+    return " 或 ".join(suffixes)
+
+
+def _registration_email_error_message():
+    return f"注册请使用 {_format_registration_suffixes()} 邮箱"
+
+
+def _auth_config_payload():
+    enabled = _registration_email_restriction_enabled()
+    suffixes = list(_register_email_suffixes()) if enabled else []
+    return {
+        "registration_email_restriction_enabled": enabled,
+        "registration_email_suffixes": suffixes,
+    }
 
 
 def _validate_password(password):
@@ -186,6 +219,11 @@ def _verify_email_code(email, purpose, code):
     return row, None
 
 
+@auth_bp.route("/auth-config", methods=["GET"])
+def auth_config():
+    return jsonify(_auth_config_payload())
+
+
 @auth_bp.route("/email/code", methods=["POST"])
 def request_email_code():
     data = get_json_body(request)
@@ -199,7 +237,7 @@ def request_email_code():
 
     if purpose == "register" and not _is_allowed_registration_email(email):
         return error_response(
-            "注册请使用 @smail.nju.edu.cn 邮箱",
+            _registration_email_error_message(),
             400,
             code="invalid_registration_email",
         )
@@ -255,7 +293,7 @@ def register():
 
     if not _is_allowed_registration_email(email):
         return error_response(
-            "注册请使用 @smail.nju.edu.cn 邮箱",
+            _registration_email_error_message(),
             400,
             code="invalid_registration_email",
         )

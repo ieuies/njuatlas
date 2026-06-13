@@ -41,7 +41,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: JWT_EXPIRATION_SECONDS
-        value: "86400"
+        value: "604800"
       - key: AMAP_CACHE_TTL_SECONDS
         value: "900"
       - key: AMAP_CACHE_MAX_ITEMS
@@ -80,6 +80,10 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      - key: REGISTER_EMAIL_RESTRICTION_ENABLED
+        value: "true"
+      - key: REGISTER_EMAIL_SUFFIX
+        value: "@smail.nju.edu.cn,@nju.edu.cn"
 
   - type: keyvalue
     name: njuatlas-redis
