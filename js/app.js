@@ -1,6 +1,14 @@
 import { isLoggedIn, getUser, doLogout, syncUserMediaFromServer } from './auth.js';
 import { showToast, renderAvatarInto, isMobileViewport } from './utils.js';
-import { getUnreadCounts } from './api.js';
+import { getUnreadCounts, getGuideLeaderboard, listDmConversations } from './api.js';
+import {
+    entryCacheKey,
+    GUIDE_ENTRY_CAMPUS,
+    GUIDE_ENTRY_CATEGORY,
+    paintGuideEntryGrid,
+    persistLeaderboardToStorage,
+    readLeaderboardFromStorage,
+} from './guide-warm-cache.js';
 import { showHomePage } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
@@ -99,8 +107,73 @@ function prefetchPartnerOnIntent() {
     _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
 }
 
+let _guideEntryPrefetchPromise = null;
+
+/** 冷启动只预取首屏排行榜（鼓楼·美食），不加载 guide.js 模块 */
+function prefetchGuideEntryLeaderboard() {
+    if (_guideEntryPrefetchPromise) return _guideEntryPrefetchPromise;
+    _guideEntryPrefetchPromise = (async () => {
+        const key = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
+        const cached = readLeaderboardFromStorage(key);
+        if (cached) {
+            persistLeaderboardToStorage(key, cached);
+            return;
+        }
+        try {
+            const data = await getGuideLeaderboard(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
+            persistLeaderboardToStorage(key, data);
+        } catch { /* ignore */ }
+    })().finally(() => {
+        _guideEntryPrefetchPromise = null;
+    });
+    return _guideEntryPrefetchPromise;
+}
+
 function prefetchGuideOnIntent() {
-    _loadGuide().then((mod) => mod.prefetchGuideData?.()).catch(() => {});
+    prefetchGuideEntryLeaderboard();
+}
+
+const MSG_CONV_CACHE_KEY = 'njuatlas_msg_conv_v1';
+const MSG_CONV_CACHE_TTL_MS = 30 * 1000;
+
+let _msgEntryPrefetchPromise = null;
+
+/** 冷启动只预取私信会话列表，不加载 messages.js 模块 */
+function prefetchMessagesEntryData() {
+    if (!isLoggedIn()) return Promise.resolve();
+    if (_msgEntryPrefetchPromise) return _msgEntryPrefetchPromise;
+    _msgEntryPrefetchPromise = (async () => {
+        try {
+            const row = JSON.parse(sessionStorage.getItem(MSG_CONV_CACHE_KEY) || 'null');
+            if (row?.items && Date.now() - row.at < MSG_CONV_CACHE_TTL_MS) return;
+        } catch { /* ignore */ }
+        try {
+            const data = await listDmConversations(true);
+            sessionStorage.setItem(MSG_CONV_CACHE_KEY, JSON.stringify({
+                at: Date.now(),
+                items: data.items || [],
+            }));
+        } catch { /* ignore */ }
+    })().finally(() => {
+        _msgEntryPrefetchPromise = null;
+    });
+    return _msgEntryPrefetchPromise;
+}
+
+function prefetchMessagesOnIntent() {
+    prefetchMessagesEntryData();
+}
+
+let _messagesPrefetchBound = false;
+
+function bindMessagesPrefetchIntent() {
+    if (_messagesPrefetchBound) return;
+    _messagesPrefetchBound = true;
+    document.querySelectorAll('[data-page="messages"]').forEach((el) => {
+        el.addEventListener('mouseenter', prefetchMessagesOnIntent, { once: true });
+        el.addEventListener('focus', prefetchMessagesOnIntent, { once: true });
+        el.addEventListener('touchstart', prefetchMessagesOnIntent, { once: true, passive: true });
+    });
 }
 
 let _partnerPrefetchBound = false;
@@ -136,9 +209,26 @@ function bindPartnerPrefetchIntent() {
 function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
     bindGuidePrefetchIntent();
+    bindMessagesPrefetchIntent();
+    prefetchGuideEntryLeaderboard();
     const mobile = isMobileViewport();
     const delay = mobile ? 1200 : 500;
     setTimeout(() => prefetchAmapScript(), delay);
+    setTimeout(() => prefetchGuideEntryLeaderboard(), mobile ? 2000 : 4000);
+    if (isLoggedIn()) {
+        setTimeout(() => prefetchMessagesEntryData(), mobile ? 1100 : 2400);
+    }
+    if (mobile) {
+        const idlePrefetch = () => {
+            prefetchGuideEntryLeaderboard();
+            if (isLoggedIn()) prefetchMessagesEntryData();
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(idlePrefetch, { timeout: 1500 });
+        } else {
+            setTimeout(idlePrefetch, 800);
+        }
+    }
 }
 
 async function switchPage(pageId) {
@@ -150,10 +240,12 @@ async function switchPage(pageId) {
         return;
     }
 
-    const pageBootTasks = [
-        ensurePageStyles(pageId),
-        prefetchPageModule(pageId),
-    ];
+    const pageBootTasks = [ensurePageStyles(pageId)];
+    if (pageId !== 'guide') {
+        pageBootTasks.push(prefetchPageModule(pageId));
+    } else {
+        _loadGuide().catch(() => {});
+    }
     const amapPrefetch = (pageId === 'partner' || pageId === 'fullMap')
         ? prefetchAmapScript()
         : null;
@@ -223,6 +315,11 @@ async function switchPage(pageId) {
     }
 
     if (pageId === 'guide') {
+        prefetchGuideEntryLeaderboard();
+        const grid = document.getElementById('guideGrid');
+        if (grid && !grid.dataset.guideKey) {
+            paintGuideEntryGrid(grid);
+        }
         const mod = await _loadGuide();
         if (!_guidePageInited) {
             _guidePageInited = true;

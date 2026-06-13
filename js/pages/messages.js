@@ -37,6 +37,7 @@ import {
 
 const CACHE_TTL_MS = 30000;
 const CHAT_PAGE_SIZE = 50;
+const SESSION_CONV_KEY = 'njuatlas_msg_conv_v1';
 
 let currentTab = 'chats';
 let openChatPeerId = null;
@@ -71,9 +72,39 @@ function isCacheFresh(at) {
     return at && (Date.now() - at) < CACHE_TTL_MS;
 }
 
+function _readSessionConversations() {
+    try {
+        const row = JSON.parse(sessionStorage.getItem(SESSION_CONV_KEY) || 'null');
+        if (!row?.items || Date.now() - row.at > CACHE_TTL_MS) return null;
+        return row.items;
+    } catch {
+        return null;
+    }
+}
+
+function _persistSessionConversations(items) {
+    try {
+        sessionStorage.setItem(SESSION_CONV_KEY, JSON.stringify({
+            at: Date.now(),
+            items: items || [],
+        }));
+    } catch { /* quota */ }
+}
+
+function _seedChatsFromSession() {
+    if (tabCache.chats.items) return;
+    const items = _readSessionConversations();
+    if (items) {
+        tabCache.chats = { items, at: Date.now() - 12000 };
+    }
+}
+
 function invalidateCache(...keys) {
     keys.forEach((key) => {
-        if (key === 'chats') tabCache.chats = { items: null, at: 0 };
+        if (key === 'chats') {
+            tabCache.chats = { items: null, at: 0 };
+            try { sessionStorage.removeItem(SESSION_CONV_KEY); } catch { /* ignore */ }
+        }
         if (key === 'friends') tabCache.friends = { friends: null, requests: null, sent: null, at: 0 };
         if (key === 'interact') tabCache.interact = { items: null, at: 0 };
     });
@@ -239,6 +270,7 @@ async function fetchConversations({ silent = false } = {}) {
     const data = await listDmConversations(silent);
     const items = data.items || [];
     tabCache.chats = { items, at: Date.now() };
+    _persistSessionConversations(items);
     return items;
 }
 
@@ -1480,7 +1512,55 @@ function bindEvents() {
 export function initMessagesPage() {
     bindEvents();
     bindVisibilitySync();
+    _seedChatsFromSession();
+    renderTabs();
+
+    if (currentTab !== 'chats') return;
+
+    const view = document.getElementById('msgChatsView');
+    if (!view) return;
+
+    ensureConvoWrap(view);
+    showConvoList();
+    if (tabCache.chats.items) {
+        paintConvoList(tabCache.chats.items);
+    } else {
+        const list = document.getElementById('msgConvoList');
+        if (list) list.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+    }
 }
+
+function _prefetchInactiveTabs() {
+    const tasks = [];
+    if (!isCacheFresh(tabCache.friends.at)) {
+        tasks.push(fetchFriendsData().catch(() => {}));
+    }
+    if (!isCacheFresh(tabCache.interact.at)) {
+        tasks.push(fetchNotifications().catch(() => {}));
+    }
+    return Promise.all(tasks);
+}
+
+function _scheduleMessagesPageExtras({ force = false } = {}) {
+    clearTimeout(_scheduleMessagesPageExtras._timer);
+
+    const run = async () => {
+        await refreshAllBadges(null, { force }).catch(() => {});
+        if (!document.getElementById('messagesPage')?.classList.contains('active-page')) return;
+        await _prefetchInactiveTabs();
+    };
+
+    const schedule = () => { run().catch(() => {}); };
+
+    if (typeof requestIdleCallback === 'function') {
+        _scheduleMessagesPageExtras._timer = setTimeout(() => {
+            requestIdleCallback(schedule, { timeout: 2500 });
+        }, 0);
+    } else {
+        _scheduleMessagesPageExtras._timer = setTimeout(schedule, 300);
+    }
+}
+_scheduleMessagesPageExtras._timer = null;
 
 export function stopMessagesRealtimeSync() {
     stopRealtimeSync();
@@ -1511,12 +1591,27 @@ export function openChatWith(userId, peerHint = null) {
 export async function refreshMessages({ force = false } = {}) {
     bindEvents();
     bindVisibilitySync();
+    _seedChatsFromSession();
     renderTabs();
-    await refreshAllBadges(null, { force });
-    if (currentTab === 'chats') await renderChats({ force });
-    else if (currentTab === 'friends') await renderFriends({ force });
-    else await renderInteract({ force });
-    startRealtimeSync();
+
+    if (currentTab === 'chats') {
+        await renderChats({ force });
+    } else if (currentTab === 'friends') {
+        await renderFriends({ force });
+    } else {
+        await renderInteract({ force });
+    }
+
+    _scheduleMessagesPageExtras({ force });
+}
+
+/** 冷启动预取：仅会话列表（私信 Tab 首屏） */
+export async function prefetchMessagesEntryData() {
+    if (!getAuthToken()) return;
+    if (_readSessionConversations()) return;
+    try {
+        await fetchConversations({ silent: true });
+    } catch { /* ignore */ }
 }
 
 export function getMessagesState() {

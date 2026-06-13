@@ -16,18 +16,33 @@ import {
 } from '../guide-like-sync.js';
 import { getUser, isLoggedIn } from '../auth.js';
 import { showToast } from '../utils.js';
+import {
+    entryCacheKey,
+    GUIDE_CACHE_TTL_MS,
+    GUIDE_LB_CACHE_KEY,
+    hydrateMemoryLeaderboardCache,
+    persistLeaderboardToStorage,
+    readLeaderboardFromStorage,
+    readLeaderboardRow,
+} from '../guide-warm-cache.js';
 
 const DEFAULT_CAMPUS = '鼓楼';
 const ALL_CAMPUSES = ['鼓楼', '仙林', '浦口', '苏州'];
 const GUIDE_IMG_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' fill='%23e8e4f0'/%3E";
-const GUIDE_CACHE_TTL_MS = 3 * 60 * 1000;
+const GUIDE_LAZY_IMAGE_EAGER_COUNT = 3;
+const GUIDE_OTHER_CATEGORIES = ['咖啡饮品', '休闲娱乐', '运动健身', '购物商圈', '景点公园'];
 
 let _guideConfig = null;
 let currentGuideCat = '美食';
 let currentGuideCampus = DEFAULT_CAMPUS;
 let _guideRenderItems = [];
-let _guideDataLoadedAt = 0;
 let _leaderboardCache = {};
+let _leaderboardCacheAt = {};
+let _loadLeaderboardSeq = 0;
+hydrateMemoryLeaderboardCache(_leaderboardCache, entryCacheKey(DEFAULT_CAMPUS, '美食'));
+if (_leaderboardCache[entryCacheKey(DEFAULT_CAMPUS, '美食')]) {
+    _leaderboardCacheAt[entryCacheKey(DEFAULT_CAMPUS, '美食')] = Date.now();
+}
 let _isRefreshing = false;
 let _detailItem = null;
 let _explorePage = 1;
@@ -39,6 +54,10 @@ let _guideSearchLoading = false;
 let _suggestTimer = null;
 let _exploreHasMore = false;
 let _exploreKeyword = '';
+let _guidePageExtrasScheduled = false;
+let _guideModalsReady = false;
+let _guideSearchReady = false;
+let _guideShellReady = false;
 
 function esc(str) {
     if (str == null || str === '') return '';
@@ -67,6 +86,88 @@ function _categoryTypes(cat) {
     return _guideConfig?.categories?.[cat]?.types || '';
 }
 
+function _entryCampus() {
+    return DEFAULT_CAMPUS;
+}
+
+function _syncCampusFilterUi() {
+    document.querySelectorAll('#guideCampusFilter .guide-chip').forEach((chip) => {
+        chip.classList.toggle('active', chip.getAttribute('data-guide-campus') === currentGuideCampus);
+    });
+}
+
+function ensureGuideModals() {
+    if (_guideModalsReady) return;
+    _guideModalsReady = true;
+    initGuideModals();
+}
+
+function ensureGuideSearchBar() {
+    if (_guideSearchReady) return;
+    _guideSearchReady = true;
+    initGuideSearchBar();
+}
+
+function initGuideShellHandlers() {
+    if (_guideShellReady) return;
+    _guideShellReady = true;
+
+    initGuideFilter();
+    initGuideCampusFilter();
+    bindRefreshButton();
+
+    document.getElementById('openGuideExploreBtn')?.addEventListener('click', () => {
+        ensureGuideModals();
+        openGuideExplore();
+    });
+
+    const focusSearch = () => ensureGuideSearchBar();
+    document.getElementById('guideSearchInput')?.addEventListener('focus', focusSearch, { once: true });
+    document.getElementById('guideSearchBtn')?.addEventListener('click', focusSearch, { once: true });
+}
+
+async function _prefetchOtherLeaderboards() {
+    if (currentGuideCampus === 'all') return;
+    for (const cat of GUIDE_OTHER_CATEGORIES) {
+        if (cat === currentGuideCat) continue;
+        const key = _cacheKey(currentGuideCampus, cat);
+        if (_getCachedLeaderboard(key)) continue;
+        try {
+            const data = await getGuideLeaderboard(currentGuideCampus, cat);
+            _rememberLeaderboard(key, data);
+        } catch {
+            break;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+    }
+}
+
+function _scheduleGuidePageExtras() {
+    if (_guidePageExtrasScheduled) return;
+    _guidePageExtrasScheduled = true;
+
+    const run = async () => {
+        ensureGuideModals();
+        ensureGuideSearchBar();
+        await _loadGuideConfig().catch(() => {});
+        if (isLoggedIn()) {
+            const likeTasks = [];
+            if (hasPendingGuideLikes()) likeTasks.push(flushGuideLikeQueue());
+            likeTasks.push(refreshUserGuideLikes());
+            await Promise.all(likeTasks).catch(() => {});
+            const key = _cacheKey(currentGuideCampus, currentGuideCat);
+            if (_leaderboardCache[key]) renderLeaderboard(_leaderboardCache[key], key);
+        }
+        await _prefetchOtherLeaderboards();
+    };
+
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(() => { run().catch(() => {}); }, { timeout: 2500 });
+    } else {
+        setTimeout(() => { run().catch(() => {}); }, 300);
+    }
+}
+
 async function _loadGuideConfig() {
     if (_guideConfig) return _guideConfig;
     const res = await fetch(`${API_BASE}/places/guide-config`);
@@ -77,7 +178,57 @@ async function _loadGuideConfig() {
 }
 
 function _cacheKey(campus, cat) {
-    return `${campus}\x1f${cat}`;
+    return entryCacheKey(campus, cat);
+}
+
+function _getCachedLeaderboard(key) {
+    if (_leaderboardCache[key]) return _leaderboardCache[key];
+    const row = readLeaderboardRow(key);
+    if (!row?.data) return null;
+    _leaderboardCache[key] = row.data;
+    _leaderboardCacheAt[key] = row.at;
+    return row.data;
+}
+
+function _isCacheFresh(key) {
+    const at = _leaderboardCacheAt[key];
+    return at && (Date.now() - at) < GUIDE_CACHE_TTL_MS;
+}
+
+function _showGuideLoading(container) {
+    if (!container) return;
+    container.dataset.guideKey = '';
+    _guideRenderItems = [];
+    container.innerHTML = '<div class="guide-loading">加载排行榜…</div>';
+}
+
+function _rememberLeaderboard(key, data) {
+    _leaderboardCache[key] = data;
+    _leaderboardCacheAt[key] = Date.now();
+    persistLeaderboardToStorage(key, data);
+}
+
+function _bindGuideLazyImages(container) {
+    if (!container) return;
+    const imgs = container.querySelectorAll('img.guide-card-cover-img[data-src]');
+    if (!imgs.length) return;
+    if (!('IntersectionObserver' in window)) {
+        imgs.forEach((img) => {
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+        });
+        return;
+    }
+    const io = new IntersectionObserver((entries, obs) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            obs.unobserve(img);
+        }
+    }, { rootMargin: '240px 0px' });
+    imgs.forEach((img) => io.observe(img));
 }
 
 function _topRankBadge(rank) {
@@ -101,12 +252,16 @@ function _guideCardHtml(item, idx, { showRank = true } = {}) {
     const topClass = showRank && rank <= 3 ? ` guide-waterfall-card--top${rank}` : '';
     const imgSrc = _secureImageUrl(item.image) || GUIDE_IMG_PLACEHOLDER;
     const rankBadge = showRank ? _topRankBadge(rank) : '';
+    const eagerImage = idx < GUIDE_LAZY_IMAGE_EAGER_COUNT && imgSrc !== GUIDE_IMG_PLACEHOLDER;
+    const imgTag = eagerImage
+        ? `<img class="guide-card-cover-img" src="${imgSrc}" alt="${esc(item.name)}" loading="eager" decoding="async" fetchpriority="high">`
+        : `<img class="guide-card-cover-img" src="${GUIDE_IMG_PLACEHOLDER}" data-src="${imgSrc}" alt="${esc(item.name)}" loading="lazy" decoding="async">`;
 
     return `
         <article class="guide-waterfall-card${topClass}" data-guide-idx="${idx}" data-guide-name="${esc(item.name)}">
             ${rankBadge}
             <div class="guide-card-cover">
-                <img class="guide-card-cover-img" src="${imgSrc}" alt="${esc(item.name)}" loading="lazy" decoding="async">
+                ${imgTag}
             </div>
             <div class="guide-card-body">
                 <h3 class="guide-card-name">${esc(item.name)}</h3>
@@ -183,7 +338,7 @@ function _sortGuideItemsByLikes(items) {
     return sorted;
 }
 
-function renderLeaderboard(payload) {
+function renderLeaderboard(payload, cacheKey) {
     const container = document.getElementById('guideGrid');
     if (!container) return;
 
@@ -199,6 +354,7 @@ function renderLeaderboard(payload) {
     if (!flat.length) {
         container.innerHTML = '<div class="guide-empty">暂无上榜店铺，去探索页点赞推荐吧～</div>';
         _guideRenderItems = [];
+        if (cacheKey) container.dataset.guideKey = cacheKey;
         return;
     }
 
@@ -234,7 +390,10 @@ function renderLeaderboard(payload) {
 
     _guideRenderItems = flat;
     container.innerHTML = html;
+    if (cacheKey) container.dataset.guideKey = cacheKey;
+    container.dataset.guideBound = 'true';
     _bindGuideGridDelegation(container);
+    _bindGuideLazyImages(container);
 }
 
 async function loadLeaderboard({ force = false, shuffle = false } = {}) {
@@ -242,39 +401,56 @@ async function loadLeaderboard({ force = false, shuffle = false } = {}) {
     const cat = currentGuideCat;
     const key = _cacheKey(campus, cat);
     const container = document.getElementById('guideGrid');
+    const seq = ++_loadLeaderboardSeq;
+    const gridMatches = container?.dataset.guideKey === key;
+    const cached = _getCachedLeaderboard(key);
+    const fresh = Boolean(cached && _isCacheFresh(key));
 
-    if (!force && !shuffle && _leaderboardCache[key] && (Date.now() - _guideDataLoadedAt) < GUIDE_CACHE_TTL_MS) {
-        renderLeaderboard(_leaderboardCache[key]);
+    if (!force && !shuffle && fresh && gridMatches) {
+        if (!_leaderboardCache[key]) _rememberLeaderboard(key, cached);
+        renderLeaderboard(cached, key);
         return;
     }
 
-    const stale = _leaderboardCache[key];
-    if (stale) {
-        renderLeaderboard(stale);
-    } else if (container) {
-        container.innerHTML = '<div class="guide-loading">加载排行榜…</div>';
+    if (cached && !gridMatches) {
+        if (!_leaderboardCache[key]) _rememberLeaderboard(key, cached);
+        renderLeaderboard(cached, key);
+    } else if (!gridMatches || (force && !cached)) {
+        _showGuideLoading(container);
     }
 
-    try {
-        const sideTasks = [_loadGuideConfig().catch(() => {})];
-        if (isLoggedIn()) {
-            if (hasPendingGuideLikes()) {
-                sideTasks.push(flushGuideLikeQueue());
-            }
-            sideTasks.push(refreshUserGuideLikes());
-        }
+    if (!force && !shuffle && cached && gridMatches && fresh) {
+        _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq);
+        return;
+    }
 
-        const [data] = await Promise.all([
-            getGuideLeaderboard(campus, cat, { shuffle }),
-            ...sideTasks,
-        ]);
-        _leaderboardCache[key] = data;
-        _guideDataLoadedAt = Date.now();
-        renderLeaderboard(data);
+    await _fetchLeaderboard(key, campus, cat, shuffle, seq);
+}
+
+function _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq) {
+    _fetchLeaderboard(key, campus, cat, shuffle, seq).catch(() => {});
+}
+
+async function _fetchLeaderboard(key, campus, cat, shuffle, seq) {
+    try {
+        const data = await getGuideLeaderboard(campus, cat, { shuffle });
+        if (seq !== _loadLeaderboardSeq) return;
+        if (key !== _cacheKey(currentGuideCampus, currentGuideCat)) return;
+        _rememberLeaderboard(key, data);
+        renderLeaderboard(data, key);
     } catch (err) {
+        if (seq !== _loadLeaderboardSeq) return;
+        if (key !== _cacheKey(currentGuideCampus, currentGuideCat)) return;
         console.error('排行榜加载失败:', err);
-        if (!stale && container) {
+        const container = document.getElementById('guideGrid');
+        const fallback = _getCachedLeaderboard(key);
+        if (fallback) {
+            renderLeaderboard(fallback, key);
+            return;
+        }
+        if (container) {
             container.innerHTML = '<div class="guide-empty">加载失败，请稍后重试</div>';
+            container.dataset.guideKey = '';
         }
         showToast('排行榜加载失败');
     }
@@ -399,6 +575,7 @@ function _syncDetailLikeBtn() {
 }
 
 function openGuideDetail(item) {
+    ensureGuideModals();
     const cachedPlaceId = resolveGuidePlaceId(item);
     if (cachedPlaceId) item = { ...item, place_id: cachedPlaceId };
     _detailItem = { ...item };
@@ -769,6 +946,9 @@ export async function refreshGuideData() {
         btn?.classList.add('refreshing');
         if (btn) btn.disabled = true;
         _leaderboardCache = {};
+        _leaderboardCacheAt = {};
+        try { sessionStorage.removeItem(GUIDE_LB_CACHE_KEY); } catch { /* ignore */ }
+        delete window.__njuatlasGuideLbWarm;
         if (isLoggedIn()) {
             await flushGuideLikeQueue();
             await refreshUserGuideLikes({ force: true });
@@ -837,7 +1017,6 @@ function initGuideModals() {
         exploreModal.addEventListener('click', (e) => {
             if (e.target === exploreModal) closeGuideExplore();
         });
-        document.getElementById('openGuideExploreBtn')?.addEventListener('click', openGuideExplore);
         document.getElementById('guideExploreSearchBtn')?.addEventListener('click', () => runGuideExploreSearch(1));
         document.getElementById('guideExploreInput')?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') runGuideExploreSearch(1);
@@ -907,16 +1086,8 @@ function initGuideCampusFilter() {
     if (!filterBar || filterBar.dataset.ready) return;
     filterBar.dataset.ready = '1';
 
-    const user = getUser();
-    const userCampus = user?.campus || '';
-    if (userCampus && ALL_CAMPUSES.includes(userCampus)) {
-        currentGuideCampus = userCampus;
-        document.querySelectorAll('#guideCampusFilter .guide-chip').forEach((chip) => {
-            const c = chip.getAttribute('data-guide-campus');
-            chip.classList.toggle('active', c === userCampus);
-            if (c === 'all') chip.classList.remove('active');
-        });
-    }
+    currentGuideCampus = DEFAULT_CAMPUS;
+    _syncCampusFilterUi();
 
     filterBar.querySelectorAll('.guide-chip').forEach((chip) => {
         chip.addEventListener('click', () => {
@@ -936,13 +1107,8 @@ function bindRefreshButton() {
 }
 
 export async function loadGuideData() {
-    initGuideModals();
-    initGuideSearchBar();
-    initGuideFilter();
-    initGuideCampusFilter();
-    bindRefreshButton();
-    if (isLoggedIn()) refreshUserGuideLikes();
     await loadLeaderboard();
+    _scheduleGuidePageExtras();
 }
 
 export function refreshGuideView() {
@@ -957,14 +1123,16 @@ export function onGuidePageHidden() {
     flushGuideLikeQueue();
 }
 
-export function prefetchGuideData() {
-    return _loadGuideConfig().catch(() => {});
+export async function prefetchGuideData() {
+    const key = entryCacheKey(DEFAULT_CAMPUS, '美食');
+    if (_getCachedLeaderboard(key) && _isCacheFresh(key)) return;
+    try {
+        const data = await getGuideLeaderboard(DEFAULT_CAMPUS, '美食');
+        _rememberLeaderboard(key, data);
+    } catch { /* ignore */ }
 }
 
 export function initGuidePage() {
-    const container = document.getElementById('guideGrid');
-    if (container && !container.querySelector('.guide-waterfall-card')) {
-        container.innerHTML = '<div class="guide-loading">加载排行榜…</div>';
-    }
+    initGuideShellHandlers();
     loadGuideData();
 }

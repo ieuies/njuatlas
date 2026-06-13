@@ -42,8 +42,10 @@ def set_place_like(place, user_id, desired_liked):
         return _like_result(place, False, changed=True)
 
     from app.services.guide_rank_cache import sync_place_rank
+    from app.services.guide import invalidate_leaderboard_cache
 
     sync_place_rank(place)
+    invalidate_leaderboard_cache()
     return _like_result(place, desired_liked, changed=True)
 
 

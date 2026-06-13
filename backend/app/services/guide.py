@@ -68,6 +68,8 @@ GUIDE_EXCLUDED_NAME_KEYWORDS = (
 _GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
     r"\([^)]*(南京大学|南大)[^)]*店\)"
 )
+_LB_RESPONSE_CACHE_TTL_SEC = 45
+_lb_response_cache = {}
 
 
 def _normalize_poi_name(name):
@@ -262,25 +264,36 @@ def enrich_guide_items(items, user_id=None, campus=None, category=None):
             places_by_id[place.id] = place
 
     places_by_name = {}
-    if category:
-        place_q = Place.query.filter(Place.guide_category == category)
-        if campus and campus not in ("", "all"):
-            place_q = place_q.filter(Place.campus == campus)
-        for place in place_q.all():
-            places_by_id[place.id] = place
-            if place.poi_id:
-                places_by_poi.setdefault(place.poi_id, place)
-            name_key = _name_addr_key(place.name, place.address)
-            if name_key:
-                places_by_name.setdefault(name_key, place)
+    if category and items:
+        item_names = list({
+            (item.get("name") or "").strip()
+            for item in items
+            if (item.get("name") or "").strip()
+        })
+        if item_names:
+            place_q = Place.query.filter(
+                Place.guide_category == category,
+                Place.name.in_(item_names),
+            )
+            if campus and campus not in ("", "all"):
+                place_q = place_q.filter(Place.campus == campus)
+            for place in place_q.all():
+                places_by_id[place.id] = place
+                if place.poi_id:
+                    places_by_poi.setdefault(place.poi_id, place)
+                name_key = _name_addr_key(place.name, place.address)
+                if name_key:
+                    places_by_name.setdefault(name_key, place)
 
     if user_id:
-        for place in (
+        liked_q = (
             db.session.query(Place)
             .join(Like, Like.place_id == Place.id)
             .filter(Like.user_id == user_id)
-            .all()
-        ):
+        )
+        if category:
+            liked_q = liked_q.filter(Place.guide_category == category)
+        for place in liked_q.all():
             places_by_id[place.id] = place
             if place.poi_id:
                 places_by_poi.setdefault(place.poi_id, place)
@@ -407,9 +420,18 @@ def fetch_db_leaderboard_candidates(campus, cat):
 
     rows = q.all()
     warm_rank_cache(campus, cat, [(place.id, likes) for place, likes in rows])
+    place_ids = [place.id for place, _likes in rows]
+    review_counts = {}
+    if place_ids:
+        review_counts = dict(
+            db.session.query(Review.place_id, func.count(Review.id))
+            .filter(Review.place_id.in_(place_ids))
+            .group_by(Review.place_id)
+            .all()
+        )
     items = []
     for place, likes in rows:
-        review_count = Review.query.filter_by(place_id=place.id).count()
+        review_count = review_counts.get(place.id, 0)
         items.append(_place_row_to_item(place, cat, campus, like_count=likes, review_count=review_count))
     return items
 
@@ -532,9 +554,19 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
     }
 
 
+def invalidate_leaderboard_cache():
+    _lb_response_cache.clear()
+
+
 def build_leaderboard(campus, cat, random_order=False, user_id=None):
     if cat not in GUIDE_CATEGORY_CONFIG:
         return []
+
+    if not random_order:
+        cache_key = (campus, cat, user_id or 0)
+        cached = _lb_response_cache.get(cache_key)
+        if cached and time.time() - cached[0] < _LB_RESPONSE_CACHE_TTL_SEC:
+            return cached[1]
 
     if campus == "all":
         sections = []
@@ -545,11 +577,18 @@ def build_leaderboard(campus, cat, random_order=False, user_id=None):
                     campus_name, cat, random_order=random_order, user_id=user_id
                 ),
             })
-        return sections
+        result = sections
+    elif campus not in GUIDE_CAMPUS_COORDS:
+        result = _build_single_campus_leaderboard("鼓楼", cat, random_order, user_id)
+    else:
+        result = _build_single_campus_leaderboard(campus, cat, random_order, user_id)
 
-    if campus not in GUIDE_CAMPUS_COORDS:
-        campus = "鼓楼"
+    if not random_order:
+        _lb_response_cache[(campus, cat, user_id or 0)] = (time.time(), result)
+    return result
 
+
+def _build_single_campus_leaderboard(campus, cat, random_order=False, user_id=None):
     db_items = fetch_db_leaderboard_candidates(campus, cat)
     if len(db_items) >= GUIDE_LEADERBOARD_LIMIT:
         return rank_leaderboard(
