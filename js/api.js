@@ -853,6 +853,9 @@ export async function getReviews() {
 export async function getMyPostComments() {
     return request('/me/post-comments', 'GET');
 }
+export async function getMyActivities() {
+    return request('/me/activities', 'GET');
+}
 
 export async function getConversationList({ silent = false, timeoutMs = 25000 } = {}) {
     return request('/me/conversations', 'GET', null, true, timeoutMs, silent);
