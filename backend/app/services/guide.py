@@ -42,6 +42,10 @@ GUIDE_CATEGORY_CONFIG = {
 }
 
 
+# AI 小南只允许检索「吃喝」相关固定分类（与 guide 页 types 完全一致）
+AI_DINING_CATEGORIES = ("美食", "咖啡饮品")
+
+
 def guide_search_city(campus):
     return "苏州" if campus == "苏州" else "南京"
 
@@ -61,8 +65,38 @@ GUIDE_EXCLUDED_NAME_KEYWORDS = (
     "南京大学",
     "南大",
     "酒店",
+    "宾馆",
+    "旅馆",
+    "青年公寓",
+    "公寓",
+    "手工店",
+    "陶艺",
+    "石膏",
+    "世界贸易",
+    "贸易中心",
+    "写字楼",
+    "商业中心",
+    "购物中心",
     "政府部门",
     "商学院",
+    "烟酒",
+    "烟草",
+    "便利店",
+)
+
+_FOOD_AMAP_TYPE_TEXT_MARKERS = (
+    "餐饮", "餐厅", "饭店", "咖啡", "奶茶", "小吃", "火锅", "烧烤",
+    "面馆", "饺子", "烘焙", "甜品", "饮品", "中餐", "西餐", "日料",
+    "韩国料理", "快餐", "早餐", "茶楼", "茶餐厅", "酒吧", "烤肉", "食堂",
+)
+_NON_FOOD_AMAP_TYPE_TEXT_MARKERS = (
+    "贸易", "写字楼", "金融", "政府", "风景名胜", "商务住宅", "公司企业",
+    "科教文化", "交通设施", "汽车服务", "医疗保健", "购物服务", "烟酒",
+)
+_RESTAURANT_NAME_MARKERS = (
+    "餐", "饭", "面", "馆", "店", "咖啡", "奶茶", "烧烤", "火锅", "小吃",
+    "厨", "灶", "食", "坊", "斋", "酒楼", "酒家", "料理", "寿司", "披萨",
+    "麦当劳", "肯德基", "星巴克", "海底捞", "必胜客", "萨莉亚", "馄饨", "水饺",
 )
 # 校外分店后缀，如「李记吊笼牛肉汤(南京大学店)」
 _GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
@@ -87,6 +121,42 @@ def is_excluded_guide_poi_name(name):
             continue
         return True
     return False
+
+
+def _parse_amap_type_codes(type_str):
+    codes = []
+    raw = str(type_str or "").strip()
+    for part in raw.split(";"):
+        part = part.strip()
+        if re.fullmatch(r"\d{6}", part):
+            codes.append(part)
+        elif re.fullmatch(r"\d{3,6}", part):
+            codes.append(part.zfill(6))
+    return codes
+
+
+def is_food_amap_poi(poi):
+    """判断高德 POI 是否属于餐饮/饮品店，过滤贸易中心、写字楼等非餐饮结果。"""
+    if not isinstance(poi, dict):
+        return False
+    name = _normalize_poi_name(poi.get("name"))
+    if not name or is_excluded_guide_poi_name(name):
+        return False
+
+    type_str = str(poi.get("type") or "").strip()
+    codes = _parse_amap_type_codes(type_str)
+    if codes:
+        return any(code.startswith("05") for code in codes)
+
+    if type_str:
+        if any(marker in type_str for marker in _NON_FOOD_AMAP_TYPE_TEXT_MARKERS):
+            return False
+        if any(marker in type_str for marker in _FOOD_AMAP_TYPE_TEXT_MARKERS):
+            return True
+        if type_str.startswith("osm:"):
+            return True
+
+    return any(marker in name for marker in _RESTAURANT_NAME_MARKERS)
 
 
 def filter_guide_items(items):
@@ -221,6 +291,8 @@ def fetch_guide_category(campus, cat, cfg=None):
         if not batch:
             break
         for poi in batch:
+            if cat in ("美食", "咖啡饮品") and not is_food_amap_poi(poi):
+                continue
             item = _poi_to_item(poi, cat, campus)
             if is_excluded_guide_poi_name(item["name"]):
                 continue
@@ -529,7 +601,10 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
         return {"items": [], "page": page, "has_more": False, "total": 0, "error": True}
 
     items = []
+    food_categories = {"美食", "咖啡饮品"}
     for poi in result.get("pois") or []:
+        if category in food_categories and not is_food_amap_poi(poi):
+            continue
         item = _poi_to_item(poi, category, effective_campus)
         if is_excluded_guide_poi_name(item["name"]):
             continue
@@ -561,6 +636,25 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
         "keyword": keyword,
         "campus_fallback": campus == "all" or campus not in GUIDE_CAMPUS_COORDS,
     }
+
+
+def search_ai_dining_places(campus, category, keyword="", user_id=None, page=1):
+    """
+    AI 小南候选检索：唯一入口，与 guide-search 相同。
+    仅允许 AI_DINING_CATEGORIES；高德 types 由 GUIDE_CATEGORY_CONFIG 固定，禁止无分类检索。
+    """
+    if category not in AI_DINING_CATEGORIES:
+        category = "美食"
+    return search_guide_places(
+        campus, category, keyword=(keyword or "").strip(), page=page, user_id=user_id,
+    )
+
+
+def fetch_ai_dining_seed(campus, category):
+    """AI 候选不足时，拉取与 guide 排行榜相同的高德种子池。"""
+    if category not in AI_DINING_CATEGORIES:
+        category = "美食"
+    return fetch_guide_category(campus, category)
 
 
 def invalidate_leaderboard_cache():

@@ -854,8 +854,8 @@ export async function getMyPostComments() {
     return request('/me/post-comments', 'GET');
 }
 
-export async function getConversationList() {
-    return request('/me/conversations', 'GET');
+export async function getConversationList({ silent = false, timeoutMs = 25000 } = {}) {
+    return request('/me/conversations', 'GET', null, true, timeoutMs, silent);
 }
 
 export async function getConversationMessages(sessionId) {

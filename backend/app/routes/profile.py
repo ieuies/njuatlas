@@ -147,42 +147,47 @@ def my_reviews():
 @jwt_required
 @limiter.limit("60 per minute")
 def my_conversations():
-    ranked = (
+    """按会话聚合最近一条消息；避免窗口函数，SQLite 下更稳更快。"""
+    user_id = g.current_user_id
+    latest_sub = (
         db.session.query(
             ConversationMessage.session_id.label("session_id"),
-            ConversationMessage.content.label("last_message"),
-            ConversationMessage.role.label("last_role"),
-            ConversationMessage.created_at.label("last_at"),
-            func.count(ConversationMessage.id)
-            .over(partition_by=ConversationMessage.session_id)
-            .label("message_count"),
-            func.row_number()
-            .over(
-                partition_by=ConversationMessage.session_id,
-                order_by=(
-                    ConversationMessage.created_at.desc(),
-                    ConversationMessage.id.desc(),
-                ),
-            )
-            .label("rn"),
+            func.max(ConversationMessage.id).label("max_id"),
         )
-        .filter(ConversationMessage.user_id == g.current_user_id)
+        .filter(ConversationMessage.user_id == user_id)
+        .group_by(ConversationMessage.session_id)
         .subquery()
     )
     rows = (
-        db.session.query(ranked)
-        .filter(ranked.c.rn == 1)
-        .order_by(ranked.c.last_at.desc())
+        db.session.query(ConversationMessage)
+        .join(latest_sub, ConversationMessage.id == latest_sub.c.max_id)
+        .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+        .all()
+    )
+    if not rows:
+        return jsonify({"items": []})
+
+    session_ids = [row.session_id for row in rows]
+    counts = dict(
+        db.session.query(
+            ConversationMessage.session_id,
+            func.count(ConversationMessage.id),
+        )
+        .filter(
+            ConversationMessage.user_id == user_id,
+            ConversationMessage.session_id.in_(session_ids),
+        )
+        .group_by(ConversationMessage.session_id)
         .all()
     )
     return jsonify({
         "items": [
             {
                 "session_id": row.session_id,
-                "last_message": row.last_message,
-                "last_role": row.last_role,
-                "last_at": _dt(row.last_at),
-                "message_count": row.message_count,
+                "last_message": row.content,
+                "last_role": row.role,
+                "last_at": _dt(row.created_at),
+                "message_count": counts.get(row.session_id, 0),
             }
             for row in rows
         ]

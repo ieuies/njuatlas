@@ -13,4 +13,5 @@ def test_health_endpoints(client):
         payload = response.get_json()
         assert payload["status"] == "ok"
         assert payload["service"] == "njuatlas-backend"
+        assert payload.get("llm_pipeline") == "v4-guide-clarify"
         assert "realtime" in payload
