@@ -84,7 +84,7 @@ services:
       - key: REGISTER_EMAIL_RESTRICTION_ENABLED
         value: "false"
       - key: REGISTER_EMAIL_SUFFIX
-        value: "@smail.nju.edu.cn,@nju.edu.cn"
+        value: "@smail.nju.edu.cn,@nju.edu.cn,@163.com"
 
   - type: keyvalue
     name: njuatlas-redis
