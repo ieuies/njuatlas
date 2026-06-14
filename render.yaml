@@ -80,8 +80,9 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      # 注意：Blueprint 部署会以本文件为准覆盖 Dashboard 同名变量
       - key: REGISTER_EMAIL_RESTRICTION_ENABLED
-        value: "true"
+        value: "false"
       - key: REGISTER_EMAIL_SUFFIX
         value: "@smail.nju.edu.cn,@nju.edu.cn"
 
