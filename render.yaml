@@ -81,7 +81,7 @@ services:
       - key: MAIL_FROM
         sync: false
       - key: REGISTER_EMAIL_RESTRICTION_ENABLED
-        value: "false"
+        value: "true"
       - key: REGISTER_EMAIL_SUFFIX
         value: "@smail.nju.edu.cn,@nju.edu.cn"
 
