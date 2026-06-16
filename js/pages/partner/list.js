@@ -13,7 +13,7 @@ import { refreshPreviewMarkers } from './map.js';
 // 数据加载：分页从后端 API 获取帖子列表
 // ============================================================
 
-const PARTNER_SESSION_CACHE_PREFIX = 'partner_list_v1_';
+const PARTNER_SESSION_CACHE_PREFIX = 'partner_list_v2_';
 
 function _isCacheFresh(entry) {
     if (!entry?.at) return false;
@@ -286,7 +286,7 @@ export function prefetchPartnerList() {
     if (partnerStore._prefetchPromise) return partnerStore._prefetchPromise;
     partnerStore._prefetchPromise = (async () => {
         try {
-            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'hot' });
+            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'nearby' });
             const posts = (result.items || []).map(mapPost);
             _writeListCacheFor('all', '', posts, posts.length === PAGE_SIZE, 1);
         } catch (e) {
@@ -322,7 +322,7 @@ export async function loadPostsByPage(page, append = false, { background = false
         const params = {
             page: page,
             page_size: PAGE_SIZE,
-            sort: 'hot',
+            sort: 'nearby',
         };
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;
@@ -771,7 +771,7 @@ export async function silentRefreshCurrentPage() {
         const params = {
             page: partnerStore.currentPage,
             page_size: PAGE_SIZE,
-            sort: 'hot',
+            sort: 'nearby',
         };
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;

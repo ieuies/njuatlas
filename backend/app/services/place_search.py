@@ -35,6 +35,16 @@ def expand_keyword_search_terms(keywords):
     return expanded[:6]
 
 
+def parse_location(loc):
+    """解析 \"lng,lat\" 字符串，供帖子距离排序等模块复用。"""
+    return _parse_loc(loc)
+
+
+def distance_m(origin_lng, origin_lat, poi_loc):
+    """两点间球面距离（米）。"""
+    return _distance_m(origin_lng, origin_lat, poi_loc)
+
+
 def _parse_loc(loc):
     if not loc or "," not in str(loc):
         return None, None

@@ -25,7 +25,12 @@ from app.models import (
     User,
     UserTag,
 )
-from app.services.scoring import compute_hot, filter_active
+from app.services.scoring import (
+    compute_hot,
+    filter_active,
+    nearby_sort_key,
+    resolve_campus_origin,
+)
 from app.services.social import user_avatar_url
 
 
@@ -594,16 +599,24 @@ class NoteSystem:
         - type:      'event' / 'forum'，不传则全类型
         - tags:      标签名列表，如 ['羽毛球','仙林']，AND 逻辑
         - place_id:  只查关联了某个场所的帖子
-        - sort:      'hot'（热度）/ 'new'（最新）/ 'nearby'（距离，需传 lat/lng）
-        - lat, lng:  用户当前坐标，用于 nearby 排序
-        - radius:    地理半径（米），仅当 sort='nearby' 时生效
+        - sort:      'hot'（热度）/ 'new'（最新）/ 'nearby'（距离+分层+热度，按浏览者校区）
+        - lat, lng:  保留参数；nearby 排序使用浏览者资料校区，不读 GPS
+        - radius:    地理半径（米），nearby 当前未用于过滤
         - user_id:   只看某用户发的帖
         - keyword:   关键词，匹配标题/正文/地点/预算/标签/发布者
         - page, page_size: 分页
         """
+        viewer_campus = None
+        if sort == "nearby":
+            viewer_campus = self._resolve_viewer_campus()
+
         # ── 缓存：相同查询参数 45 秒内直接返回（按浏览者区分点赞/收藏状态）──
         cache_key = json.dumps(
-            [type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, keyword, self.user_id],
+            [
+                type, tags, place_id, sort, lat, lng, radius, user_id,
+                page, page_size, keyword, self.user_id,
+                viewer_campus if sort == "nearby" else None,
+            ],
             sort_keys=True,
             default=str,
         )
@@ -658,24 +671,27 @@ class NoteSystem:
         # 过滤已过期帖子（立即超时 / 指定时间已过）
         q = filter_active(q, EventPost)
 
-        # 排序
-        if sort == "new":
-            q = q.order_by(EventPost.created_at.desc())
-        elif sort == "nearby":
-            # 附近排序：先用 place_id 做地理粗筛，后续可加 GeoHash 优化
-            q = q.order_by(EventPost.hot_score.desc())  # 暂时退化为热度排序
-        elif sort == "random":
-            from sqlalchemy import func
-            q = q.order_by(func.random())
-        else:
-            # 默认 hot
-            q = q.order_by(EventPost.hot_score.desc())
-
         # 预加载用户信息，避免 to_dict() 中 m.user 触发 N 次懒查询
         q = q.options(selectinload(EventPost.user))
-        # 用 limit/offset 代替 paginate()，跳过不必要的 COUNT 查询
-        q = q.limit(page_size).offset((page - 1) * page_size)
-        rows = q.all()
+
+        # 排序与分页
+        if sort == "nearby":
+            origin_lng, origin_lat = resolve_campus_origin(viewer_campus)
+            all_rows = q.all()
+            all_rows.sort(key=lambda m: nearby_sort_key(m, origin_lng, origin_lat))
+            offset = (page - 1) * page_size
+            rows = all_rows[offset:offset + page_size]
+        else:
+            if sort == "new":
+                q = q.order_by(EventPost.created_at.desc())
+            elif sort == "random":
+                from sqlalchemy import func
+                q = q.order_by(func.random())
+            else:
+                # 默认 hot
+                q = q.order_by(EventPost.hot_score.desc())
+            q = q.limit(page_size).offset((page - 1) * page_size)
+            rows = q.all()
 
         # ── 批量预加载关联数据，避免 N+1 查询 ──────────────────
         post_ids = [m.id for m in rows]
@@ -739,6 +755,13 @@ class NoteSystem:
         }
         _SEARCH_CACHE[cache_key] = (now, result)
         return result
+
+    def _resolve_viewer_campus(self):
+        """nearby 排序：取当前浏览者资料校区，未登录或未设置则 None（回退鼓楼）。"""
+        if not self.user_id:
+            return None
+        campus = db.session.query(User.campus).filter_by(id=self.user_id).scalar()
+        return (campus or "").strip() or None
 
     # ── 场所关联帖子 ──────────────────────────────────────────
     def posts_for_place(self, place_id, page=1, page_size=10):
