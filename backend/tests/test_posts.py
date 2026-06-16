@@ -151,6 +151,53 @@ def test_nearby_sort_tiers(client, auth_a, auth_b):
     assert ids.index(long_term) < ids.index(full_event)
 
 
+def test_nearby_participated_posts_rank_first(client, auth_a, auth_b):
+    """nearby：当前用户已报名的帖子（含满员）排在未报名帖之前。"""
+    client.put(
+        "/api/me/profile",
+        json={"campus": "仙林"},
+        headers=auth_a,
+    )
+    client.put(
+        "/api/me/profile",
+        json={"campus": "仙林"},
+        headers=auth_b,
+    )
+    _clear_post_search_cache()
+
+    near_open = _create_post(
+        client, auth_a,
+        title="近-可报名", content="open", tags=["报名排序"],
+        urgency="now", location="118.950,32.110",
+    ).get_json()["id"]
+    full_joined = _create_post(
+        client, auth_a,
+        title="近-已满我报名", content="full joined", tags=["报名排序"],
+        type="event", urgency="now", location="118.950,32.110",
+        slots=2,
+    ).get_json()["id"]
+    client.post(
+        f"/api/posts/{full_joined}/participate",
+        json={"status": "going"},
+        headers=auth_b,
+    )
+    _clear_post_search_cache()
+
+    listed_b = client.get(
+        "/api/posts?sort=nearby&page=1&page_size=20&tags=报名排序",
+        headers=auth_b,
+    )
+    ids_b = [item["id"] for item in listed_b.get_json()["items"]]
+    assert ids_b.index(full_joined) < ids_b.index(near_open)
+
+    listed_a = client.get(
+        "/api/posts?sort=nearby&page=1&page_size=20&tags=报名排序",
+        headers=auth_a,
+    )
+    ids_a = [item["id"] for item in listed_a.get_json()["items"]]
+    assert ids_a.index(near_open) < ids_a.index(full_joined)
+
+
 def test_participation_full_flag(client, auth_a, auth_b, auth_c):
     """满员时 is_full 对未报名用户为 true，对已报名用户为 false。"""
     created = _create_post(

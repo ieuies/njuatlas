@@ -719,7 +719,24 @@ class NoteSystem:
         if sort == "nearby":
             origin_lng, origin_lat = resolve_campus_origin(viewer_campus)
             all_rows = q.all()
-            all_rows.sort(key=lambda m: nearby_sort_key(m, origin_lng, origin_lat))
+            participated_ids = set()
+            if self.user_id and all_rows:
+                row_ids = [m.id for m in all_rows]
+                participated_ids = {
+                    p.post_id
+                    for p in EventParticipant.query.filter(
+                        EventParticipant.post_id.in_(row_ids),
+                        EventParticipant.user_id == self.user_id,
+                    ).all()
+                }
+            all_rows.sort(
+                key=lambda m: nearby_sort_key(
+                    m,
+                    origin_lng,
+                    origin_lat,
+                    user_participated=m.id in participated_ids,
+                )
+            )
             offset = (page - 1) * page_size
             rows = all_rows[offset:offset + page_size]
         else:

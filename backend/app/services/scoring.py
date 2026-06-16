@@ -147,13 +147,18 @@ def post_distance_m(post, origin_lng, origin_lat):
     return distance_m(origin_lng, origin_lat, loc)
 
 
-def nearby_sort_key(post, origin_lng, origin_lat):
-    """找搭子 nearby 排序键：(tier, distance, -hot_score, -id)。"""
+def nearby_sort_key(post, origin_lng, origin_lat, *, user_participated=False):
+    """找搭子 nearby 排序键。
+
+    已登录且已报名的帖子优先于「满员沉底」规则；同组内仍按距离与热度。
+    """
+    participated_rank = 0 if user_participated else 1
+    tier = 0 if user_participated else post_list_tier(post)
     dist = post_distance_m(post, origin_lng, origin_lat)
     dist_key = dist if dist is not None else _NO_LOCATION_DISTANCE
     hot = getattr(post, "hot_score", 0) or 0
     pid = getattr(post, "id", 0) or 0
-    return (post_list_tier(post), dist_key, -hot, -pid)
+    return (participated_rank, tier, dist_key, -hot, -pid)
 
 
 def filter_active(query, model):
