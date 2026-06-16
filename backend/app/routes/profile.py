@@ -140,6 +140,7 @@ def my_favorites():
             "post": _post_payload(row.post),
         }
         for row in post_rows
+        if row.post is not None
     ]
     items.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return jsonify({

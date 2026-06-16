@@ -17,6 +17,8 @@ from app import db
 from app.models import (
     EventPost,
     EventParticipant,
+    MatchRecord,
+    Notification,
     PostComment,
     PostFavorite,
     PostLike,
@@ -93,6 +95,19 @@ class SingleNote:
         """展示与校验口径的人数上限（含发起人，且至少 2）。"""
         return max(self._m.max_participants or 2, 2)
 
+    def participation_full_for_user(self, user_id=None, participation_status=None):
+        """是否应对当前用户展示「已满员」（已报名用户仍可取消）。"""
+        if self.participant_total_count < self.participant_limit_total:
+            return False
+        if participation_status is None and user_id:
+            part = EventParticipant.query.filter_by(
+                post_id=self._m.id, user_id=user_id
+            ).first()
+            participation_status = part.status if part else None
+        if participation_status == "going":
+            return False
+        return True
+
     # ── 持久化 ────────────────────────────────────────────────
     def save(self):
         """将帖子写入数据库（新建或更新），并同步 post_tags 关联。
@@ -166,11 +181,31 @@ class SingleNote:
     def delete(self):
         """删除帖子及其所有关联数据。"""
         post_id = self._m.id
+
+        # 标签关联：减 usage_count 后删除
+        old_tags = (
+            PostTag.query.filter_by(post_id=post_id)
+            .options(joinedload(PostTag.tag))
+            .all()
+        )
+        for pt in old_tags:
+            if pt.tag:
+                pt.tag.usage_count = max(0, (pt.tag.usage_count or 0) - 1)
         PostTag.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+
+        # 评论：先删回复再删顶级，避免 post_comments.parent_id 自引用冲突
+        PostComment.query.filter(
+            PostComment.post_id == post_id,
+            PostComment.parent_id.isnot(None),
+        ).delete(synchronize_session=False)
         PostComment.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+
         PostLike.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         PostFavorite.query.filter_by(post_id=post_id).delete(synchronize_session=False)
         EventParticipant.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        Notification.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+        MatchRecord.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+
         db.session.delete(self._m)
         db.session.commit()
         _clear_search_cache()
@@ -456,6 +491,12 @@ class SingleNote:
                     post_id=m.id, user_id=current_user_id
                 ).first()
                 result["participation_status"] = part.status if part else None
+
+        participation_status = result.get("participation_status")
+        result["is_full"] = self.participation_full_for_user(
+            current_user_id,
+            participation_status=participation_status if current_user_id else None,
+        )
 
         # 可选：附带场所信息
         if include_place and m.place:

@@ -5,7 +5,7 @@ import {
     partnerStore, PAGE_SIZE, LIST_CACHE_TTL_MS, FULL_LIST_CACHE_TTL_MS, LIST_RENDER_BATCH,
     partnerListCache, partnerListCacheKey,
 } from './shared.js';
-import { mapPost, typeLabel, isCurrentUserOwner } from './shared.js';
+import { mapPost, typeLabel, isCurrentUserOwner, isPostParticipationFull } from './shared.js';
 import { openPostDetail } from './post-detail.js';
 import { refreshPreviewMarkers } from './map.js';
 
@@ -36,21 +36,21 @@ function _hydrateSessionCache(key) {
     }
 }
 
-function _writeListCacheFor(category, searchQuery, posts, hasMore, pagesLoaded = 1) {
-    const key = partnerListCacheKey(category, searchQuery, 1);
+function _writeListCacheFor(category, searchQuery, page, posts, hasMore) {
+    const key = partnerListCacheKey(category, searchQuery, page);
     const entry = {
         at: Date.now(),
         posts,
         hasMore,
-        pagesLoaded,
+        page,
         fullyLoaded: !hasMore,
     };
     partnerListCache.set(key, entry);
     _persistSessionCache(key, entry);
 }
 
-function _getCategoryCache(category, searchQuery) {
-    const key = partnerListCacheKey(category, searchQuery, 1);
+function _getPageCache(category, searchQuery, page) {
+    const key = partnerListCacheKey(category, searchQuery, page);
     let cached = partnerListCache.get(key);
     if (!cached) {
         cached = _hydrateSessionCache(key);
@@ -59,18 +59,18 @@ function _getCategoryCache(category, searchQuery) {
     return cached;
 }
 
-function _writeListCache(posts, hasMore, pagesLoaded = partnerStore.currentPage) {
+function _writeListCache(posts, hasMore, page = partnerStore.currentPage) {
     _writeListCacheFor(
         partnerStore.currentCategory,
         partnerStore.searchQuery,
+        page,
         posts,
         hasMore,
-        pagesLoaded,
     );
 }
 
-function _readListCache() {
-    return _getCategoryCache(partnerStore.currentCategory, partnerStore.searchQuery);
+function _readListCache(page = partnerStore.currentPage) {
+    return _getPageCache(partnerStore.currentCategory, partnerStore.searchQuery, page);
 }
 
 /** 发布/编辑/删除后清掉列表缓存，避免 loadPostsByPage 读到旧数据 */
@@ -220,55 +220,37 @@ async function _deletePostCard(postId) {
     }
 }
 
-function _filterPostsByCategory(posts, category) {
-    if (category === 'all') return posts;
-    return posts.filter(p => p.tags.includes(category));
-}
-
-function _resolveCategoryPosts(category, searchQuery) {
-    const direct = _getCategoryCache(category, searchQuery);
+function _resolveCategoryPosts(category, searchQuery, page = 1) {
+    const direct = _getPageCache(category, searchQuery, page);
     if (direct?.posts) {
         return {
             posts: direct.posts,
             hasMore: direct.hasMore,
-            pagesLoaded: direct.pagesLoaded || 1,
+            page: direct.page || page,
             stale: !_isCacheFresh(direct),
         };
-    }
-
-    if (category !== 'all' && !searchQuery) {
-        const allCached = _getCategoryCache('all', '');
-        if (allCached?.fullyLoaded && allCached.posts?.length) {
-            const filtered = _filterPostsByCategory(allCached.posts, category);
-            _writeListCacheFor(category, '', filtered, false, allCached.pagesLoaded || 1);
-            return {
-                posts: filtered,
-                hasMore: false,
-                pagesLoaded: allCached.pagesLoaded || 1,
-                stale: !_isCacheFresh(allCached),
-            };
-        }
     }
     return null;
 }
 
 function _applyCachedCategoryView(category, searchQuery) {
-    const resolved = _resolveCategoryPosts(category, searchQuery);
+    const resolved = _resolveCategoryPosts(category, searchQuery, 1);
     if (!resolved) return false;
 
     partnerStore.allPartnersData = resolved.posts;
     partnerStore.partnersData = resolved.posts;
     partnerStore.hasMore = resolved.hasMore;
-    partnerStore.currentPage = resolved.pagesLoaded;
+    partnerStore.currentPage = 1;
     renderWaterfall();
+    renderPartnerPagination();
     refreshPreviewMarkers();
     if (resolved.stale) {
-        loadPostsByPage(1, false, { background: true });
+        loadPostsByPage(1, { background: true });
     }
     return true;
 }
 
-export function showPartnerSkeleton(count = 6) {
+export function showPartnerSkeleton(count = PAGE_SIZE) {
     const container = document.getElementById('partnerWaterfall');
     if (!container) return;
     container.innerHTML = Array.from({ length: count }, () => (
@@ -288,7 +270,7 @@ export function prefetchPartnerList() {
         try {
             const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'nearby' });
             const posts = (result.items || []).map(mapPost);
-            _writeListCacheFor('all', '', posts, posts.length === PAGE_SIZE, 1);
+            _writeListCacheFor('all', '', 1, posts, posts.length === PAGE_SIZE);
         } catch (e) {
             partnerStore._prefetchPromise = null;
         }
@@ -296,31 +278,36 @@ export function prefetchPartnerList() {
     return partnerStore._prefetchPromise;
 }
 
-/** 根据当前分类加载指定页码的数据，append=true 时追加到缓存并追加渲染，否则重置 */
-export async function loadPostsByPage(page, append = false, { background = false, forceRefresh = false } = {}) {
+/** 加载指定页（每页 PAGE_SIZE 条，默认 9 条） */
+export async function loadPostsByPage(page, { background = false, forceRefresh = false } = {}) {
     if (partnerStore.isLoading && !background) return [];
+    if (page < 1) page = 1;
 
-    if (!append && page === 1 && !background && !forceRefresh) {
-        const cached = _readListCache();
+    if (!background && !forceRefresh) {
+        const cached = _readListCache(page);
         if (cached?.posts) {
             partnerStore.allPartnersData = cached.posts;
             partnerStore.partnersData = cached.posts;
             partnerStore.hasMore = cached.hasMore;
-            partnerStore.currentPage = cached.pagesLoaded || 1;
+            partnerStore.currentPage = page;
             renderWaterfall();
+            renderPartnerPagination();
+            refreshPreviewMarkers();
             if (!_isCacheFresh(cached)) {
-                loadPostsByPage(1, false, { background: true });
+                loadPostsByPage(page, { background: true });
             }
             return cached.posts;
         }
-        showPartnerSkeleton();
     }
 
-    if (!background) partnerStore.isLoading = true;
+    if (!background) {
+        partnerStore.isLoading = true;
+        showPartnerSkeleton(PAGE_SIZE);
+    }
 
     try {
         const params = {
-            page: page,
+            page,
             page_size: PAGE_SIZE,
             sort: 'nearby',
         };
@@ -339,27 +326,24 @@ export async function loadPostsByPage(page, append = false, { background = false
         }
 
         partnerStore.hasMore = newPosts.length === PAGE_SIZE;
+        partnerStore.currentPage = page;
+        partnerStore.allPartnersData = newPosts;
+        partnerStore.partnersData = newPosts;
 
-        if (append) {
-            partnerStore.allPartnersData.push(...newPosts);
-            partnerStore.partnersData = partnerStore.allPartnersData;
-            appendWaterfallCards(newPosts);
-            _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, page);
+        if (!background) {
+            renderWaterfall();
+            renderPartnerPagination();
         } else {
-            const prevIds = background
-                ? partnerStore.allPartnersData.map(p => p.id).join(',')
-                : '';
-            partnerStore.allPartnersData = newPosts;
-            partnerStore.partnersData = partnerStore.allPartnersData;
+            const prevIds = (_readListCache(page)?.posts || []).map(p => p.id).join(',');
             const nextIds = newPosts.map(p => p.id).join(',');
-            // 后台刷新：仅当帖子集合变化时才整页重绘，避免冲掉刚发布/删除的乐观更新
-            if (!background) {
+            if (prevIds !== nextIds) {
                 renderWaterfall();
-            } else if (prevIds !== nextIds) {
-                renderWaterfall();
+                renderPartnerPagination();
             }
-            _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, page);
         }
+
+        _writeListCache(newPosts, partnerStore.hasMore, page);
+        refreshPreviewMarkers();
         return newPosts;
     } catch (err) {
         if (!background) {
@@ -371,17 +355,68 @@ export async function loadPostsByPage(page, append = false, { background = false
         if (!background) partnerStore.isLoading = false;
     }
 }
-/** 追加渲染新卡片到瀑布流末尾（不重建全部） */
-function appendWaterfallCards(posts) {
-    const container = document.getElementById('partnerWaterfall');
-    if (!container) return;
 
-    const fragment = document.createDocumentFragment();
-    posts.forEach(p => {
-        fragment.appendChild(createPostCardElement(p));
+let _paginationBound = false;
+
+export function initPartnerPagination() {
+    if (_paginationBound) return;
+    const nav = document.getElementById('partnerPagination');
+    if (!nav) return;
+    _paginationBound = true;
+    nav.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn || btn.disabled) return;
+        if (btn.dataset.action === 'prev') {
+            goToPartnerPage(partnerStore.currentPage - 1);
+        } else if (btn.dataset.action === 'next') {
+            goToPartnerPage(partnerStore.currentPage + 1);
+        } else if (btn.dataset.page) {
+            goToPartnerPage(parseInt(btn.dataset.page, 10));
+        }
     });
-    container.appendChild(fragment);
-    bindCardEvents(container);
+}
+
+export function renderPartnerPagination() {
+    const nav = document.getElementById('partnerPagination');
+    if (!nav) return;
+
+    const page = partnerStore.currentPage;
+    const hasPrev = page > 1;
+    const hasNext = partnerStore.hasMore;
+    const hasPosts = partnerStore.allPartnersData.length > 0;
+
+    if (!hasPosts && !hasPrev) {
+        nav.hidden = true;
+        nav.innerHTML = '';
+        return;
+    }
+
+    nav.hidden = false;
+    const pages = new Set([page]);
+    if (hasPrev) pages.add(page - 1);
+    if (hasNext) pages.add(page + 1);
+    const pageNums = [...pages].sort((a, b) => a - b);
+
+    nav.innerHTML = `
+        <button type="button" class="partner-pagination-btn" data-action="prev" ${hasPrev ? '' : 'disabled'} aria-label="上一页">‹</button>
+        ${pageNums.map((p) => (
+            `<button type="button" class="partner-pagination-btn${p === page ? ' is-active' : ''}" data-page="${p}">${p}</button>`
+        )).join('')}
+        <button type="button" class="partner-pagination-btn" data-action="next" ${hasNext ? '' : 'disabled'} aria-label="下一页">›</button>
+        <span class="partner-pagination-info">第 ${page} 页 · 每页 ${PAGE_SIZE} 条</span>
+    `;
+}
+
+export async function goToPartnerPage(page) {
+    if (page < 1 || partnerStore.isLoading) return;
+    if (page > partnerStore.currentPage && !partnerStore.hasMore) return;
+    await loadPostsByPage(page);
+    const scroller = getAppScroller();
+    const anchor = document.getElementById('partnerWaterfall') || document.getElementById('partnerPagination');
+    if (anchor && scroller) {
+        const top = anchor.getBoundingClientRect().top + scroller.scrollTop - 72;
+        scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
 }
 
 /** 创建单个卡片 DOM 元素 */
@@ -441,8 +476,8 @@ function createPostCardElement(p) {
                 </div>
                 ${p.isOwner ? `
                     <button class="join-btn owner-delete-btn" data-id="${p.id}"><i class="fas fa-trash-can" aria-hidden="true"></i> 删除活动</button>
-                ` : (p.type === 'event' && p.members >= p.slots && p.participationStatus !== 'going') ? `
-                    <button class="join-btn" disabled style="opacity:0.5;cursor:not-allowed;"><i class="fas fa-ban" aria-hidden="true"></i> 已满员</button>
+                ` : (p.isFull && p.participationStatus !== 'going') ? `
+                    <button class="join-btn join-btn--full" disabled style="opacity:0.5;cursor:not-allowed;"><i class="fas fa-ban" aria-hidden="true"></i> 已满员</button>
                 ` : `
                     <button class="join-btn" data-id="${p.id}">${p.participationStatus === 'going' ? '<i class="fas fa-circle-check" aria-hidden="true"></i> 已报名·点此取消' : '我要参加'}</button>
                 `}
@@ -458,7 +493,7 @@ function bindCardEvents(container) {
         btn.removeEventListener('click', _deleteHandler);
         btn.addEventListener('click', _deleteHandler);
     });
-    container.querySelectorAll('.join-btn:not(.owner-delete-btn)').forEach(btn => {
+    container.querySelectorAll('.join-btn:not(.owner-delete-btn):not(.join-btn--full)').forEach(btn => {
         btn.removeEventListener('click', _joinHandler);
         btn.addEventListener('click', _joinHandler);
     });
@@ -522,6 +557,7 @@ function renderWaterfall() {
         container.innerHTML = q
             ? `<div class="partner-empty-state">未找到与「${escapeHtml(q)}」相关的帖子，试试换个关键词</div>`
             : '<div class="partner-empty-state">暂无组局，快来发起第一个吧~</div>';
+        renderPartnerPagination();
         return;
     }
 
@@ -540,6 +576,7 @@ function renderWaterfall() {
             requestAnimationFrame(paintBatch);
         } else {
             bindCardEvents(container);
+            renderPartnerPagination();
         }
     };
 
@@ -576,7 +613,7 @@ export async function switchCategory(category) {
     const container = document.getElementById('partnerWaterfall');
     if (container) showPartnerSkeleton();
 
-    await loadPostsByPage(1, false);
+    await loadPostsByPage(1);
     refreshPreviewMarkers();
 }
 
@@ -605,7 +642,7 @@ export async function switchSearch(query) {
     const container = document.getElementById('partnerWaterfall');
     if (container) showPartnerSkeleton();
 
-    await loadPostsByPage(1, false);
+    await loadPostsByPage(1);
     refreshPreviewMarkers();
 }
 
@@ -613,11 +650,35 @@ export async function switchSearch(query) {
 // ============================================================
 // 参与活动 & 删除帖子等操作（需刷新分页缓存）
 // ============================================================
-function _updateSingleCardDOM(postId, status, participantCount, slots) {
+function _updateSingleCardDOM(postId, status, participantCount, slots, isFull) {
     const card = document.querySelector(`.partner-card[data-id="${postId}"]`);
     if (!card) return;
-    const btn = card.querySelector('.join-btn:not(.owner-delete-btn)');
+    let btn = card.querySelector('.join-btn:not(.owner-delete-btn)');
+    const showFull = (typeof isFull === 'boolean' ? isFull : participantCount >= slots) && status !== 'going';
+    if (showFull) {
+        if (!btn) return;
+        btn.className = 'join-btn join-btn--full';
+        btn.removeAttribute('data-id');
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i> 已满员';
+        btn.replaceWith(btn.cloneNode(true));
+        return;
+    }
+    if (btn?.classList.contains('join-btn--full')) {
+        const replacement = document.createElement('button');
+        replacement.className = 'join-btn';
+        replacement.setAttribute('data-id', String(postId));
+        btn.replaceWith(replacement);
+        btn = replacement;
+        btn.addEventListener('click', _joinHandler);
+    }
     if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+        btn.setAttribute('data-id', String(postId));
         btn.innerHTML = status === 'going'
             ? '<i class="fas fa-circle-check" aria-hidden="true"></i> 已报名·点此取消'
             : '我要参加';
@@ -626,6 +687,25 @@ function _updateSingleCardDOM(postId, status, participantCount, slots) {
     if (statSpans.length >= 4) {
         statSpans[3].innerHTML = `<i class="fas fa-user" aria-hidden="true"></i> ${participantCount}/${slots}`;
     }
+}
+
+export function syncPostInListFromApi(apiPost) {
+    if (!apiPost?.id) return null;
+    const mapped = mapPost(apiPost);
+    const idx = partnerStore.allPartnersData.findIndex((p) => p.id === mapped.id);
+    if (idx >= 0) {
+        partnerStore.allPartnersData[idx] = { ...partnerStore.allPartnersData[idx], ...mapped };
+        partnerStore.partnersData = partnerStore.allPartnersData;
+    }
+    _updateSingleCardDOM(
+        mapped.id,
+        mapped.participationStatus,
+        mapped.members,
+        mapped.slots,
+        mapped.isFull,
+    );
+    _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, partnerStore.currentPage);
+    return mapped;
 }
 
 export async function handleParticipate(postId) {
@@ -644,7 +724,13 @@ export async function handleParticipate(postId) {
             showToast('已取消报名');
         }
         const post = partnerStore.allPartnersData.find(p => p.id === postId);
-        _updateSingleCardDOM(postId, result.status, post?.members || 0, post?.slots || 2);
+        _updateSingleCardDOM(
+            postId,
+            result.status,
+            post?.members || 0,
+            post?.slots || 2,
+            post?.isFull,
+        );
         _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, partnerStore.currentPage);
         // 后台静默刷新当前页面数据（不重置分页，仅更新缓存）
         silentRefreshCurrentPage();
@@ -663,6 +749,11 @@ export function applyParticipationResult(postId, result) {
         post.members += 1;
     } else if (result.status === null && post.members > 0) {
         post.members -= 1;
+    }
+    if (typeof result.is_full === 'boolean') {
+        post.isFull = result.is_full;
+    } else {
+        post.isFull = isPostParticipationFull(post);
     }
 }
 
@@ -764,58 +855,9 @@ async function handleToggleFavorite(postId, clickedBtn = null) {
 }
 
 export async function silentRefreshCurrentPage() {
-    // 静默重新加载当前页码的数据，更新缓存但不改变 UI 滚动位置
     if (partnerStore.isLoading) return;
-    partnerStore.isLoading = true;
-    try {
-        const params = {
-            page: partnerStore.currentPage,
-            page_size: PAGE_SIZE,
-            sort: 'nearby',
-        };
-        if (partnerStore.currentCategory !== 'all') {
-            params.tags = partnerStore.currentCategory;
-        }
-        if (partnerStore.searchQuery) {
-            params.q = partnerStore.searchQuery;
-        }
-        const result = await listPosts(params);
-        const newPosts = (result.items || []).map(mapPost);
-        // 替换当前页在缓存中的部分（简单做法：整体重新拉取并重置全部，但保留已加载的页数？为了简单，重置整个缓存为第一页）
-        // 更严谨：只更新当前页对应的条目，但为了保持简单且不错位，这里重置缓存并重新加载第一页，同时重置滚动位置。
-        // 注意：这会丢失之前已加载的后续页面，但保证了数据一致性，体验尚可。
-        partnerStore.currentPage = 1;
-        partnerStore.allPartnersData = newPosts;
-        partnerStore.partnersData = partnerStore.allPartnersData;
-        partnerStore.hasMore = newPosts.length === PAGE_SIZE;
-        _writeListCache(partnerStore.allPartnersData, partnerStore.hasMore, 1);
-        renderWaterfall();
-        refreshPreviewMarkers();
-    } catch (err) {
-        console.warn('静默刷新失败', err);
-    } finally {
-        partnerStore.isLoading = false;
-    }
+    await loadPostsByPage(partnerStore.currentPage, { forceRefresh: true });
 }
 
-// ============================================================
-// 滚动分页监听（触底加载更多）
-// ============================================================
-let scrollTimeout = null;
-export function handleScroll() {
-    if (scrollTimeout) return;
-    scrollTimeout = setTimeout(async () => {
-        const scroller = getAppScroller();
-        const scrollTop = scroller.scrollTop;
-        const winHeight = scroller.clientHeight;
-        const docHeight = scroller.scrollHeight;
-
-        if (scrollTop + winHeight >= docHeight - 300) {
-            if (!partnerStore.isLoading && partnerStore.hasMore) {
-                partnerStore.currentPage++;
-                await loadPostsByPage(partnerStore.currentPage, true);
-            }
-        }
-        scrollTimeout = null;
-    }, 120);
-}
+/** 已改为底部分页栏，保留空实现避免旧引用报错 */
+export function handleScroll() {}

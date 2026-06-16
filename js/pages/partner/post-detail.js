@@ -5,7 +5,8 @@ import {
 } from '../../api.js';
 import { partnerStore } from './shared.js';
 import { formatPostTime, isCurrentUserOwner, safeHtmlWithBreaks } from './shared.js';
-import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList } from './list.js';
+import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList, syncPostInListFromApi } from './list.js';
+import { isPostParticipationFull } from './shared.js';
 import { refreshPreviewMarkers } from './map.js';
 import { openEditPostModal } from './partner-form.js';
 
@@ -155,9 +156,9 @@ export function initPostDetailModal() {
         const newStatus = prevStatus === 'going' ? null : 'going';
         currentDetailPost.participation_status = newStatus;
         currentDetailPost.participant_count = newStatus === 'going' ? prevCount + 1 : Math.max(0, prevCount - 1);
+        currentDetailPost.is_full = isPostParticipationFull(currentDetailPost);
         _updateDetailStats();
-        participateBtn.textContent = newStatus === 'going' ? '已报名，点击取消' : '我要参加';
-        participateBtn.classList.toggle('going', newStatus === 'going');
+        _applyDetailParticipateButton(currentDetailPost);
         const user = getUser();
         if (user && user.username) {
             _optimisticUpdateParticipants(newStatus, user);
@@ -166,19 +167,19 @@ export function initPostDetailModal() {
             const result = await participateEvent(currentDetailPost.id, 'going');
             currentDetailPost.participation_status = result.status;
             currentDetailPost.participant_count = result.participant_count;
+            if (typeof result.is_full === 'boolean') {
+                currentDetailPost.is_full = result.is_full;
+            }
             applyParticipationResult(currentDetailPost.id, result);
             _updateDetailStats();
-            const going = result.status === 'going';
-            participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
-            participateBtn.classList.toggle('going', going);
+            _applyDetailParticipateButton(currentDetailPost);
             _refreshDetailParticipants(currentDetailPost.id);
             silentRefreshCurrentPage();
         } catch (err) {
             currentDetailPost.participation_status = prevStatus;
             currentDetailPost.participant_count = prevCount;
             _updateDetailStats();
-            participateBtn.textContent = prevStatus === 'going' ? '已报名，点击取消' : '我要参加';
-            participateBtn.classList.toggle('going', prevStatus === 'going');
+            _applyDetailParticipateButton(currentDetailPost);
             _revertOptimisticParticipants(prevStatus, user);
             showToast('操作失败: ' + err.message);
         }
@@ -252,6 +253,7 @@ function _mapCachedToDetailFormat(cached) {
         is_liked: cached.isLiked,
         is_favorited: cached.isFavorited,
         participation_status: cached.participationStatus,
+        is_full: cached.isFull,
         _fromCache: true,
     };
 }
@@ -281,6 +283,7 @@ export async function openPostDetail(postId) {
     try {
         const post = await getPost(postId);
         currentDetailPost = post;
+        syncPostInListFromApi(post);
         _renderPostDetail(post);
     } catch (err) {
         if (!cached) {
@@ -393,33 +396,42 @@ function _renderPostDetail(post) {
     _applyDetailLikeUi(Boolean(post.is_liked));
     _applyDetailFavoriteUi(Boolean(post.is_favorited));
 
-    const participateBtn = document.getElementById('detailParticipateBtn');
     const ownerActions = document.getElementById('detailOwnerActions');
     const editMiniBtn = document.getElementById('detailEditMiniBtn');
-    const isFull = (post.participant_count || 0) >= (post.max_participants || 2);
+    _applyDetailParticipateButton(post);
     if (post.is_owner) {
-        participateBtn.style.display = 'none';
         if (ownerActions) ownerActions.style.display = 'flex';
         if (editMiniBtn) editMiniBtn.style.display = 'inline-flex';
-    } else if (isFull && post.participation_status !== 'going') {
-        participateBtn.style.display = 'block';
-        participateBtn.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i> 已满员';
-        participateBtn.disabled = true;
-        participateBtn.classList.remove('going');
-        if (ownerActions) ownerActions.style.display = 'none';
-        if (editMiniBtn) editMiniBtn.style.display = 'none';
     } else {
-        participateBtn.style.display = 'block';
-        participateBtn.disabled = false;
-        const going = post.participation_status === 'going';
-        participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
-        participateBtn.classList.toggle('going', going);
         if (ownerActions) ownerActions.style.display = 'none';
         if (editMiniBtn) editMiniBtn.style.display = 'none';
     }
 
     _renderDetailParticipants(post.participants || []);
     _renderDetailComments(post.comments || { items: [] });
+}
+
+function _applyDetailParticipateButton(post) {
+    const participateBtn = document.getElementById('detailParticipateBtn');
+    if (!participateBtn || !post) return;
+    if (post.is_owner) {
+        participateBtn.style.display = 'none';
+        return;
+    }
+    participateBtn.style.display = 'block';
+    const isFull = typeof post.is_full === 'boolean'
+        ? post.is_full
+        : isPostParticipationFull(post);
+    if (isFull && post.participation_status !== 'going') {
+        participateBtn.innerHTML = '<i class="fas fa-ban" aria-hidden="true"></i> 已满员';
+        participateBtn.disabled = true;
+        participateBtn.classList.remove('going');
+        return;
+    }
+    participateBtn.disabled = false;
+    const going = post.participation_status === 'going';
+    participateBtn.textContent = going ? '已报名，点击取消' : '我要参加';
+    participateBtn.classList.toggle('going', going);
 }
 
 function _updateDetailStats(postOverride) {

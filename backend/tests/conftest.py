@@ -97,3 +97,20 @@ def auth_a(user_a):
 @pytest.fixture
 def auth_b(user_b):
     return auth_header(user_b["token"])
+
+
+@pytest.fixture
+def user_c(app, client):
+    with app.app_context():
+        create_verified_user(
+            email="carol@example.com",
+            username="carol",
+            password="testpass123",
+        )
+    token = login(client, "carol@example.com", "testpass123")
+    return {"email": "carol@example.com", "username": "carol", "token": token}
+
+
+@pytest.fixture
+def auth_c(user_c):
+    return auth_header(user_c["token"])

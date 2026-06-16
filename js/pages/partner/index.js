@@ -1,6 +1,6 @@
 import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
-import { loadPostsByPage, handleScroll, handleParticipate, prefetchPartnerList } from './list.js';
+import { loadPostsByPage, handleParticipate, prefetchPartnerList, initPartnerPagination } from './list.js';
 import {
     schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap, scheduleMobileMapPrewarm,
@@ -42,7 +42,7 @@ export async function loadPartnerData() {
     partnerStore.partnerDataLoaded = true;
     // 与帖子请求并行预拉高德 SDK，地图仍在帖子完成后再初始化
     prefetchAmapScript();
-    await loadPostsByPage(1, false);
+    await loadPostsByPage(1);
     schedulePreviewMapAfterPaint();
     scheduleMobileMapPrewarm();
 }
@@ -54,6 +54,7 @@ function ensureRightPanel() {
     const searchBar = page.querySelector('.partner-search-bar');
     const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
+    const pagination = page.querySelector('.partner-pagination');
     if (!container || !waterfall) return;
 
     let panel = page.querySelector('.partner-right-panel');
@@ -64,17 +65,20 @@ function ensureRightPanel() {
         if (searchBar) panel.appendChild(searchBar);
         panel.appendChild(container);
         panel.appendChild(waterfall);
+        if (pagination) panel.appendChild(pagination);
         return;
     }
 
     if (searchBar && searchBar.parentElement !== panel) panel.insertBefore(searchBar, panel.firstChild);
     if (container.parentElement !== panel) panel.appendChild(container);
     if (waterfall.parentElement !== panel) panel.appendChild(waterfall);
+    if (pagination && pagination.parentElement !== panel) panel.appendChild(pagination);
 }
 
 export async function initPartnerPage() {
     initPartnerModal();
     initPostDetailModal();
+    initPartnerPagination();
 
     setupCategoryScrollArrows();
     ensureRightPanel();
@@ -94,9 +98,6 @@ export async function initPartnerPage() {
         window.addEventListener('resize', () => {
             setTimeout(() => window._refreshCategoryArrows?.(), 150);
         });
-        const scroller = document.getElementById('contentArea');
-        const scrollTarget = scroller || window;
-        scrollTarget.addEventListener('scroll', handleScroll, { passive: true });
     }
 }
 

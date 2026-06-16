@@ -429,6 +429,10 @@ def participate(post_id):
     return jsonify({
         "status": result,
         "participant_count": note.participant_total_count,
+        "is_full": note.participation_full_for_user(
+            g.current_user_id,
+            participation_status=result,
+        ),
     })
 
 

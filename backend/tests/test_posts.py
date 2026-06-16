@@ -149,3 +149,81 @@ def test_nearby_sort_tiers(client, auth_a, auth_b):
     assert ids.index(near_now) < ids.index(far_now)
     assert ids.index(far_now) < ids.index(no_loc)
     assert ids.index(long_term) < ids.index(full_event)
+
+
+def test_participation_full_flag(client, auth_a, auth_b, auth_c):
+    """满员时 is_full 对未报名用户为 true，对已报名用户为 false。"""
+    created = _create_post(
+        client, auth_a,
+        type="forum",
+        title="满员测试",
+        content="slots=2",
+        tags=["测试"],
+        urgency="now",
+        location="118.954,32.114",
+        slots=2,
+    )
+    post_id = created.get_json()["id"]
+
+    detail_b = client.get(f"/api/posts/{post_id}", headers=auth_b).get_json()
+    assert detail_b["is_full"] is False
+
+    join_b = client.post(f"/api/posts/{post_id}/participate", json={"status": "going"}, headers=auth_b)
+    assert join_b.status_code == 200
+    body_b = join_b.get_json()
+    assert body_b["participant_count"] == 2
+    assert body_b["is_full"] is False
+
+    detail_b2 = client.get(f"/api/posts/{post_id}", headers=auth_b).get_json()
+    assert detail_b2["is_full"] is False
+
+    detail_c = client.get(f"/api/posts/{post_id}", headers=auth_c).get_json()
+    assert detail_c["is_full"] is True
+
+    full = client.post(f"/api/posts/{post_id}/participate", json={"status": "going"}, headers=auth_c)
+    assert full.status_code == 400
+
+
+def test_delete_post_with_interactions(client, auth_a, auth_b):
+    """帖主可删除已有互动数据的帖子（含回复评论、点赞、收藏、报名及通知）。"""
+    created = _create_post(client, auth_a)
+    post_id = created.get_json()["id"]
+
+    client.post(f"/api/posts/{post_id}/like", headers=auth_b)
+    top_comment_id = client.post(
+        f"/api/posts/{post_id}/comments",
+        json={"content": "顶级评论"},
+        headers=auth_b,
+    ).get_json()["id"]
+    client.post(
+        f"/api/posts/{post_id}/comments",
+        json={"content": "回复评论", "parent_id": top_comment_id},
+        headers=auth_a,
+    )
+    client.post(f"/api/posts/{post_id}/favorite", headers=auth_b)
+    client.post(
+        f"/api/posts/{post_id}/participate",
+        json={"status": "going"},
+        headers=auth_b,
+    )
+
+    deleted = client.delete(f"/api/posts/{post_id}", headers=auth_a)
+    assert deleted.status_code == 200
+
+    detail = client.get(f"/api/posts/{post_id}")
+    assert detail.status_code == 404
+
+    owner_notifs = client.get("/api/social/notifications", headers=auth_a).get_json()["items"]
+    assert not any(n.get("post_id") == post_id for n in owner_notifs)
+
+    favs = client.get("/api/me/favorites", headers=auth_b).get_json()["items"]
+    assert not any(
+        item.get("kind") == "post" and (item.get("post") or {}).get("id") == post_id
+        for item in favs
+    )
+
+    activities = client.get("/api/me/activities", headers=auth_b).get_json()["items"]
+    assert not any(item.get("id") == post_id for item in activities)
+
+    comments = client.get("/api/me/post-comments", headers=auth_b).get_json()["items"]
+    assert not any(item.get("post_id") == post_id for item in comments)

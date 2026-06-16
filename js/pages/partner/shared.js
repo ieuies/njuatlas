@@ -2,7 +2,7 @@ import { formatDate, parseApiDate, beijingDateKey, BEIJING_TZ, escapeHtml, wgs84
 import { getUser } from '../../auth.js';
 import { t, tPartnerCategory } from '../../i18n.js';
 
-export const PAGE_SIZE = 20;
+export const PAGE_SIZE = 9;
 export const LIST_CACHE_TTL_MS = 45000;
 /** 已完整加载（触底无更多）的列表缓存有效期 */
 export const FULL_LIST_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -100,9 +100,20 @@ export function isCurrentUserOwner(item) {
     return Boolean(item.is_owner || (currentId != null && ownerId != null && String(currentId) === String(ownerId)));
 }
 
+/** 是否应对当前用户展示「已满员」（已报名用户仍可取消） */
+export function isPostParticipationFull(p) {
+    if (typeof p.is_full === 'boolean') return p.is_full;
+    if (typeof p.isFull === 'boolean') return p.isFull;
+    const members = p.members ?? p.participant_count ?? 0;
+    const slots = p.slots ?? p.max_participants ?? 2;
+    if (members < slots) return false;
+    const status = p.participationStatus ?? p.participation_status ?? null;
+    return status !== 'going';
+}
+
 /** 将后端帖子格式映射为前端卡片和地图所需的字段 */
 export function mapPost(p) {
-    return {
+    const mapped = {
         id: p.id,
         type: p.type,
         category: (p.tags && p.tags.length > 0) ? p.tags[0] : '其他',
@@ -132,9 +143,14 @@ export function mapPost(p) {
         isFavorited: p.is_favorited || false,
         isOwner: isCurrentUserOwner(p),
         participationStatus: p.participation_status,
+        isFull: typeof p.is_full === 'boolean' ? p.is_full : undefined,
         createdAt: formatDate(p.created_at),
         nearby: '',
     };
+    if (typeof mapped.isFull !== 'boolean') {
+        mapped.isFull = isPostParticipationFull(mapped);
+    }
+    return mapped;
 }
 
 export function formatPostTime(iso, urgency, endIso = null) {

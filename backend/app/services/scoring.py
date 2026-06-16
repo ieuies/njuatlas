@@ -124,9 +124,7 @@ def resolve_campus_origin(campus):
 
 
 def is_post_full(post):
-    """event 帖是否已满员（口径与 SingleNote.participant_total_count 一致）。"""
-    if getattr(post, "type", None) != "event":
-        return False
+    """帖子是否已满员（口径与 SingleNote.participant_total_count 一致）。"""
     limit = max(getattr(post, "max_participants", 2) or 2, 2)
     occupied = (getattr(post, "participant_count", 0) or 0) + 1
     return occupied >= limit

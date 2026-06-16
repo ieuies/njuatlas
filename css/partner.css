@@ -413,10 +413,77 @@
 /* ========== 瀑布流卡片容器 ========== */
 .partner-waterfall {
     display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
     column-count: auto !important;
-    padding-bottom: 70px;
+    padding-bottom: 12px;
+    min-height: 120px;
+}
+
+.partner-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 12px 80px;
+}
+
+.partner-pagination[hidden] {
+    display: none !important;
+}
+
+.partner-pagination-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--atlas-line);
+    background: var(--atlas-card);
+    color: var(--atlas-text);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+.partner-pagination-btn:hover:not(:disabled) {
+    border-color: var(--atlas-accent);
+    color: var(--atlas-accent);
+}
+
+.partner-pagination-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.partner-pagination-btn.is-active {
+    background: var(--atlas-accent);
+    border-color: var(--atlas-accent);
+    color: #fff;
+}
+
+.partner-pagination-info {
+    font-size: 13px;
+    color: var(--atlas-muted);
+    padding: 0 4px;
+    user-select: none;
+}
+
+@media (max-width: 1100px) {
+    .partner-waterfall {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .partner-waterfall {
+        grid-template-columns: 1fr;
+        padding-bottom: 8px;
+    }
+
+    .partner-pagination {
+        padding-bottom: 88px;
+    }
 }
 
 /* ========== 简约信息卡片样式（partner-brief-card） ========== */
@@ -895,7 +962,7 @@
         margin: 0 !important;
         min-width: 0;
         align-content: start;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     #partnerPage .map-fab-mobile {
         display: none !important;
