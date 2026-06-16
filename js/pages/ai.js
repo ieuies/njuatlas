@@ -10,6 +10,56 @@ const _selectedSessions = new Set();
 // 发送锁：上一次请求未完成时忽略新的发送
 let isSending = false;
 
+/** 按会话缓存每轮 assistant 回复对应的推荐卡片（内存 + sessionStorage） */
+const sessionTurnCandidates = new Map();
+
+function _candidatesCacheKey(sessionId) {
+    return `ai_turn_candidates_${sessionId}`;
+}
+
+function loadCandidatesCache(sessionId) {
+    if (!sessionId || sessionTurnCandidates.has(sessionId)) return;
+    try {
+        const raw = sessionStorage.getItem(_candidatesCacheKey(sessionId));
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) sessionTurnCandidates.set(sessionId, parsed);
+    } catch {
+        // ignore corrupt cache
+    }
+}
+
+function persistCandidatesCache(sessionId) {
+    if (!sessionId) return;
+    const list = sessionTurnCandidates.get(sessionId);
+    if (!list) return;
+    try {
+        sessionStorage.setItem(_candidatesCacheKey(sessionId), JSON.stringify(list));
+    } catch {
+        // quota exceeded etc.
+    }
+}
+
+function recordTurnCandidates(sessionId, candidates) {
+    if (!sessionId || !candidates?.length) return;
+    const list = sessionTurnCandidates.get(sessionId) || [];
+    list.push(candidates);
+    // 只保留最近 30 轮，避免内存/sessionStorage 膨胀
+    if (list.length > 30) list.splice(0, list.length - 30);
+    sessionTurnCandidates.set(sessionId, list);
+    persistCandidatesCache(sessionId);
+}
+
+function clearCandidatesCache(sessionId) {
+    if (!sessionId) return;
+    sessionTurnCandidates.delete(sessionId);
+    try {
+        sessionStorage.removeItem(_candidatesCacheKey(sessionId));
+    } catch {
+        // ignore
+    }
+}
+
 const POI_TYPE_LABELS = {
     '050000': '餐饮',
     '050100': '中餐厅',
@@ -101,10 +151,10 @@ function renderQuickQuestions() {
     });
 }
 
-function renderCandidateCards(candidates, messagesDiv) {
-    if (!candidates || !candidates.length || !messagesDiv) return;
+function renderCandidateCards(candidates, messagesDiv, anchorEl = null) {
+    if (!candidates || !candidates.length || !messagesDiv) return null;
     const candDiv = document.createElement('div');
-    candDiv.className = 'chat-message chat-bot';
+    candDiv.className = 'chat-message chat-bot ai-candidate-cards';
     let html = `<div class="ai-candidates">
         <div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>
         <div class="ai-candidate-head" aria-hidden="true">
@@ -125,7 +175,12 @@ function renderCandidateCards(candidates, messagesDiv) {
     });
     html += '</div>';
     candDiv.innerHTML = html;
-    messagesDiv.appendChild(candDiv);
+    if (anchorEl && anchorEl.parentNode === messagesDiv) {
+        anchorEl.insertAdjacentElement('afterend', candDiv);
+    } else {
+        messagesDiv.appendChild(candDiv);
+    }
+    return candDiv;
 }
 
 function setSendLock(locked) {
@@ -155,7 +210,7 @@ function clearChatMessages() {
     hideWelcome();
 }
 
-function renderMessages(messages) {
+function renderMessages(messages, sessionId = currentSessionId) {
     const messagesDiv = document.getElementById('chatMessages');
     if (!messagesDiv) return;
     const welcome = messagesDiv.querySelector('.ai-welcome');
@@ -166,11 +221,21 @@ function renderMessages(messages) {
         showWelcome();
         return;
     }
+    loadCandidatesCache(sessionId);
+    const cachedTurns = sessionTurnCandidates.get(sessionId) || [];
+    let assistantTurn = 0;
     messages.forEach(msg => {
         const div = document.createElement('div');
         div.className = `chat-message ${msg.role === 'user' ? 'chat-user' : 'chat-bot'}`;
         div.textContent = msg.role === 'assistant' ? stripMarkdown(msg.content) : msg.content;
         messagesDiv.appendChild(div);
+        if (msg.role === 'assistant') {
+            const turnCandidates = cachedTurns[assistantTurn];
+            if (turnCandidates?.length) {
+                renderCandidateCards(turnCandidates, messagesDiv, div);
+            }
+            assistantTurn += 1;
+        }
     });
     scrollToBottom();
 }
@@ -237,13 +302,13 @@ function toggleSessionSelection(sessionId) {
     updateBatchUiState();
 }
 
-async function loadConversationList(force = false) {
+async function loadConversationList(force = false, { silent = false } = {}) {
     if (!isLoggedIn()) return;
     if (!force && _conversationListLoaded) return;
     const listContainer = document.getElementById('aiConversationList');
     if (!listContainer) return;
     try {
-        const data = await getConversationList();
+        const data = await getConversationList({ silent });
         const sessions = data.items || [];
         if (sessions.length === 0) {
             if (_batchModeEnabled) setBatchMode(false);
@@ -326,7 +391,7 @@ async function loadConversation(sessionId) {
         currentSessionId = sessionId;
         clearChatMessages();
         if (messages.length === 0) showWelcome();
-        else renderMessages(messages);
+        else renderMessages(messages, sessionId);
         highlightCurrentSession(sessionId);
         if (window.innerWidth <= 768) closeMobileSidebar();
     } catch (err) {
@@ -342,6 +407,7 @@ async function loadConversation(sessionId) {
 async function deleteConversationHandler(sessionId) {
     try {
         await deleteConversation(sessionId);
+        clearCandidatesCache(sessionId);
         showToast('对话已删除');
         if (currentSessionId === sessionId) startNewChat();
         await loadConversationList(true);
@@ -366,6 +432,7 @@ async function batchDeleteConversationHandler() {
     try {
         const res = await batchDeleteConversations(sessionIds);
         const deletedSessions = res.deleted_sessions ?? sessionIds.length;
+        sessionIds.forEach((sid) => clearCandidatesCache(sid));
         if (currentSessionId && _selectedSessions.has(currentSessionId)) startNewChat();
         showToast(`已删除 ${deletedSessions} 个会话`);
         setBatchMode(false);
@@ -504,6 +571,9 @@ async function sendMessage() {
     botMsg.className = 'chat-message chat-bot';
     let streamStarted = false;
     let streamCandidates = [];
+    let candidateCardsEl = null;
+    let sidebarRefreshNeeded = false;
+    let sidebarListRefreshNeeded = false;
 
     const ensureBotBubble = () => {
         if (!streamStarted) {
@@ -514,21 +584,24 @@ async function sendMessage() {
         }
     };
 
+    const ensureCandidateCards = () => {
+        if (!streamCandidates.length) return;
+        if (candidateCardsEl?.isConnected) return;
+        candidateCardsEl = renderCandidateCards(streamCandidates, messagesDiv, botMsg);
+    };
+
     try {
         await chatRecommendStream(msg, currentSessionId, '南京', userLocation, {
-            onMeta: async (payload) => {
+            onMeta: (payload) => {
+                // 必须先同步写入 candidates，避免 onDone 早于 await 侧栏刷新
+                streamCandidates = payload.candidates || [];
                 if (payload.session_id) {
                     const newSession = currentSessionId !== payload.session_id;
                     currentSessionId = payload.session_id;
-                    if (newSession) {
-                        _conversationListLoaded = false;
-                        await loadConversationList(true);
-                    } else {
-                        await refreshSidebar();
-                    }
+                    sidebarListRefreshNeeded = newSession;
+                    sidebarRefreshNeeded = !newSession;
                     highlightCurrentSession(currentSessionId);
                 }
-                streamCandidates = payload.candidates || [];
             },
             onToken: (text) => {
                 ensureBotBubble();
@@ -539,7 +612,10 @@ async function sendMessage() {
                 ensureBotBubble();
                 const finalReply = stripMarkdown(payload.reply || botMsg.textContent || '');
                 botMsg.textContent = finalReply;
-                renderCandidateCards(streamCandidates, messagesDiv);
+                ensureCandidateCards();
+                if (currentSessionId && streamCandidates.length) {
+                    recordTurnCandidates(currentSessionId, streamCandidates);
+                }
                 scrollToBottom();
             },
             onError: (message) => {
@@ -550,12 +626,20 @@ async function sendMessage() {
         if (!streamStarted) {
             removeThinking();
         }
+        if (sidebarListRefreshNeeded) {
+            _conversationListLoaded = false;
+            void loadConversationList(true, { silent: true });
+        } else if (sidebarRefreshNeeded) {
+            void loadConversationList(true, { silent: true });
+        }
         renderQuickQuestions();
-        await refreshSidebar();
     } catch (e) {
         removeThinking();
         if (streamStarted && botMsg.parentNode) {
             botMsg.remove();
+        }
+        if (candidateCardsEl?.parentNode) {
+            candidateCardsEl.remove();
         }
         if (e.message === 'UNAUTHORIZED') {
             showToast('登录已过期，请重新登录');

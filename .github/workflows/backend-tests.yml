@@ -31,6 +31,7 @@ jobs:
 
       - name: Run pytest
         env:
+          PYTHONPATH: .
           SECRET_KEY: test-secret-key-at-least-32-characters-long
           GAODE_API_KEY: test-gaode-api-key
           BAILIAN_API_KEY: test-bailian-api-key

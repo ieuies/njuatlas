@@ -3,7 +3,7 @@
 from math import asin, cos, radians, sin, sqrt
 
 from app.services.amap import inputtips, search_places
-from app.services.guide import GUIDE_MAX_DISTANCE_M, is_excluded_guide_poi_name
+from app.services.guide import GUIDE_MAX_DISTANCE_M, is_excluded_guide_poi_name, is_food_amap_poi, is_food_amap_poi
 
 KEYWORD_SEARCH_RADIUS = 10000
 KEYWORD_PAGE_SIZE = 25
@@ -133,7 +133,7 @@ def _normalize_tip_location(raw_location):
 def _collect_pois(pois, seen, merged, origin_lng, origin_lat, max_distance_m):
     for poi in pois or []:
         name = str(poi.get("name") or "").strip()
-        if not name or is_excluded_guide_poi_name(name):
+        if not name or is_excluded_guide_poi_name(name) or not is_food_amap_poi(poi):
             continue
         if origin_lng is not None:
             dist = _distance_m(origin_lng, origin_lat, poi.get("location"))
@@ -161,6 +161,15 @@ def _search_term_pois(term, city, location, origin_lng, origin_lat, max_distance
             tip_name = str(tip.get("name") or "").strip()
             if not tip_name or is_excluded_guide_poi_name(tip_name):
                 continue
+            tip_poi = {
+                "name": tip_name,
+                "location": _normalize_tip_location(tip.get("location")),
+                "address": tip.get("address") or tip.get("district") or "",
+                "type": tip.get("typecode") or tip.get("type") or "",
+                "biz_ext": {},
+            }
+            if not is_food_amap_poi(tip_poi):
+                continue
             tip_loc = _normalize_tip_location(tip.get("location"))
             if tip_loc:
                 _collect_pois(
@@ -183,7 +192,7 @@ def _search_term_pois(term, city, location, origin_lng, origin_lat, max_distance
                     city=city,
                     page=1,
                     page_size=5,
-                    types=None,
+                    types="050000",
                     sortrule="weight",
                 )
                 if str(text.get("status")) == "1":
@@ -207,8 +216,8 @@ def _search_term_pois(term, city, location, origin_lng, origin_lat, max_distance
                 page=1,
                 page_size=KEYWORD_PAGE_SIZE,
                 radius=KEYWORD_SEARCH_RADIUS,
-                types=None,
-                sortrule="weight",
+                types="050000",
+                sortrule="distance",
             )
             if str(around.get("status")) == "1":
                 _collect_pois(

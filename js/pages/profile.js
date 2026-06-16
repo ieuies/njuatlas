@@ -2,7 +2,7 @@
 // profile.js - 个人中心模块（含封面裁剪高清版）
 // ================================================================
 
-import { getFavorites, getLikes, getReviews, getMyPostComments, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
+import { getFavorites, getLikes, getReviews, getMyPostComments, getMyActivities, changePassword, deleteAccount, getMyProfile, updateMyProfile, listPosts, getUserProfile, sendFriendRequest, uploadAvatar, uploadCover } from '../api.js';
 import { resendVerificationEmail, getUser, isLoggedIn, doLogout, updateUserFromLogin, clearSelfCanonicalAvatarUrl } from '../auth.js';
 import { showToast, escapeHtml, formatDate, avatarStorageKey, resolveApiAssetUrl, getAvatarInitial, bumpAvatarVersion, renderAvatarInto } from '../utils.js';
 import { t } from '../i18n.js';
@@ -1348,12 +1348,8 @@ async function renderMyFavorites(container) {
 // ========== 我的活动 ==========
 async function renderMyActivities(container) {
     try {
-        const data = await listPosts({ page_size: 30 });
-        const user = getUser();
-        const allPosts = data.items || [];
-        const myActivities = allPosts.filter(p =>
-            (p.participants || []).some(part => part.user_id === user?.id || part.username === user?.username)
-        );
+        const data = await getMyActivities();
+        const myActivities = data.items || [];
 
         if (!myActivities.length) {
             container.innerHTML = `

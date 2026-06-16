@@ -2,7 +2,7 @@ import { showToast } from '../utils.js';
 import { t, getLocale } from '../i18n.js';
 import { fetchAuthConfig } from '../api.js';
 
-const DEFAULT_REGISTER_EMAIL_SUFFIXES = ['@smail.nju.edu.cn', '@nju.edu.cn'];
+const DEFAULT_REGISTER_EMAIL_SUFFIXES = ['@smail.nju.edu.cn', '@nju.edu.cn','@163.com'];
 
 let currentModalTab = 'login';
 let authConfig = {

@@ -85,6 +85,7 @@ def create_app():
             "dm_api": "tail-v2",
             "api_proxy": "same-origin-v1",
             "guide_bundle": "app-context-v1",
+            "llm_pipeline": "v4-guide-clarify",
             "realtime": realtime_hub.mode,
         }
         git_commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT")

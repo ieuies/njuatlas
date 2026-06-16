@@ -2,13 +2,14 @@ from flask import Blueprint, current_app, g, jsonify, request
 import re
 
 from sqlalchemy import func
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
 from app.auth_utils import jwt_required
 from app.errors import error_response
 from app.logging_utils import log_event
-from app.models import ConversationMessage, Favorite, Like, PostFavorite, Review
+from app.models import ConversationMessage, EventParticipant, EventPost, Favorite, Like, PostFavorite, PostTag, Review
+from app.services.note import SingleNote
 from app.rate_limit import limiter
 from app.services.social import count_friends, count_likes_received, count_user_posts, user_avatar_url, user_cover_url
 from app.validators import clean_string, get_json_body
@@ -52,6 +53,57 @@ def _post_payload(post):
         "favorite_count": post.favorite_count or 0,
         "created_at": _dt(post.created_at),
     }
+
+
+@profile_bp.route("/activities", methods=["GET"])
+@jwt_required
+@limiter.limit("60 per minute")
+def my_activities():
+    """当前用户报名参加的组局/活动（按报名时间倒序）。"""
+    rows = (
+        EventParticipant.query
+        .filter_by(user_id=g.current_user_id, status="going")
+        .order_by(EventParticipant.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    if not rows:
+        return jsonify({"items": []})
+
+    post_ids = [row.post_id for row in rows]
+    posts = (
+        EventPost.query
+        .options(selectinload(EventPost.user))
+        .filter(EventPost.id.in_(post_ids))
+        .all()
+    )
+    posts_map = {post.id: post for post in posts}
+
+    tags_map = {}
+    tag_rows = (
+        PostTag.query
+        .options(joinedload(PostTag.tag))
+        .filter(PostTag.post_id.in_(post_ids))
+        .all()
+    )
+    for row in tag_rows:
+        if row.tag:
+            tags_map.setdefault(row.post_id, []).append(row.tag.name)
+
+    user_id = g.current_user_id
+    items = []
+    for row in rows:
+        post = posts_map.get(row.post_id)
+        if not post:
+            continue
+        note = SingleNote(model=post)
+        items.append(note.to_dict(
+            current_user_id=user_id,
+            brief=True,
+            _tags=tags_map.get(post.id, []),
+            _participation=row.status,
+        ))
+    return jsonify({"items": items})
 
 
 @profile_bp.route("/favorites", methods=["GET"])
@@ -147,42 +199,47 @@ def my_reviews():
 @jwt_required
 @limiter.limit("60 per minute")
 def my_conversations():
-    ranked = (
+    """按会话聚合最近一条消息；避免窗口函数，SQLite 下更稳更快。"""
+    user_id = g.current_user_id
+    latest_sub = (
         db.session.query(
             ConversationMessage.session_id.label("session_id"),
-            ConversationMessage.content.label("last_message"),
-            ConversationMessage.role.label("last_role"),
-            ConversationMessage.created_at.label("last_at"),
-            func.count(ConversationMessage.id)
-            .over(partition_by=ConversationMessage.session_id)
-            .label("message_count"),
-            func.row_number()
-            .over(
-                partition_by=ConversationMessage.session_id,
-                order_by=(
-                    ConversationMessage.created_at.desc(),
-                    ConversationMessage.id.desc(),
-                ),
-            )
-            .label("rn"),
+            func.max(ConversationMessage.id).label("max_id"),
         )
-        .filter(ConversationMessage.user_id == g.current_user_id)
+        .filter(ConversationMessage.user_id == user_id)
+        .group_by(ConversationMessage.session_id)
         .subquery()
     )
     rows = (
-        db.session.query(ranked)
-        .filter(ranked.c.rn == 1)
-        .order_by(ranked.c.last_at.desc())
+        db.session.query(ConversationMessage)
+        .join(latest_sub, ConversationMessage.id == latest_sub.c.max_id)
+        .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+        .all()
+    )
+    if not rows:
+        return jsonify({"items": []})
+
+    session_ids = [row.session_id for row in rows]
+    counts = dict(
+        db.session.query(
+            ConversationMessage.session_id,
+            func.count(ConversationMessage.id),
+        )
+        .filter(
+            ConversationMessage.user_id == user_id,
+            ConversationMessage.session_id.in_(session_ids),
+        )
+        .group_by(ConversationMessage.session_id)
         .all()
     )
     return jsonify({
         "items": [
             {
                 "session_id": row.session_id,
-                "last_message": row.last_message,
-                "last_role": row.last_role,
-                "last_at": _dt(row.last_at),
-                "message_count": row.message_count,
+                "last_message": row.content,
+                "last_role": row.role,
+                "last_at": _dt(row.created_at),
+                "message_count": counts.get(row.session_id, 0),
             }
             for row in rows
         ]
