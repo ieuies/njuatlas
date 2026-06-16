@@ -128,8 +128,8 @@ def list_posts():
         ?q=剧本杀              关键词搜索（标题/正文/地点/标签/发布者）
         ?place_id=1            关联指定场所
         ?user_id=1             只看某用户发的帖
-        ?sort=hot|new|nearby   排序（默认 hot）
-        ?lat=32.10&lng=118.93 附近排序所需坐标
+        ?sort=hot|new|nearby   排序（默认 hot；nearby=按浏览者校区距离+分层+热度）
+        ?lat=32.10&lng=118.93  保留参数（nearby 使用资料校区，不读 GPS）
         ?page=1&page_size=20   分页
     """
     post_type = clean_string(request.args.get("type"), "type", max_length=20)

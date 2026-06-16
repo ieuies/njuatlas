@@ -9,6 +9,12 @@ from datetime import datetime, timezone
 
 from flask import current_app
 
+from app.services.guide import GUIDE_CAMPUS_COORDS
+from app.services.place_search import distance_m
+
+DEFAULT_CAMPUS = "鼓楼"
+_NO_LOCATION_DISTANCE = float("inf")
+
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -108,6 +114,48 @@ def is_expired(post):
         return event_time <= _utcnow()
 
     return False
+
+
+def resolve_campus_origin(campus):
+    """校区名 → (lng, lat)，未知校区回退鼓楼。"""
+    coords = GUIDE_CAMPUS_COORDS.get((campus or "").strip()) or GUIDE_CAMPUS_COORDS[DEFAULT_CAMPUS]
+    lng_s, lat_s = coords.split(",", 1)
+    return float(lng_s), float(lat_s)
+
+
+def is_post_full(post):
+    """event 帖是否已满员（口径与 SingleNote.participant_total_count 一致）。"""
+    if getattr(post, "type", None) != "event":
+        return False
+    limit = max(getattr(post, "max_participants", 2) or 2, 2)
+    occupied = (getattr(post, "participant_count", 0) or 0) + 1
+    return occupied >= limit
+
+
+def post_list_tier(post):
+    """列表分层：0=普通未满员，1=长期未满员，2=满员。"""
+    if is_post_full(post):
+        return 2
+    if getattr(post, "urgency", None) == "long_term":
+        return 1
+    return 0
+
+
+def post_distance_m(post, origin_lng, origin_lat):
+    """帖子 location 到原点的距离（米）；无坐标返回 None。"""
+    loc = getattr(post, "location", None)
+    if not loc:
+        return None
+    return distance_m(origin_lng, origin_lat, loc)
+
+
+def nearby_sort_key(post, origin_lng, origin_lat):
+    """找搭子 nearby 排序键：(tier, distance, -hot_score, -id)。"""
+    dist = post_distance_m(post, origin_lng, origin_lat)
+    dist_key = dist if dist is not None else _NO_LOCATION_DISTANCE
+    hot = getattr(post, "hot_score", 0) or 0
+    pid = getattr(post, "id", 0) or 0
+    return (post_list_tier(post), dist_key, -hot, -pid)
 
 
 def filter_active(query, model):
