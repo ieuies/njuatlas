@@ -794,7 +794,7 @@ export async function chatRecommendStream(message, sessionId = null, city = '南
 export async function createPost({ type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact } = {}) {
     return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact });
 }
-export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q } = {}) {
+export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q, urgency_scope } = {}) {
     const params = new URLSearchParams();
     if (type) params.set('type', type);
     if (tags) params.set('tags', Array.isArray(tags) ? tags.join(',') : tags);
@@ -807,6 +807,7 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (page) params.set('page', page);
     if (page_size) params.set('page_size', page_size);
     if (q) params.set('q', q);
+    if (urgency_scope) params.set('urgency_scope', urgency_scope);
     const qs = params.toString();
     // 已登录时附带 JWT，后端才会返回 is_liked / participation_status 等个人状态
     return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken);

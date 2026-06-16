@@ -1,6 +1,6 @@
 import { escapeHtml } from '../../utils.js';
 import { categoryChipHtml, debounce, partnerStore } from './shared.js';
-import { switchCategory, switchSearch } from './list.js';
+import { switchCategory, switchSearch, switchUrgencyScope } from './list.js';
 import { t } from '../../i18n.js';
 
 // ============================================================
@@ -42,6 +42,31 @@ export function initFilters() {
     });
 
     setupCategoryScrollArrows();
+}
+
+export function initPartnerDurationToggle() {
+    const toggle = document.getElementById('partnerDurationToggle');
+    if (!toggle || toggle.dataset.bound === 'true') return;
+    toggle.dataset.bound = 'true';
+
+    const syncActive = (scope) => {
+        toggle.querySelectorAll('.partner-duration-option').forEach((btn) => {
+            const active = btn.getAttribute('data-scope') === scope;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    };
+
+    syncActive(partnerStore.urgencyScope || 'short');
+
+    toggle.querySelectorAll('.partner-duration-option').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const scope = btn.getAttribute('data-scope');
+            if (!scope || scope === partnerStore.urgencyScope) return;
+            syncActive(scope);
+            switchUrgencyScope(scope);
+        });
+    });
 }
 
 export function initPartnerSearch() {

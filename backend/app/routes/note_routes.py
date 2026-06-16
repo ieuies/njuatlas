@@ -131,6 +131,7 @@ def list_posts():
         ?sort=hot|new|nearby   排序（默认 hot；nearby=按浏览者校区距离+分层+热度）
         ?lat=32.10&lng=118.93  保留参数（nearby 使用资料校区，不读 GPS）
         ?page=1&page_size=20   分页
+        ?urgency_scope=short|long  时长：short=立即/指定时间（默认），long=长期有效
     """
     post_type = clean_string(request.args.get("type"), "type", max_length=20)
     tags_raw = request.args.get("tags", "")
@@ -154,6 +155,9 @@ def list_posts():
     page = int_range(request.args.get("page", 1), "page", min_value=1)
     page_size = int_range(request.args.get("page_size", 20), "page_size", min_value=1, max_value=100)
 
+    urgency_scope_raw = clean_string(request.args.get("urgency_scope"), "urgency_scope", max_length=10)
+    urgency_scope = urgency_scope_raw if urgency_scope_raw in ("short", "long") else None
+
     notes = NoteSystem(user_id=g.current_user_id if hasattr(g, "current_user_id") else None)
     result = notes.search(
         type=post_type,
@@ -167,6 +171,7 @@ def list_posts():
         page=page,
         page_size=page_size,
         keyword=keyword,
+        urgency_scope=urgency_scope,
     )
     return jsonify(result)
 

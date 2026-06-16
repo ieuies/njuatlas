@@ -198,6 +198,32 @@ def test_nearby_participated_posts_rank_first(client, auth_a, auth_b):
     assert ids_a.index(near_open) < ids_a.index(full_joined)
 
 
+def test_urgency_scope_filter(client, auth_a):
+    """urgency_scope：short 不含长期帖，long 仅长期帖。"""
+    _clear_post_search_cache()
+    short_id = _create_post(
+        client, auth_a,
+        title="短期帖", content="now", tags=["时长筛"],
+        urgency="now", location="118.954,32.114",
+    ).get_json()["id"]
+    long_id = _create_post(
+        client, auth_a,
+        title="长期帖", content="lt", tags=["时长筛"],
+        urgency="long_term", location="118.954,32.114",
+    ).get_json()["id"]
+    _clear_post_search_cache()
+
+    short_list = client.get("/api/posts?urgency_scope=short&tags=时长筛&page_size=50")
+    short_ids = [item["id"] for item in short_list.get_json()["items"]]
+    assert short_id in short_ids
+    assert long_id not in short_ids
+
+    long_list = client.get("/api/posts?urgency_scope=long&tags=时长筛&page_size=50")
+    long_ids = [item["id"] for item in long_list.get_json()["items"]]
+    assert long_id in long_ids
+    assert short_id not in long_ids
+
+
 def test_participation_full_flag(client, auth_a, auth_b, auth_c):
     """满员时 is_full 对未报名用户为 true，对已报名用户为 false。"""
     created = _create_post(

@@ -268,7 +268,7 @@ export function prefetchPartnerList() {
     if (partnerStore._prefetchPromise) return partnerStore._prefetchPromise;
     partnerStore._prefetchPromise = (async () => {
         try {
-            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'nearby' });
+            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'nearby', urgency_scope: 'short' });
             const posts = (result.items || []).map(mapPost);
             _writeListCacheFor('all', '', 1, posts, posts.length === PAGE_SIZE);
         } catch (e) {
@@ -310,6 +310,7 @@ export async function loadPostsByPage(page, { background = false, forceRefresh =
             page,
             page_size: PAGE_SIZE,
             sort: 'nearby',
+            urgency_scope: partnerStore.urgencyScope || 'short',
         };
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;
@@ -612,6 +613,47 @@ export async function switchCategory(category) {
 
     const container = document.getElementById('partnerWaterfall');
     if (container) showPartnerSkeleton();
+
+    await loadPostsByPage(1);
+    refreshPreviewMarkers();
+}
+
+/** 切换短期/长期组局列表 */
+export async function switchUrgencyScope(scope) {
+    const next = scope === 'long' ? 'long' : 'short';
+    if (partnerStore.urgencyScope === next) return;
+
+    if (partnerStore.allPartnersData.length) {
+        _writeListCache(
+            partnerStore.allPartnersData,
+            partnerStore.hasMore,
+            partnerStore.currentPage,
+        );
+    }
+
+    partnerStore.urgencyScope = next;
+    partnerStore.currentPage = 1;
+    partnerStore.hasMore = true;
+    partnerStore.allPartnersData = [];
+    partnerStore.partnersData = [];
+
+    const cached = _readListCache(1);
+    if (cached?.posts) {
+        partnerStore.allPartnersData = cached.posts;
+        partnerStore.partnersData = cached.posts;
+        partnerStore.hasMore = cached.hasMore;
+        partnerStore.currentPage = 1;
+        renderWaterfall();
+        renderPartnerPagination();
+        refreshPreviewMarkers();
+        if (!_isCacheFresh(cached)) {
+            loadPostsByPage(1, { background: true });
+        }
+        return;
+    }
+
+    const container = document.getElementById('partnerWaterfall');
+    if (container) showPartnerSkeleton(PAGE_SIZE);
 
     await loadPostsByPage(1);
     refreshPreviewMarkers();

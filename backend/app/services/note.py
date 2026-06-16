@@ -633,7 +633,8 @@ class NoteSystem:
     # ── 多维搜索 ──────────────────────────────────────────────
     def search(self, *, type=None, tags=None, place_id=None,
                sort="hot", lat=None, lng=None, radius=5000,
-               user_id=None, page=1, page_size=20, keyword=None):
+               user_id=None, page=1, page_size=20, keyword=None,
+               urgency_scope=None):
         """帖子列表多维筛选。
 
         参数：
@@ -645,6 +646,7 @@ class NoteSystem:
         - radius:    地理半径（米），nearby 当前未用于过滤
         - user_id:   只看某用户发的帖
         - keyword:   关键词，匹配标题/正文/地点/预算/标签/发布者
+        - urgency_scope: 'short'（立即/指定时间）/ 'long'（长期有效），不传则不过滤
         - page, page_size: 分页
         """
         viewer_campus = None
@@ -655,7 +657,7 @@ class NoteSystem:
         cache_key = json.dumps(
             [
                 type, tags, place_id, sort, lat, lng, radius, user_id,
-                page, page_size, keyword, self.user_id,
+                page, page_size, keyword, urgency_scope, self.user_id,
                 viewer_campus if sort == "nearby" else None,
             ],
             sort_keys=True,
@@ -688,6 +690,15 @@ class NoteSystem:
         # 只看某用户
         if user_id is not None:
             q = q.filter(EventPost.user_id == user_id)
+
+        # 时长：短期=立即/指定时间；长期=long_term
+        if urgency_scope == "long":
+            q = q.filter(EventPost.urgency == "long_term")
+        elif urgency_scope == "short":
+            q = q.filter(or_(
+                EventPost.urgency.is_(None),
+                EventPost.urgency != "long_term",
+            ))
 
         # 关键词搜索
         if keyword:

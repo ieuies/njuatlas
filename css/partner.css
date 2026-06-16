@@ -2,13 +2,73 @@
 
 /* 页面容器宽度见 layout.css（guide/profile 首访也依赖该规则） */
 
-/* ========== 搜索栏 ========== */
-.partner-search-bar {
+/* ========== 搜索栏 + 时长切换 ========== */
+.partner-list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     width: 100%;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
     margin-bottom: 12px;
+}
+
+.partner-search-bar {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.partner-duration-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    padding: 4px 6px;
+    background: var(--atlas-card);
+    border: 1px solid var(--atlas-line);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
+}
+
+.partner-duration-option {
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 0.88rem;
+    font-weight: 500;
+    line-height: 1;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.partner-duration-option:hover {
+    color: var(--atlas-ink);
+}
+
+.partner-duration-option.active {
+    background: rgba(107, 33, 165, 0.12);
+    color: var(--btn-primary-bg);
+    font-weight: 600;
+}
+
+.partner-duration-sep {
+    color: var(--atlas-line);
+    font-size: 0.82rem;
+    line-height: 1;
+    user-select: none;
+    padding: 0 2px;
+}
+
+.partner-search-bar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 .partner-search-input-wrap {
     position: relative;
@@ -220,8 +280,34 @@
 
 /* 移动端隐藏箭头，纯手势滑动 */
 @media (max-width: 768px) {
-    .partner-search-bar {
+    .partner-list-toolbar {
+        flex-direction: row;
+        align-items: stretch;
+        gap: 8px;
         margin-bottom: 8px;
+    }
+    .partner-search-bar {
+        flex: 1 1 0;
+        min-width: 0;
+        margin-bottom: 0;
+    }
+    .partner-duration-toggle {
+        flex-shrink: 0;
+        align-self: stretch;
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 4px;
+        border-radius: 10px;
+        box-shadow: none;
+        background: var(--bg-secondary);
+    }
+    .partner-duration-option {
+        padding: 6px 8px;
+        font-size: 0.82rem;
+    }
+    .partner-duration-sep {
+        font-size: 0.75rem;
+        padding: 0 1px;
     }
     .partner-search-input-wrap {
         min-height: 42px;
@@ -235,7 +321,7 @@
     }
     .partner-search-input-wrap input {
         font-size: 16px; /* 避免 iOS 输入时自动缩放 */
-        padding: 10px 36px 10px 34px;
+        padding: 10px 32px 10px 30px;
     }
     .partner-search-clear {
         right: 4px;
@@ -825,6 +911,12 @@
     color: var(--btn-primary-bg);
     border-bottom-color: var(--btn-primary-bg);
 }
+
+:root[data-theme="dark"] .partner-duration-option.active {
+    background: rgba(167, 139, 250, 0.16);
+    color: #c4b5fd;
+}
+
 :root[data-theme="dark"] .scroll-arrow:hover {
     background: var(--btn-primary-bg);
     color: var(--btn-primary-fg);

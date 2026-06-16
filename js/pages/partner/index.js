@@ -7,7 +7,7 @@ import {
 } from './map.js';
 import { initPostDetailModal, openPostDetail } from './post-detail.js';
 import { initPartnerModal } from './partner-form.js';
-import { initFilters, setupCategoryScrollArrows, initPartnerSearch } from './filters.js';
+import { initFilters, setupCategoryScrollArrows, initPartnerSearch, initPartnerDurationToggle } from './filters.js';
 import { isMobileViewport } from '../../utils.js';
 
 // ============================================================
@@ -25,6 +25,7 @@ export async function loadPartnerData() {
     if (!partnerStore.filtersInited) {
         initFilters();
         initPartnerSearch();
+        initPartnerDurationToggle();
         partnerStore.filtersInited = true;
     }
 
@@ -51,7 +52,7 @@ function ensureRightPanel() {
     const page = document.getElementById('partnerPage');
     if (!page) return;
 
-    const searchBar = page.querySelector('.partner-search-bar');
+    const toolbar = page.querySelector('.partner-list-toolbar');
     const container = page.querySelector('.filter-slider-container');
     const waterfall = page.querySelector('.partner-waterfall');
     const pagination = page.querySelector('.partner-pagination');
@@ -61,15 +62,15 @@ function ensureRightPanel() {
     if (!panel) {
         panel = document.createElement('div');
         panel.className = 'partner-right-panel';
-        page.insertBefore(panel, searchBar || container);
-        if (searchBar) panel.appendChild(searchBar);
+        page.insertBefore(panel, toolbar || container);
+        if (toolbar) panel.appendChild(toolbar);
         panel.appendChild(container);
         panel.appendChild(waterfall);
         if (pagination) panel.appendChild(pagination);
         return;
     }
 
-    if (searchBar && searchBar.parentElement !== panel) panel.insertBefore(searchBar, panel.firstChild);
+    if (toolbar && toolbar.parentElement !== panel) panel.insertBefore(toolbar, panel.firstChild);
     if (container.parentElement !== panel) panel.appendChild(container);
     if (waterfall.parentElement !== panel) panel.appendChild(waterfall);
     if (pagination && pagination.parentElement !== panel) panel.appendChild(pagination);
@@ -136,4 +137,4 @@ window.checkOverflow = function () {
     });
 };
 
-export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch, prefetchPartnerList };
+export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch, initPartnerDurationToggle, prefetchPartnerList };

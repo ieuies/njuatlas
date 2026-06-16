@@ -14,7 +14,8 @@ export const partnerListCache = new Map();
 export function partnerListCacheKey(category, searchQuery, page) {
     const user = getUser();
     const userKey = user?.id ?? user?.user_id ?? 'anon';
-    return `${userKey}|nearby|${category}|${searchQuery}|${page}`;
+    const scope = partnerStore.urgencyScope || 'short';
+    return `${userKey}|nearby|${category}|${searchQuery}|${scope}|${page}`;
 }
 
 /** 跨模块共享可变状态（import 的 let 绑定在其它模块里只读，须用对象属性） */
@@ -23,6 +24,7 @@ export const partnerStore = {
     partnersData: [],
     currentCategory: 'all',
     searchQuery: '',
+    urgencyScope: 'short',
     currentPage: 1,
     hasMore: true,
     isLoading: false,
