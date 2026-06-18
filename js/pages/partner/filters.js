@@ -1,5 +1,5 @@
 import { escapeHtml } from '../../utils.js';
-import { categoryChipHtml, debounce, partnerStore, PARTNER_FILTER_CATEGORIES } from './shared.js';
+import { categoryChipHtml, debounce, partnerStore, PARTNER_FILTER_CATEGORIES, DEFAULT_URGENCY_SCOPE } from './shared.js';
 import { switchCategory, switchSearch, switchUrgencyScope } from './list.js';
 import { t } from '../../i18n.js';
 
@@ -45,7 +45,7 @@ export function initPartnerDurationToggle() {
         });
     };
 
-    syncActive(partnerStore.urgencyScope || 'short');
+    syncActive(partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE);
 
     toggle.querySelectorAll('.partner-duration-option').forEach((btn) => {
         btn.addEventListener('click', () => {

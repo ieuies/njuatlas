@@ -7,6 +7,8 @@ export const LIST_CACHE_TTL_MS = 45000;
 /** 已完整加载（触底无更多）的列表缓存有效期 */
 export const FULL_LIST_CACHE_TTL_MS = 30 * 60 * 1000;
 export const LIST_RENDER_BATCH = 6;
+/** 找搭子列表默认时长：short 短期活动 / long 长期招募 */
+export const DEFAULT_URGENCY_SCOPE = 'long';
 
 /** 找搭子分类 Tab（filters 与列表预取共用） */
 export const PARTNER_FILTER_CATEGORIES = [
@@ -28,7 +30,7 @@ export const partnerListCache = new Map();
 export function partnerListCacheKey(category, searchQuery, page) {
     const user = getUser();
     const userKey = user?.id ?? user?.user_id ?? 'anon';
-    const scope = partnerStore.urgencyScope || 'short';
+    const scope = partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE;
     return `${userKey}|nearby|${category}|${searchQuery}|${scope}|${page}`;
 }
 
@@ -38,7 +40,7 @@ export const partnerStore = {
     partnersData: [],
     currentCategory: 'all',
     searchQuery: '',
-    urgencyScope: 'short',
+    urgencyScope: DEFAULT_URGENCY_SCOPE,
     currentPage: 1,
     hasMore: true,
     isLoading: false,

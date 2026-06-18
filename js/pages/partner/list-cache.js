@@ -5,6 +5,7 @@ import {
     partnerStore,
     LIST_CACHE_TTL_MS,
     FULL_LIST_CACHE_TTL_MS,
+    DEFAULT_URGENCY_SCOPE,
 } from './shared.js';
 
 export const PARTNER_SESSION_CACHE_PREFIX = 'partner_list_v2_';
@@ -70,7 +71,7 @@ export function clearPartnerListCache() {
 
 /** 收集当前 scope 下各分类第 1 页缓存中的帖子 id（供详情预取 Stage 2 使用） */
 export function collectCachedListPostIds({ urgencyScope, searchQuery = '' } = {}) {
-    const scope = urgencyScope || partnerStore.urgencyScope || 'short';
+    const scope = urgencyScope || partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE;
     const user = getUser();
     const userKey = user?.id ?? user?.user_id ?? 'anon';
     const prefix = `${userKey}|nearby|`;

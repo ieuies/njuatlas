@@ -1,15 +1,18 @@
 /**
  * 找搭子预加载管道
  *
- * Stage 1（已实现）：各分类列表第 1 页串行预取 → 切换分类秒开
- * Stage 2（预留）：帖子详情预取 → 见 prefetchPartnerPostDetails / partnerPostDetailCache
+ * Stage 1：各分类列表第 1 页串行预取 → 切换分类秒开
+ * Stage 2：帖子详情预取 → openPostDetail 优先读 partnerPostDetailCache
  */
-import { listPosts } from '../../api.js';
+import { getUser } from '../../auth.js';
+import { getPost, listPosts } from '../../api.js';
 import {
+    LIST_CACHE_TTL_MS,
     mapPost,
     PAGE_SIZE,
     PARTNER_FILTER_CATEGORIES,
     partnerStore,
+    DEFAULT_URGENCY_SCOPE,
 } from './shared.js';
 import {
     collectCachedListPostIds,
@@ -22,56 +25,153 @@ const PREFETCH_GAP_MS = 320;
 const PREFETCH_429_BASE_MS = 2000;
 const PREFETCH_MAX_ATTEMPTS = 4;
 
-// ── Stage 2: 帖子详情缓存（后续实现详情预取时写入）────────────────
+const DETAIL_CACHE_TTL_MS = LIST_CACHE_TTL_MS;
+const DETAIL_PREFETCH_GAP_MS = 320;
+const DETAIL_PREFETCH_MAX = 60;
+
+// ── Stage 2: 帖子详情缓存 ────────────────────────────────────────
 export const partnerPostDetailCache = new Map();
-/** @type {Promise<unknown> | null} */
-let _detailPrefetchPromise = null;
+const _detailPrefetchPending = new Set();
+/** @type {Promise<void> | null} */
+let _detailPrefetchWorker = null;
+
+function _detailUserKey() {
+    const user = getUser();
+    return user?.id ?? user?.user_id ?? 'anon';
+}
+
+function _detailCacheKey(postId) {
+    return `${_detailUserKey()}|${Number(postId)}`;
+}
+
+function _getCacheRow(postId) {
+    return partnerPostDetailCache.get(_detailCacheKey(postId));
+}
+
+export function isPartnerPostDetailCacheFresh(postId) {
+    const row = _getCacheRow(postId);
+    if (!row?.data || !row.at) return false;
+    return Date.now() - row.at < DETAIL_CACHE_TTL_MS;
+}
 
 export function getCachedPartnerPostDetail(postId) {
-    const row = partnerPostDetailCache.get(Number(postId));
-    if (!row?.data) return null;
-    return row.data;
+    if (!isPartnerPostDetailCacheFresh(postId)) return null;
+    return _getCacheRow(postId).data;
 }
 
 export function setCachedPartnerPostDetail(postId, data) {
     if (!postId || !data) return;
-    partnerPostDetailCache.set(Number(postId), { at: Date.now(), data });
+    partnerPostDetailCache.set(_detailCacheKey(postId), {
+        at: Date.now(),
+        data,
+        userKey: _detailUserKey(),
+    });
 }
 
 export function invalidatePartnerPostDetailCache(postIds = null) {
     if (!postIds) {
         partnerPostDetailCache.clear();
-        _detailPrefetchPromise = null;
+        _detailPrefetchPending.clear();
+        _detailPrefetchWorker = null;
         return;
     }
     for (const id of postIds) {
-        partnerPostDetailCache.delete(Number(id));
+        partnerPostDetailCache.delete(_detailCacheKey(id));
     }
 }
 
 /**
- * Stage 2 入口：根据已缓存列表批量预取帖子详情。
- * 当前为占位实现，列表预取完成后会调用；后续在此串行 getPost 并写入 partnerPostDetailCache。
+ * 将帖子 id 加入详情预取队列（首屏列表加载后即可调用，不必等 Stage 1 结束）。
+ * @param {number[]} postIds
+ * @param {{ priority?: boolean }} options priority=true 时插队到队列前端
+ */
+export function enqueuePartnerDetailPrefetch(postIds = [], { priority = false } = {}) {
+    const normalized = postIds
+        .map((id) => Number(id))
+        .filter((id) => id > 0 && !isPartnerPostDetailCacheFresh(id));
+
+    if (!normalized.length) return;
+
+    if (priority) {
+        const rest = [..._detailPrefetchPending];
+        _detailPrefetchPending.clear();
+        for (const id of normalized) _detailPrefetchPending.add(id);
+        for (const id of rest) _detailPrefetchPending.add(id);
+    } else {
+        for (const id of normalized) _detailPrefetchPending.add(id);
+    }
+
+    if (!_detailPrefetchWorker) {
+        _detailPrefetchWorker = _runDetailPrefetchWorker()
+            .catch(() => {})
+            .finally(() => {
+                _detailPrefetchWorker = null;
+                if (_detailPrefetchPending.size > 0) {
+                    enqueuePartnerDetailPrefetch([..._detailPrefetchPending]);
+                }
+            });
+    }
+}
+
+async function _fetchOnePostDetail(postId) {
+    for (let attempt = 0; attempt < PREFETCH_MAX_ATTEMPTS; attempt += 1) {
+        try {
+            const data = await getPost(postId, { prefetch: true, silent: true });
+            setCachedPartnerPostDetail(postId, data);
+            return true;
+        } catch (err) {
+            if (_isRateLimitError(err) && attempt < PREFETCH_MAX_ATTEMPTS - 1) {
+                const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
+                await new Promise((r) => setTimeout(r, delay));
+                continue;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+async function _runDetailPrefetchWorker() {
+    let fetched = 0;
+    while (_detailPrefetchPending.size > 0 && fetched < DETAIL_PREFETCH_MAX) {
+        const id = _detailPrefetchPending.values().next().value;
+        _detailPrefetchPending.delete(id);
+
+        if (isPartnerPostDetailCacheFresh(id)) continue;
+
+        await _fetchOnePostDetail(id);
+        fetched += 1;
+
+        if (_detailPrefetchPending.size > 0 && DETAIL_PREFETCH_GAP_MS > 0) {
+            await new Promise((r) => setTimeout(r, DETAIL_PREFETCH_GAP_MS));
+        }
+    }
+}
+
+/**
+ * Stage 2：根据已缓存列表批量预取帖子详情（串行、不计浏览量）。
  */
 export async function prefetchPartnerPostDetails({ postIds, urgencyScope } = {}) {
-    const ids = postIds?.length
+    let ids = postIds?.length
         ? postIds.filter((id) => id > 0)
         : collectCachedListPostIds({ urgencyScope });
 
     if (!ids.length) {
-        return { prefetched: 0, skipped: 0, total: 0, stage: 2, implemented: false };
+        return { prefetched: 0, skipped: 0, total: 0, stage: 2, implemented: true };
     }
 
-    // TODO(stage-2): import { getPost } from '../../api.js'
-    // TODO(stage-2): for (const id of ids) { if (getCachedPartnerPostDetail(id)) continue; ... }
-    void urgencyScope;
-    return {
-        prefetched: 0,
-        skipped: ids.length,
-        total: ids.length,
-        stage: 2,
-        implemented: false,
-    };
+    ids = ids.slice(0, DETAIL_PREFETCH_MAX);
+    const needFetch = ids.filter((id) => !isPartnerPostDetailCacheFresh(id));
+    const skipped = ids.length - needFetch.length;
+
+    enqueuePartnerDetailPrefetch(needFetch);
+
+    if (_detailPrefetchWorker) {
+        await _detailPrefetchWorker.catch(() => {});
+    }
+
+    const prefetched = needFetch.filter((id) => isPartnerPostDetailCacheFresh(id)).length;
+    return { prefetched, skipped, total: ids.length, stage: 2, implemented: true };
 }
 
 function _isRateLimitError(err) {
@@ -81,6 +181,11 @@ function _isRateLimitError(err) {
 
 function _listPartnerPrefetchCategories() {
     return PARTNER_FILTER_CATEGORIES.map((item) => item.category);
+}
+
+function _enqueueDetailPrefetchFromListCache(urgencyScope) {
+    const ids = collectCachedListPostIds({ urgencyScope });
+    if (ids.length) enqueuePartnerDetailPrefetch(ids);
 }
 
 async function _fetchOneCategoryPage(category, urgencyScope) {
@@ -122,29 +227,26 @@ async function _fetchOneCategoryPage(category, urgencyScope) {
 }
 
 async function _runListPrefetchPipeline({ urgencyScope } = {}) {
-    const scope = urgencyScope || partnerStore.urgencyScope || 'short';
+    const scope = urgencyScope || partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE;
     if ((partnerStore.searchQuery || '').trim()) {
         return { stage: 1, skipped: true, reason: 'search_active' };
     }
+
+    // 首屏列表已在 loadPostsByPage 写入缓存，立即启动详情预取，不必等全部分类列表跑完
+    _enqueueDetailPrefetchFromListCache(scope);
 
     const categories = _listPartnerPrefetchCategories();
     const results = [];
 
     for (const category of categories) {
         results.push(await _fetchOneCategoryPage(category, scope));
+        _enqueueDetailPrefetchFromListCache(scope);
         if (PREFETCH_GAP_MS > 0) {
             await new Promise((r) => setTimeout(r, PREFETCH_GAP_MS));
         }
     }
 
-    // Stage 2 hook: 列表预取结束后，可在此触发详情预取（当前为占位）
-    if (!_detailPrefetchPromise) {
-        _detailPrefetchPromise = prefetchPartnerPostDetails({ urgencyScope: scope })
-            .catch(() => {})
-            .finally(() => {
-                _detailPrefetchPromise = null;
-            });
-    }
+    await prefetchPartnerPostDetails({ urgencyScope: scope });
 
     return { stage: 1, results };
 }

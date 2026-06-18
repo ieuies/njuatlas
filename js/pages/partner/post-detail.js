@@ -9,8 +9,12 @@ import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList,
 import { isPostParticipationFull } from './shared.js';
 import { refreshPreviewMarkers } from './map.js';
 import { openEditPostModal } from './partner-form.js';
-// Stage 2 详情预取：后续在 openPostDetail 中优先读 getCachedPartnerPostDetail(postId)
-// import { getCachedPartnerPostDetail } from './prefetch.js';
+import {
+    getCachedPartnerPostDetail,
+    invalidatePartnerPostDetailCache,
+    setCachedPartnerPostDetail,
+    enqueuePartnerDetailPrefetch,
+} from './prefetch.js';
 
 // ============================================================
 // 帖子详情模态框（保持不变，略作适配）
@@ -105,6 +109,7 @@ export function initPostDetailModal() {
             _updateDetailStats();
             _applyDetailLikeUi(result.liked);
             _syncLikeStateToList(currentDetailPost.id, result.liked, result.like_count);
+            setCachedPartnerPostDetail(currentDetailPost.id, { ...currentDetailPost });
         } catch (err) {
             currentDetailPost.is_liked = prevLiked;
             currentDetailPost.like_count = prevCount;
@@ -139,6 +144,7 @@ export function initPostDetailModal() {
             _updateDetailStats();
             _applyDetailFavoriteUi(currentDetailPost.is_favorited);
             _syncFavoriteStateToList(currentDetailPost.id, currentDetailPost.is_favorited, currentDetailPost.favorite_count);
+            setCachedPartnerPostDetail(currentDetailPost.id, { ...currentDetailPost });
         } catch (err) {
             currentDetailPost.is_favorited = prevFavorited;
             currentDetailPost.favorite_count = prevCount;
@@ -177,6 +183,7 @@ export function initPostDetailModal() {
             _applyDetailParticipateButton(currentDetailPost);
             _refreshDetailParticipants(currentDetailPost.id);
             silentRefreshCurrentPage();
+            invalidatePartnerPostDetailCache([currentDetailPost.id]);
         } catch (err) {
             currentDetailPost.participation_status = prevStatus;
             currentDetailPost.participant_count = prevCount;
@@ -196,6 +203,7 @@ export function initPostDetailModal() {
             await addPostComment(currentDetailPost.id, content);
             commentInput.value = '';
             showToast('评论发表成功');
+            invalidatePartnerPostDetailCache([currentDetailPost.id]);
             await _refreshDetailComments(currentDetailPost.id);
         } catch (err) {
             showToast('评论失败: ' + err.message);
@@ -266,35 +274,63 @@ function setDetailCommentsLoading() {
     el.innerHTML = `<div class="detail-comments-empty detail-comments-loading">${atlasInlineSpinnerHtml({ label: '加载评论中' })}<span>加载评论中...</span></div>`;
 }
 
+function _backgroundRefreshPostDetail(postId) {
+    getPost(postId)
+        .then((post) => {
+            if (currentDetailPost?.id !== postId) return;
+            currentDetailPost = post;
+            syncPostInListFromApi(post);
+            setCachedPartnerPostDetail(postId, post);
+            _renderPostDetail(post);
+        })
+        .catch((err) => {
+            console.warn('帖子详情刷新失败:', err.message);
+        });
+}
+
 export async function openPostDetail(postId) {
     initPostDetailModal();
     const modal = document.getElementById('postDetailModal');
     if (!modal) return;
 
+    const numericId = Number(postId);
     modal.style.display = 'flex';
     _resetDetailUI();
-    setDetailCommentsLoading();
 
-    const cached = partnerStore.allPartnersData.find(p => p.id === postId);
-    if (cached) {
-        const quick = _mapCachedToDetailFormat(cached);
+    const prefetched = getCachedPartnerPostDetail(numericId);
+    const listCached = partnerStore.allPartnersData.find((p) => p.id === numericId);
+
+    if (prefetched) {
+        currentDetailPost = prefetched;
+        _renderPostDetail(prefetched);
+        _backgroundRefreshPostDetail(numericId);
+        return;
+    }
+
+    enqueuePartnerDetailPrefetch([numericId], { priority: true });
+
+    if (listCached) {
+        const quick = _mapCachedToDetailFormat(listCached);
+        currentDetailPost = quick;
         _renderPostDetail(quick);
+        setDetailCommentsLoading();
+    } else {
         setDetailCommentsLoading();
     }
 
     try {
-        const post = await getPost(postId);
+        const post = await getPost(numericId);
         currentDetailPost = post;
         syncPostInListFromApi(post);
+        setCachedPartnerPostDetail(numericId, post);
         _renderPostDetail(post);
     } catch (err) {
-        if (!cached) {
+        if (!listCached) {
             showToast('加载帖子详情失败: ' + err.message);
             modal.style.display = 'none';
             currentDetailPost = null;
         } else {
             console.warn('帖子详情刷新失败:', err.message);
-            currentDetailPost = cached;
         }
     }
 }
@@ -642,6 +678,7 @@ function _renderDetailComments(commentsData) {
             try {
                 await deletePostComment(currentDetailPost.id, commentId);
                 showToast('评论已删除');
+                invalidatePartnerPostDetailCache([currentDetailPost.id]);
                 await _refreshDetailComments(currentDetailPost.id);
             } catch (err) {
                 showToast('删除失败: ' + err.message);
@@ -671,6 +708,7 @@ function _showReplyInput(commentEl, parentId) {
             await addPostComment(currentDetailPost.id, content, parentId);
             row.remove();
             showToast('回复成功');
+            invalidatePartnerPostDetailCache([currentDetailPost.id]);
             await _refreshDetailComments(currentDetailPost.id);
         } catch (err) {
             showToast('回复失败: ' + err.message);
@@ -687,6 +725,7 @@ async function _refreshDetailComments(postId) {
     try {
         const post = await getPost(postId);
         currentDetailPost = post;
+        setCachedPartnerPostDetail(postId, post);
         _renderDetailComments(post.comments || { items: [] });
         _updateDetailStats();
     } catch (e) { /* ignore */ }
@@ -696,6 +735,7 @@ async function _refreshDetailParticipants(postId) {
     try {
         const post = await getPost(postId);
         currentDetailPost = post;
+        setCachedPartnerPostDetail(postId, post);
         _renderDetailParticipants(post.participants || []);
     } catch (e) { /* ignore */ }
 }

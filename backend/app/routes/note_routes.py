@@ -190,7 +190,9 @@ def get_post(post_id):
     if not note:
         return error_response("帖子不存在", 404, code="post_not_found")
 
-    note.record_view()
+    skip_view = request.args.get("prefetch") in ("1", "true", "yes")
+    if not skip_view:
+        note.record_view()
 
     # ── 预加载：一次性查出 to_dict() 需要的用户状态，避免 N+1 ──
     user_id = notes.user_id

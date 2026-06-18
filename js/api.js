@@ -812,8 +812,9 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     // 已登录时附带 JWT，后端才会返回 is_liked / participation_status 等个人状态
     return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken);
 }
-export async function getPost(postId) {
-    return request(`/posts/${postId}`, 'GET', null, true);
+export async function getPost(postId, { prefetch = false, silent = false } = {}) {
+    const qs = prefetch ? '?prefetch=1' : '';
+    return request(`/posts/${postId}${qs}`, 'GET', null, !!authToken, undefined, silent);
 }
 export async function updatePost(postId, data) {
     return request(`/posts/${postId}`, 'PUT', data);

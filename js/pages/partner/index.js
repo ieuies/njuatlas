@@ -1,7 +1,7 @@
 import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
 import { loadPostsByPage, handleParticipate, initPartnerPagination } from './list.js';
-import { schedulePartnerPrefetch } from './prefetch.js';
+import { schedulePartnerPrefetch, enqueuePartnerDetailPrefetch } from './prefetch.js';
 import {
     schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap, scheduleMobileMapPrewarm,
@@ -38,6 +38,8 @@ export async function loadPartnerData() {
                 addMarkersToMap(map, partnerStore.partnersData);
             }
         }
+        enqueuePartnerDetailPrefetch(partnerStore.allPartnersData.map((p) => p.id));
+        schedulePartnerPrefetch();
         return;
     }
 
@@ -45,6 +47,7 @@ export async function loadPartnerData() {
     // 与帖子请求并行预拉高德 SDK，地图仍在帖子完成后再初始化
     prefetchAmapScript();
     await loadPostsByPage(1);
+    enqueuePartnerDetailPrefetch(partnerStore.allPartnersData.map((p) => p.id));
     schedulePreviewMapAfterPaint();
     scheduleMobileMapPrewarm();
     schedulePartnerPrefetch();

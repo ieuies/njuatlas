@@ -2,7 +2,7 @@ import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller, isMobileViewp
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
 import {
-    partnerStore, PAGE_SIZE, LIST_RENDER_BATCH,
+    partnerStore, PAGE_SIZE, LIST_RENDER_BATCH, DEFAULT_URGENCY_SCOPE,
 } from './shared.js';
 import {
     clearPartnerListCache,
@@ -10,7 +10,7 @@ import {
     readPartnerListCache,
     writePartnerListCache,
 } from './list-cache.js';
-import { invalidatePartnerPostDetailCache, schedulePartnerPrefetch } from './prefetch.js';
+import { invalidatePartnerPostDetailCache, schedulePartnerPrefetch, enqueuePartnerDetailPrefetch } from './prefetch.js';
 import { mapPost, typeLabel, isCurrentUserOwner, isPostParticipationFull } from './shared.js';
 import { openPostDetail } from './post-detail.js';
 import { refreshPreviewMarkers } from './map.js';
@@ -227,7 +227,7 @@ export function showPartnerSkeleton(count = PAGE_SIZE) {
 }
 
 /** 空闲时预拉各分类第 1 页，进入找搭子后可秒切分类 */
-export { prefetchPartnerList, prefetchAllPartnerCategories, schedulePartnerPrefetch } from './prefetch.js';
+export { prefetchPartnerList, prefetchAllPartnerCategories, schedulePartnerPrefetch, enqueuePartnerDetailPrefetch } from './prefetch.js';
 
 /** 加载指定页（每页 PAGE_SIZE 条，默认 9 条） */
 export async function loadPostsByPage(page, { background = false, forceRefresh = false } = {}) {
@@ -244,6 +244,7 @@ export async function loadPostsByPage(page, { background = false, forceRefresh =
             renderWaterfall();
             renderPartnerPagination();
             refreshPreviewMarkers();
+            enqueuePartnerDetailPrefetch(cached.posts.map((p) => p.id));
             if (!_isCacheFresh(cached)) {
                 loadPostsByPage(page, { background: true });
             }
@@ -261,7 +262,7 @@ export async function loadPostsByPage(page, { background = false, forceRefresh =
             page,
             page_size: PAGE_SIZE,
             sort: 'nearby',
-            urgency_scope: partnerStore.urgencyScope || 'short',
+            urgency_scope: partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE,
         };
         if (partnerStore.currentCategory !== 'all') {
             params.tags = partnerStore.currentCategory;
@@ -295,6 +296,7 @@ export async function loadPostsByPage(page, { background = false, forceRefresh =
         }
 
         _writeListCache(newPosts, partnerStore.hasMore, page);
+        enqueuePartnerDetailPrefetch(newPosts.map((p) => p.id));
         refreshPreviewMarkers();
         return newPosts;
     } catch (err) {
@@ -686,6 +688,7 @@ function _updateSingleCardDOM(postId, status, participantCount, slots, isFull) {
 
 export function syncPostInListFromApi(apiPost) {
     if (!apiPost?.id) return null;
+    invalidatePartnerPostDetailCache([apiPost.id]);
     const mapped = mapPost(apiPost);
     const idx = partnerStore.allPartnersData.findIndex((p) => p.id === mapped.id);
     if (idx >= 0) {
