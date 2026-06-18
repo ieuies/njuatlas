@@ -2,9 +2,15 @@ import { showToast, escapeHtml, avatarHtmlForUser, getAppScroller, isMobileViewp
 import { isLoggedIn, getUser } from '../../auth.js';
 import { listPosts, deletePost, participateEvent, togglePostLike, togglePostFavorite } from '../../api.js';
 import {
-    partnerStore, PAGE_SIZE, LIST_CACHE_TTL_MS, FULL_LIST_CACHE_TTL_MS, LIST_RENDER_BATCH,
-    partnerListCache, partnerListCacheKey,
+    partnerStore, PAGE_SIZE, LIST_RENDER_BATCH,
 } from './shared.js';
+import {
+    clearPartnerListCache,
+    isPartnerListCacheFresh,
+    readPartnerListCache,
+    writePartnerListCache,
+} from './list-cache.js';
+import { invalidatePartnerPostDetailCache, schedulePartnerPrefetch } from './prefetch.js';
 import { mapPost, typeLabel, isCurrentUserOwner, isPostParticipationFull } from './shared.js';
 import { openPostDetail } from './post-detail.js';
 import { refreshPreviewMarkers } from './map.js';
@@ -13,50 +19,16 @@ import { refreshPreviewMarkers } from './map.js';
 // 数据加载：分页从后端 API 获取帖子列表
 // ============================================================
 
-const PARTNER_SESSION_CACHE_PREFIX = 'partner_list_v2_';
-
-function _isCacheFresh(entry) {
-    if (!entry?.at) return false;
-    const ttl = entry.fullyLoaded ? FULL_LIST_CACHE_TTL_MS : LIST_CACHE_TTL_MS;
-    return Date.now() - entry.at < ttl;
-}
-
-function _persistSessionCache(key, entry) {
-    try {
-        sessionStorage.setItem(PARTNER_SESSION_CACHE_PREFIX + key, JSON.stringify(entry));
-    } catch (_) { /* quota or private mode */ }
-}
-
-function _hydrateSessionCache(key) {
-    try {
-        const raw = sessionStorage.getItem(PARTNER_SESSION_CACHE_PREFIX + key);
-        return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-        return null;
-    }
-}
-
 function _writeListCacheFor(category, searchQuery, page, posts, hasMore) {
-    const key = partnerListCacheKey(category, searchQuery, page);
-    const entry = {
-        at: Date.now(),
-        posts,
-        hasMore,
-        page,
-        fullyLoaded: !hasMore,
-    };
-    partnerListCache.set(key, entry);
-    _persistSessionCache(key, entry);
+    writePartnerListCache(category, searchQuery, page, posts, hasMore);
 }
 
 function _getPageCache(category, searchQuery, page) {
-    const key = partnerListCacheKey(category, searchQuery, page);
-    let cached = partnerListCache.get(key);
-    if (!cached) {
-        cached = _hydrateSessionCache(key);
-        if (cached) partnerListCache.set(key, cached);
-    }
-    return cached;
+    return readPartnerListCache(category, searchQuery, page);
+}
+
+function _isCacheFresh(entry) {
+    return isPartnerListCacheFresh(entry);
 }
 
 function _writeListCache(posts, hasMore, page = partnerStore.currentPage) {
@@ -75,17 +47,8 @@ function _readListCache(page = partnerStore.currentPage) {
 
 /** 发布/编辑/删除后清掉列表缓存，避免 loadPostsByPage 读到旧数据 */
 export function invalidatePartnerListCache() {
-    partnerListCache.clear();
-    partnerStore._prefetchPromise = null;
-    try {
-        const prefix = PARTNER_SESSION_CACHE_PREFIX;
-        const keys = [];
-        for (let i = 0; i < sessionStorage.length; i++) {
-            const key = sessionStorage.key(i);
-            if (key && key.startsWith(prefix)) keys.push(key);
-        }
-        keys.forEach((key) => sessionStorage.removeItem(key));
-    } catch (_) { /* quota or private mode */ }
+    clearPartnerListCache();
+    invalidatePartnerPostDetailCache();
 }
 
 function _postMatchesCurrentView(post) {
@@ -263,20 +226,8 @@ export function showPartnerSkeleton(count = PAGE_SIZE) {
     )).join('');
 }
 
-/** 空闲时预拉首屏列表，进入找搭子时可秒开 */
-export function prefetchPartnerList() {
-    if (partnerStore._prefetchPromise) return partnerStore._prefetchPromise;
-    partnerStore._prefetchPromise = (async () => {
-        try {
-            const result = await listPosts({ page: 1, page_size: PAGE_SIZE, sort: 'nearby', urgency_scope: 'short' });
-            const posts = (result.items || []).map(mapPost);
-            _writeListCacheFor('all', '', 1, posts, posts.length === PAGE_SIZE);
-        } catch (e) {
-            partnerStore._prefetchPromise = null;
-        }
-    })();
-    return partnerStore._prefetchPromise;
-}
+/** 空闲时预拉各分类第 1 页，进入找搭子后可秒切分类 */
+export { prefetchPartnerList, prefetchAllPartnerCategories, schedulePartnerPrefetch } from './prefetch.js';
 
 /** 加载指定页（每页 PAGE_SIZE 条，默认 9 条） */
 export async function loadPostsByPage(page, { background = false, forceRefresh = false } = {}) {
@@ -649,6 +600,7 @@ export async function switchUrgencyScope(scope) {
         if (!_isCacheFresh(cached)) {
             loadPostsByPage(1, { background: true });
         }
+        schedulePartnerPrefetch({ urgencyScope: next });
         return;
     }
 
@@ -657,6 +609,7 @@ export async function switchUrgencyScope(scope) {
 
     await loadPostsByPage(1);
     refreshPreviewMarkers();
+    schedulePartnerPrefetch({ urgencyScope: next });
 }
 
 /** 关键词搜索：优先读本地缓存，未命中再请求网络 */

@@ -1,23 +1,11 @@
 import { escapeHtml } from '../../utils.js';
-import { categoryChipHtml, debounce, partnerStore } from './shared.js';
+import { categoryChipHtml, debounce, partnerStore, PARTNER_FILTER_CATEGORIES } from './shared.js';
 import { switchCategory, switchSearch, switchUrgencyScope } from './list.js';
 import { t } from '../../i18n.js';
 
 // ============================================================
 // 分类筛选（固定分类，动态生成）
 // ============================================================
-const FIXED_CATEGORIES = [
-    { label: '全部', category: 'all' },
-    { label: '饭搭子', icon: 'fa-utensils', category: '饭搭子' },
-    { label: '运动搭子', icon: 'fa-futbol', category: '运动搭子' },
-    { label: '学习搭子', icon: 'fa-book', category: '学习搭子' },
-    { label: '游戏搭子', icon: 'fa-gamepad', category: '游戏搭子' },
-    { label: '电影搭子', icon: 'fa-film', category: '电影搭子' },
-    { label: '旅游搭子', icon: 'fa-plane', category: '旅游搭子' },
-    { label: '音乐搭子', icon: 'fa-music', category: '音乐搭子' },
-    { label: '摄影搭子', icon: 'fa-camera', category: '摄影搭子' },
-    { label: '其他', icon: 'fa-ellipsis', category: '其他' },
-];
 
 export function initFilters() {
     const container = document.getElementById('partnerFilter');
@@ -27,7 +15,7 @@ export function initFilters() {
         || partnerStore.currentCategory
         || 'all';
 
-    container.innerHTML = FIXED_CATEGORIES.map((c) =>
+    container.innerHTML = PARTNER_FILTER_CATEGORIES.map((c) =>
         `<span class="filter-chip${c.category === activeCategory ? ' active' : ''}" data-category="${escapeHtml(c.category)}">${categoryChipHtml(c)}</span>`
     ).join('');
 

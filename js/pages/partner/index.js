@@ -1,6 +1,7 @@
 import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
-import { loadPostsByPage, handleParticipate, prefetchPartnerList, initPartnerPagination } from './list.js';
+import { loadPostsByPage, handleParticipate, initPartnerPagination } from './list.js';
+import { schedulePartnerPrefetch } from './prefetch.js';
 import {
     schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap, scheduleMobileMapPrewarm,
@@ -46,6 +47,7 @@ export async function loadPartnerData() {
     await loadPostsByPage(1);
     schedulePreviewMapAfterPaint();
     scheduleMobileMapPrewarm();
+    schedulePartnerPrefetch();
 }
 
 function ensureRightPanel() {
@@ -137,4 +139,5 @@ window.checkOverflow = function () {
     });
 };
 
-export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch, initPartnerDurationToggle, prefetchPartnerList };
+export { openPostDetail, initFilters, setupCategoryScrollArrows, initPartnerSearch, initPartnerDurationToggle };
+export { prefetchPartnerList } from './prefetch.js';

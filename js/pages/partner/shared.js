@@ -8,6 +8,20 @@ export const LIST_CACHE_TTL_MS = 45000;
 export const FULL_LIST_CACHE_TTL_MS = 30 * 60 * 1000;
 export const LIST_RENDER_BATCH = 6;
 
+/** 找搭子分类 Tab（filters 与列表预取共用） */
+export const PARTNER_FILTER_CATEGORIES = [
+    { label: '全部', category: 'all' },
+    { label: '饭搭子', icon: 'fa-utensils', category: '饭搭子' },
+    { label: '运动搭子', icon: 'fa-futbol', category: '运动搭子' },
+    { label: '学习搭子', icon: 'fa-book', category: '学习搭子' },
+    { label: '游戏搭子', icon: 'fa-gamepad', category: '游戏搭子' },
+    { label: '电影搭子', icon: 'fa-film', category: '电影搭子' },
+    { label: '旅游搭子', icon: 'fa-plane', category: '旅游搭子' },
+    { label: '音乐搭子', icon: 'fa-music', category: '音乐搭子' },
+    { label: '摄影搭子', icon: 'fa-camera', category: '摄影搭子' },
+    { label: '其他', icon: 'fa-ellipsis', category: '其他' },
+];
+
 /** 列表内存缓存：key -> { at, posts, hasMore } */
 export const partnerListCache = new Map();
 

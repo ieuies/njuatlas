@@ -9,6 +9,8 @@ import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList,
 import { isPostParticipationFull } from './shared.js';
 import { refreshPreviewMarkers } from './map.js';
 import { openEditPostModal } from './partner-form.js';
+// Stage 2 详情预取：后续在 openPostDetail 中优先读 getCachedPartnerPostDetail(postId)
+// import { getCachedPartnerPostDetail } from './prefetch.js';
 
 // ============================================================
 // 帖子详情模态框（保持不变，略作适配）
