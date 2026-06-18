@@ -36,11 +36,26 @@ import {
     compressChatBgImage,
     setChatBackground,
 } from '../chatBackground.js';
+import {
+    MSG_CACHE_TTL_MS,
+    readSessionChats,
+    readSessionFriends,
+    readSessionInteract,
+    getCachedDmThread,
+    setCachedDmThread,
+    invalidateDmThread,
+    invalidateMessagesChatsCache,
+    invalidateMessagesFriendsCache,
+    invalidateMessagesInteractCache,
+    persistSessionChats,
+    persistSessionFriends,
+    persistSessionInteract,
+    prefetchMessagesEntryData as prefetchMessagesEntryDataFromModule,
+} from '../messages-prefetch.js';
 
-const CACHE_TTL_MS = 30000;
+const CACHE_TTL_MS = MSG_CACHE_TTL_MS;
 const CHAT_PAGE_SIZE = 50;
 const CHAT_TIME_GAP_MS = 5 * 60 * 1000;
-const SESSION_CONV_KEY = 'njuatlas_msg_conv_v1';
 /** 列表项头像懒加载，减少首屏并发请求 */
 const LIST_AVATAR_OPTS = { lazy: true };
 
@@ -78,22 +93,11 @@ function isCacheFresh(at) {
 }
 
 function _readSessionConversations() {
-    try {
-        const row = JSON.parse(sessionStorage.getItem(SESSION_CONV_KEY) || 'null');
-        if (!row?.items || Date.now() - row.at > CACHE_TTL_MS) return null;
-        return row.items;
-    } catch {
-        return null;
-    }
+    return readSessionChats();
 }
 
 function _persistSessionConversations(items) {
-    try {
-        sessionStorage.setItem(SESSION_CONV_KEY, JSON.stringify({
-            at: Date.now(),
-            items: items || [],
-        }));
-    } catch { /* quota */ }
+    persistSessionChats(items);
 }
 
 function _seedChatsFromSession() {
@@ -104,14 +108,36 @@ function _seedChatsFromSession() {
     }
 }
 
+function _seedFriendsFromSession() {
+    if (tabCache.friends.friends !== null) return;
+    const data = readSessionFriends();
+    if (data) {
+        tabCache.friends = { ...data, at: Date.now() - 12000 };
+    }
+}
+
+function _seedInteractFromSession() {
+    if (tabCache.interact.items) return;
+    const items = readSessionInteract();
+    if (items) {
+        tabCache.interact = { items, at: Date.now() - 12000 };
+    }
+}
+
 function invalidateCache(...keys) {
     keys.forEach((key) => {
         if (key === 'chats') {
             tabCache.chats = { items: null, at: 0 };
-            try { sessionStorage.removeItem(SESSION_CONV_KEY); } catch { /* ignore */ }
+            invalidateMessagesChatsCache();
         }
-        if (key === 'friends') tabCache.friends = { friends: null, requests: null, sent: null, at: 0 };
-        if (key === 'interact') tabCache.interact = { items: null, at: 0 };
+        if (key === 'friends') {
+            tabCache.friends = { friends: null, requests: null, sent: null, at: 0 };
+            invalidateMessagesFriendsCache();
+        }
+        if (key === 'interact') {
+            tabCache.interact = { items: null, at: 0 };
+            invalidateMessagesInteractCache();
+        }
     });
 }
 
@@ -322,31 +348,51 @@ async function renderChats({ force = false } = {}) {
     ensureConvoWrap(view);
     showConvoList();
 
-    const cached = tabCache.chats.items;
+    if (!tabCache.chats.items) {
+        _seedChatsFromSession();
+    }
+
+    let cached = tabCache.chats.items;
     const fresh = !force && isCacheFresh(tabCache.chats.at);
 
     if (cached) {
         paintConvoList(cached);
-    } else {
-        const list = document.getElementById('msgConvoList');
-        if (list) list.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
-    }
-
-    if (fresh) {
-        fetchConversations({ silent: true })
-            .then((items) => { paintConvoList(items); updateTabBadges(); startRealtimeSync(); })
+        const useBootstrap = !fresh;
+        fetchConversations({ silent: true, useBootstrap })
+            .then((items) => { paintConvoList(items); updateTabBadges(); })
             .catch(() => {});
+        startRealtimeSync();
         return;
     }
 
-    const useBootstrap = !cached || force;
+    const sessionItems = readSessionChats();
+    if (sessionItems?.length && !force) {
+        tabCache.chats = { items: sessionItems, at: Date.now() - 12000 };
+        paintConvoList(sessionItems);
+        fetchConversations({ silent: true, useBootstrap: true })
+            .then((items) => { paintConvoList(items); updateTabBadges(); })
+            .catch(() => {});
+        startRealtimeSync();
+        return;
+    }
+
+    const list = document.getElementById('msgConvoList');
+    if (list) list.innerHTML = `<div class="msg-skeleton">${t('common.loading')}</div>`;
+
     try {
-        const items = await fetchConversations({ silent: true, useBootstrap });
+        await prefetchMessagesEntryDataFromModule({ listsOnly: true });
+        _seedChatsFromSession();
+        cached = tabCache.chats.items;
+        if (cached) {
+            paintConvoList(cached);
+            startRealtimeSync();
+            return;
+        }
+        const items = await fetchConversations({ silent: true, useBootstrap: true });
         paintConvoList(items);
-        if (!useBootstrap) updateTabBadges();
+        updateTabBadges();
         startRealtimeSync();
     } catch {
-        const list = document.getElementById('msgConvoList');
         if (list) list.innerHTML = `<div class="msg-empty-sm">${t('messages.loadFail')}</div>`;
     }
 }
@@ -939,9 +985,32 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     }
 
     chatState.peerId = peerId;
-    chatState.messages = [];
     chatState.page = 1;
     chatState.total = 0;
+
+    const cachedPeer = peerHint
+        || _pendingPeerHint
+        || tabCache.chats.items?.find((c) => c.peer_id === peerId)?.peer;
+    _pendingPeerHint = null;
+
+    const cachedThread = !force ? getCachedDmThread(peerId) : null;
+
+    if (cachedThread) {
+        chatState.messages = cachedThread.messages.slice();
+        chatState.hasMoreOlder = cachedThread.hasMoreOlder;
+        chatState.peer = cachedPeer || cachedThread.peer;
+        chatState.page = cachedThread.hasMoreOlder ? 2 : 1;
+        chatState.total = cachedThread.messages.length;
+        syncBubbleStyles();
+        updateChatHeader();
+        paintChatMessages({ scrollToBottom: true });
+        document.getElementById('msgChatText')?.focus();
+        startRealtimeSync();
+        _backgroundRefreshChatThread(peerId, cachedPeer);
+        return;
+    }
+
+    chatState.messages = [];
     chatState.hasMoreOlder = false;
 
     const body = document.getElementById('msgChatBody');
@@ -949,10 +1018,6 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     startRealtimeSync();
 
     try {
-        const cachedPeer = peerHint
-            || _pendingPeerHint
-            || tabCache.chats.items?.find((c) => c.peer_id === peerId)?.peer;
-        _pendingPeerHint = null;
         const { peer, messages, hasMoreOlder } = await fetchChatThread(peerId);
         const duringLoad = chatState.messages.filter((m) => m.id);
         const fetchedIds = new Set(messages.map((m) => m.id));
@@ -966,6 +1031,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         chatState.hasMoreOlder = hasMoreOlder;
         chatState.page = hasMoreOlder ? 2 : 1;
         chatState.total = messages.length;
+        setCachedDmThread(peerId, { peer: chatState.peer, messages: merged, hasMoreOlder });
         syncBubbleStyles();
         updateChatHeader();
         paintChatMessages({ scrollToBottom: true });
@@ -973,6 +1039,7 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
         clearLocalConvoUnread(peerId);
         markDmThreadRead(peerId)
             .then(() => {
+                invalidateDmThread(peerId);
                 invalidateUnreadCache();
                 return refreshAllBadges(null, { force: true });
             })
@@ -980,6 +1047,40 @@ async function openChatRoom(peerId, { force = false, peerHint = null } = {}) {
     } catch (e) {
         if (body) body.innerHTML = `<div class="msg-empty-sm">${escapeHtml(e.message || t('messages.chatLoadFail'))}</div>`;
     }
+}
+
+function _backgroundRefreshChatThread(peerId, peerHint = null) {
+    fetchChatThread(peerId)
+        .then(({ peer, messages, hasMoreOlder }) => {
+            if (Number(chatState.peerId) !== Number(peerId)) return;
+            const duringLoad = chatState.messages.filter((m) => m.id);
+            const fetchedIds = new Set(messages.map((m) => m.id));
+            const merged = [...messages];
+            for (const m of duringLoad) {
+                if (m.id && !fetchedIds.has(m.id)) merged.push(m);
+            }
+            merged.sort((a, b) => (a.id || 0) - (b.id || 0));
+            chatState.peer = peerHint || peer || chatState.peer;
+            chatState.messages = merged;
+            chatState.hasMoreOlder = hasMoreOlder;
+            chatState.page = hasMoreOlder ? 2 : 1;
+            chatState.total = merged.length;
+            setCachedDmThread(peerId, { peer: chatState.peer, messages: merged, hasMoreOlder });
+            syncBubbleStyles();
+            updateChatHeader();
+            paintChatMessages({ scrollToBottom: false });
+            clearLocalConvoUnread(peerId);
+            markDmThreadRead(peerId)
+                .then(() => {
+                    invalidateDmThread(peerId);
+                    invalidateUnreadCache();
+                    return refreshAllBadges(null, { force: true });
+                })
+                .catch(() => {});
+        })
+        .catch((err) => {
+            console.warn('聊天后台刷新失败:', err?.message || err);
+        });
 }
 
 async function loadOlderMessages() {
@@ -1111,6 +1212,7 @@ async function sendChatMessageOnce(peerId, tempId, text) {
             appendChatBubble(confirmed);
         }
         scheduleConvoListSync();
+        invalidateDmThread(peerId);
     } catch (err) {
         const row = document.querySelector(`[data-temp-id="${tempId}"]`);
         const dividerBefore = row?.previousElementSibling?.classList?.contains('msg-time-divider')
@@ -1269,6 +1371,7 @@ async function fetchFriendsData() {
             sent: bundle.sent || [],
         };
         tabCache.friends = { ...payload, at: Date.now() };
+        persistSessionFriends(payload);
         return payload;
     } catch {
         const [friendsData, reqData, sentReqData] = await Promise.all([
@@ -1282,6 +1385,7 @@ async function fetchFriendsData() {
             sent: sentReqData.items || [],
         };
         tabCache.friends = { ...payload, at: Date.now() };
+        persistSessionFriends(payload);
         return payload;
     }
 }
@@ -1385,6 +1489,7 @@ async function fetchNotifications() {
     const data = await listNotifications();
     const items = data.items || [];
     tabCache.interact = { items, at: Date.now() };
+    persistSessionInteract(items);
     return items;
 }
 
@@ -1695,6 +1800,8 @@ export function initMessagesPage() {
     bindEvents();
     bindVisibilitySync();
     _seedChatsFromSession();
+    _seedFriendsFromSession();
+    _seedInteractFromSession();
     renderTabs();
 
     if (currentTab !== 'chats') return;
@@ -1774,6 +1881,8 @@ export async function refreshMessages({ force = false } = {}) {
     bindEvents();
     bindVisibilitySync();
     _seedChatsFromSession();
+    _seedFriendsFromSession();
+    _seedInteractFromSession();
     renderTabs();
 
     if (currentTab === 'chats') {
@@ -1787,13 +1896,9 @@ export async function refreshMessages({ force = false } = {}) {
     _scheduleMessagesPageExtras({ force });
 }
 
-/** 冷启动预取：仅会话列表（私信 Tab 首屏） */
-export async function prefetchMessagesEntryData() {
-    if (!getAuthToken()) return;
-    if (_readSessionConversations()) return;
-    try {
-        await fetchConversations({ silent: true, useBootstrap: true });
-    } catch { /* ignore */ }
+/** 冷启动预取：委托统一消息预加载模块 */
+export function prefetchMessagesEntryData(options = {}) {
+    return prefetchMessagesEntryDataFromModule(options);
 }
 
 export function getMessagesState() {

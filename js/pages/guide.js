@@ -20,7 +20,9 @@ import {
 } from '../api.js';
 import {
     hydrateAllLeaderboardsFromStorage,
-    prefetchAllGuideLeaderboards,
+    scheduleGuidePrefetch,
+    prefetchGuideEntryLeaderboards,
+    isGuidePrefetchComplete,
 } from '../guide-prefetch.js';
 import {
     ALL_GUIDE_CAMPUSES,
@@ -32,6 +34,7 @@ import {
     leaderboardKeysForGuideItem,
     persistLeaderboardToStorage,
     readLeaderboardRow,
+    readWarmLeaderboard,
     stripGuideUserState,
     stripGuideUserStateFromStorageCache,
 } from '../guide-warm-cache.js';
@@ -172,7 +175,7 @@ function _scheduleGuidePageExtras() {
             const key = _cacheKey(currentGuideCampus, currentGuideCat);
             if (_leaderboardCache[key]) renderLeaderboard(_leaderboardCache[key], key);
         }
-        prefetchAllGuideLeaderboards().catch(() => {});
+        scheduleGuidePrefetch();
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -195,13 +198,34 @@ function _cacheKey(campus, cat) {
     return entryCacheKey(campus, cat);
 }
 
+function _readStaleLeaderboardData(key) {
+    try {
+        const map = JSON.parse(sessionStorage.getItem(GUIDE_LB_CACHE_KEY) || '{}');
+        return map[key]?.data || null;
+    } catch {
+        return null;
+    }
+}
+
 function _getCachedLeaderboard(key) {
     if (_leaderboardCache[key]) return _leaderboardCache[key];
     const row = readLeaderboardRow(key);
-    if (!row?.data) return null;
-    _leaderboardCache[key] = row.data;
-    _leaderboardCacheAt[key] = row.at;
-    return row.data;
+    if (row?.data) {
+        _leaderboardCache[key] = row.data;
+        _leaderboardCacheAt[key] = row.at;
+        return row.data;
+    }
+    const warm = readWarmLeaderboard(key);
+    if (warm) {
+        _leaderboardCache[key] = warm;
+        return warm;
+    }
+    const stale = _readStaleLeaderboardData(key);
+    if (stale) {
+        _leaderboardCache[key] = stale;
+        return stale;
+    }
+    return null;
 }
 
 function _isCacheFresh(key) {
@@ -422,30 +446,37 @@ async function loadLeaderboard({ force = false, shuffle = false } = {}) {
     const key = _cacheKey(campus, cat);
     const container = document.getElementById('guideGrid');
     const seq = ++_loadLeaderboardSeq;
-    const cached = _getCachedLeaderboard(key);
-    const fresh = Boolean(cached && _isCacheFresh(key));
 
     if (shuffle) {
+        const cached = _getCachedLeaderboard(key);
         if (!cached) _showGuideLoading(container);
         await _fetchLeaderboard(key, campus, cat, shuffle, seq);
         return;
     }
 
-    if (cached) {
+    const cached = _getCachedLeaderboard(key);
+
+    if (cached && !force) {
         const gridMatches = container?.dataset.guideKey === key;
         if (!gridMatches) renderLeaderboard(cached, key);
-    } else {
-        _showGuideLoading(container);
-    }
-
-    if (!force && cached && fresh) {
         _fetchLeaderboardInBackground(key, campus, cat, false, seq);
         return;
     }
 
-    if (force || !cached || !fresh) {
-        await _fetchLeaderboard(key, campus, cat, false, seq);
+    if (!cached) {
+        _showGuideLoading(container);
+        try {
+            await prefetchGuideEntryLeaderboards();
+            const warmed = _getCachedLeaderboard(key);
+            if (warmed) {
+                renderLeaderboard(warmed, key);
+                _fetchLeaderboardInBackground(key, campus, cat, false, seq);
+                return;
+            }
+        } catch { /* ignore */ }
     }
+
+    await _fetchLeaderboard(key, campus, cat, false, seq);
 }
 
 function _fetchLeaderboardInBackground(key, campus, cat, shuffle, seq) {
@@ -1157,6 +1188,9 @@ export async function loadGuideData() {
 }
 
 export function refreshGuideView() {
+    if (!isGuidePrefetchComplete()) {
+        scheduleGuidePrefetch();
+    }
     if (_guideViewMode === 'search') {
         runGuideSearch(_guideSearchPage, { keyword: _guideSearchQuery });
     } else {
@@ -1169,7 +1203,7 @@ export function onGuidePageHidden() {
 }
 
 export function prefetchGuideData() {
-    return prefetchAllGuideLeaderboards();
+    return scheduleGuidePrefetch();
 }
 
 export function initGuidePage() {

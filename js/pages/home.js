@@ -133,6 +133,8 @@ async function handleLogin() {
         // 刷新导航栏
         window.updateNavBar();
         showToast('登录成功');
+        const { scheduleMessagesPrefetch } = await import('../messages-prefetch.js');
+        scheduleMessagesPrefetch();
     } catch(e) {
         showToast(e.message);
     } finally {
@@ -155,6 +157,8 @@ async function handleRegister() {
         hideModal();
         showToast('注册成功，已自动登录');
         window.updateNavBar();
+        const { scheduleMessagesPrefetch } = await import('../messages-prefetch.js');
+        scheduleMessagesPrefetch();
     } catch(e) {
         showToast(e.message);
     }

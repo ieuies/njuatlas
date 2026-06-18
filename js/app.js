@@ -1,13 +1,20 @@
 import { isLoggedIn, getUser, doLogout, syncUserMediaFromServer } from './auth.js';
 import { showToast, renderAvatarInto, isMobileViewport } from './utils.js';
-import { getUnreadCounts, listDmConversations } from './api.js';
+import { getUnreadCounts } from './api.js';
+import {
+    scheduleMessagesPrefetch,
+    prefetchMessagesEntryData,
+    clearMessagesPrefetchCache,
+    readSessionChats,
+} from './messages-prefetch.js';
 import {
     entryCacheKey,
     GUIDE_ENTRY_CAMPUS,
     GUIDE_ENTRY_CATEGORY,
     paintGuideGridFromCache,
+    readWarmLeaderboard,
 } from './guide-warm-cache.js';
-import { prefetchAllGuideLeaderboards } from './guide-prefetch.js';
+import { scheduleGuidePrefetch, prefetchGuideEntryLeaderboards } from './guide-prefetch.js';
 import { showHomePage, initAuthConfig, applyAuthConfigToRegisterForm } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
@@ -107,34 +114,7 @@ function prefetchPartnerOnIntent() {
 }
 
 function prefetchGuideOnIntent() {
-    prefetchAllGuideLeaderboards();
-}
-
-const MSG_CONV_CACHE_KEY = 'njuatlas_msg_conv_v1';
-const MSG_CONV_CACHE_TTL_MS = 30 * 1000;
-
-let _msgEntryPrefetchPromise = null;
-
-/** 冷启动只预取私信会话列表，不加载 messages.js 模块 */
-function prefetchMessagesEntryData() {
-    if (!isLoggedIn()) return Promise.resolve();
-    if (_msgEntryPrefetchPromise) return _msgEntryPrefetchPromise;
-    _msgEntryPrefetchPromise = (async () => {
-        try {
-            const row = JSON.parse(sessionStorage.getItem(MSG_CONV_CACHE_KEY) || 'null');
-            if (row?.items && Date.now() - row.at < MSG_CONV_CACHE_TTL_MS) return;
-        } catch { /* ignore */ }
-        try {
-            const data = await listDmConversations(true);
-            sessionStorage.setItem(MSG_CONV_CACHE_KEY, JSON.stringify({
-                at: Date.now(),
-                items: data.items || [],
-            }));
-        } catch { /* ignore */ }
-    })().finally(() => {
-        _msgEntryPrefetchPromise = null;
-    });
-    return _msgEntryPrefetchPromise;
+    scheduleGuidePrefetch();
 }
 
 function prefetchMessagesOnIntent() {
@@ -187,17 +167,17 @@ function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
     bindGuidePrefetchIntent();
     bindMessagesPrefetchIntent();
-    prefetchAllGuideLeaderboards();
+    scheduleGuidePrefetch();
     const mobile = isMobileViewport();
     const delay = mobile ? 1200 : 500;
     setTimeout(() => prefetchAmapScript(), delay);
     if (isLoggedIn()) {
-        setTimeout(() => prefetchMessagesEntryData(), mobile ? 1100 : 2400);
+        scheduleMessagesPrefetch();
     }
     if (mobile) {
         const idlePrefetch = () => {
-            prefetchAllGuideLeaderboards();
-            if (isLoggedIn()) prefetchMessagesEntryData();
+            scheduleGuidePrefetch();
+            if (isLoggedIn()) scheduleMessagesPrefetch();
         };
         if (typeof requestIdleCallback === 'function') {
             requestIdleCallback(idlePrefetch, { timeout: 1500 });
@@ -291,7 +271,11 @@ async function switchPage(pageId) {
     }
 
     if (pageId === 'guide') {
-        prefetchAllGuideLeaderboards();
+        const entryKey = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
+        scheduleGuidePrefetch();
+        if (!readWarmLeaderboard(entryKey)) {
+            prefetchGuideEntryLeaderboards();
+        }
         const grid = document.getElementById('guideGrid');
         if (grid && !grid.dataset.guideKey) {
             paintGuideGridFromCache(grid, entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY));
@@ -326,6 +310,9 @@ async function switchPage(pageId) {
         window._profileViewPending = false;
         mod.refreshProfile();
     } else if (pageId === 'messages') {
+        if (isLoggedIn() && !readSessionChats()) {
+            prefetchMessagesEntryData({ listsOnly: true });
+        }
         const mod = await _loadMessages();
         if (!_messagesPageInited) {
             _messagesPageInited = true;
@@ -386,6 +373,7 @@ function updateNavBar() {
         if (userNav) userNav.style.display = 'none';
         document.body.classList.remove('logged-in');
         clearNavUnreadBadges();
+        clearMessagesPrefetchCache();
         if (typeof window.clearMessagesTabBadges === 'function') window.clearMessagesTabBadges();
     }
 
@@ -1058,6 +1046,17 @@ function clearNavUnreadBadges() {
 
 window.refreshUnreadBadge = refreshUnreadBadge;
 window.clearNavUnreadBadges = clearNavUnreadBadges;
+
+window.addEventListener('njuatlas:auth-change', () => {
+    if (isLoggedIn()) {
+        refreshUnreadBadge(null, { force: true });
+        scheduleMessagesPrefetch();
+        scheduleGuidePrefetch();
+    } else {
+        clearMessagesPrefetchCache();
+        clearNavUnreadBadges();
+    }
+});
 
 window.openUserProfile = async (userId) => {
     const mod = await _loadProfile();
