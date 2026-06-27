@@ -11,8 +11,20 @@ const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname
 // - 本地静态预览：默认直连生产 API，无需起 Flask
 // - 本地后端联调：在 index.html 设 NJUATLAS_CONFIG.USE_LOCAL_API = true
 const useLocalApi = isLocal && runtimeConfig.USE_LOCAL_API === true;
-export const API_BASE = runtimeConfig.API_BASE
-    || (useLocalApi ? LOCAL_API_BASE : PRODUCTION_API_BASE);
+const isNjuAtlasProductionHost = typeof window !== 'undefined'
+    && /\.njuatlas\.cn$/i.test(hostname);
+
+function resolveApiBase() {
+    if (runtimeConfig.API_BASE) return runtimeConfig.API_BASE;
+    if (useLocalApi) return LOCAL_API_BASE;
+    // 生产站点默认同域 /api（依赖 Render Rewrite）；若 404 可在 index.html 设 API_BASE 回退
+    if (isNjuAtlasProductionHost) {
+        return `${window.location.origin}/api`;
+    }
+    return PRODUCTION_API_BASE;
+}
+
+export const API_BASE = resolveApiBase();
 export const IS_CROSS_ORIGIN_API = (() => {
     try {
         const apiOrigin = new URL(API_BASE, window.location.href).origin;

@@ -24,10 +24,21 @@ import {
 const PREFETCH_GAP_MS = 320;
 const PREFETCH_429_BASE_MS = 2000;
 const PREFETCH_MAX_ATTEMPTS = 4;
+const PREFETCH_RATE_LIMIT_PAUSE_MS = 30_000;
+
+let _prefetchPausedUntil = 0;
+
+function _isPartnerPrefetchPaused() {
+    return Date.now() < _prefetchPausedUntil;
+}
+
+function _pausePartnerPrefetchOnRateLimit() {
+    _prefetchPausedUntil = Date.now() + PREFETCH_RATE_LIMIT_PAUSE_MS;
+}
 
 const DETAIL_CACHE_TTL_MS = LIST_CACHE_TTL_MS;
 const DETAIL_PREFETCH_GAP_MS = 320;
-const DETAIL_PREFETCH_MAX = 60;
+const DETAIL_PREFETCH_MAX = 8;
 
 // ── Stage 2: 帖子详情缓存 ────────────────────────────────────────
 export const partnerPostDetailCache = new Map();
@@ -120,10 +131,13 @@ async function _fetchOnePostDetail(postId) {
             setCachedPartnerPostDetail(postId, data);
             return true;
         } catch (err) {
-            if (_isRateLimitError(err) && attempt < PREFETCH_MAX_ATTEMPTS - 1) {
-                const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
-                await new Promise((r) => setTimeout(r, delay));
-                continue;
+            if (_isRateLimitError(err)) {
+                _pausePartnerPrefetchOnRateLimit();
+                if (attempt < PREFETCH_MAX_ATTEMPTS - 1) {
+                    const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
+                    await new Promise((r) => setTimeout(r, delay));
+                    continue;
+                }
             }
             return false;
         }
@@ -132,6 +146,7 @@ async function _fetchOnePostDetail(postId) {
 }
 
 async function _runDetailPrefetchWorker() {
+    if (_isPartnerPrefetchPaused()) return;
     let fetched = 0;
     while (_detailPrefetchPending.size > 0 && fetched < DETAIL_PREFETCH_MAX) {
         const id = _detailPrefetchPending.values().next().value;
@@ -179,6 +194,11 @@ function _isRateLimitError(err) {
     return msg.includes('过于频繁') || msg.includes('429');
 }
 
+function _isAbortPrefetchError(err) {
+    const msg = String(err?.message || '');
+    return msg.includes('数据库操作失败') || msg.includes('database_error');
+}
+
 function _listPartnerPrefetchCategories() {
     return PARTNER_FILTER_CATEGORIES.map((item) => item.category);
 }
@@ -207,7 +227,7 @@ async function _fetchOneCategoryPage(category, urgencyScope) {
 
     for (let attempt = 0; attempt < PREFETCH_MAX_ATTEMPTS; attempt += 1) {
         try {
-            const result = await listPosts(params);
+            const result = await listPosts({ ...params, silent: true });
             let posts = (result.items || []).map(mapPost);
             if (category !== 'all') {
                 posts = posts.filter((post) => post.tags.includes(category));
@@ -215,10 +235,16 @@ async function _fetchOneCategoryPage(category, urgencyScope) {
             writePartnerListCache(category, searchQuery, 1, posts, posts.length === PAGE_SIZE);
             return { category, skipped: false, count: posts.length };
         } catch (err) {
-            if (_isRateLimitError(err) && attempt < PREFETCH_MAX_ATTEMPTS - 1) {
-                const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
-                await new Promise((r) => setTimeout(r, delay));
-                continue;
+            if (_isAbortPrefetchError(err)) {
+                return { category, error: err, abort: true };
+            }
+            if (_isRateLimitError(err)) {
+                _pausePartnerPrefetchOnRateLimit();
+                if (attempt < PREFETCH_MAX_ATTEMPTS - 1) {
+                    const delay = PREFETCH_429_BASE_MS * (2 ** attempt);
+                    await new Promise((r) => setTimeout(r, delay));
+                    continue;
+                }
             }
             return { category, error: err };
         }
@@ -227,6 +253,9 @@ async function _fetchOneCategoryPage(category, urgencyScope) {
 }
 
 async function _runListPrefetchPipeline({ urgencyScope } = {}) {
+    if (_isPartnerPrefetchPaused()) {
+        return { stage: 1, skipped: true, reason: 'rate_limited' };
+    }
     const scope = urgencyScope || partnerStore.urgencyScope || DEFAULT_URGENCY_SCOPE;
     if ((partnerStore.searchQuery || '').trim()) {
         return { stage: 1, skipped: true, reason: 'search_active' };
@@ -239,7 +268,9 @@ async function _runListPrefetchPipeline({ urgencyScope } = {}) {
     const results = [];
 
     for (const category of categories) {
-        results.push(await _fetchOneCategoryPage(category, scope));
+        const row = await _fetchOneCategoryPage(category, scope);
+        results.push(row);
+        if (row?.abort) break;
         _enqueueDetailPrefetchFromListCache(scope);
         if (PREFETCH_GAP_MS > 0) {
             await new Promise((r) => setTimeout(r, PREFETCH_GAP_MS));

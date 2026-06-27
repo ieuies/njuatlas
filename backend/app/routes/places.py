@@ -208,6 +208,35 @@ def guide_leaderboard():
     return jsonify({"campus": campus, "category": category, "items": result})
 
 
+@places_bp.route("/guide-leaderboard-bundle", methods=["GET"])
+@jwt_optional
+@limiter.limit("40 per minute")
+def guide_leaderboard_bundle():
+    """同校区多分类榜单合并响应，供前端 Stage1 预取（单次 HTTP 往返）。"""
+    campus = clean_string(request.args.get("campus", "鼓楼"), "campus", max_length=20) or "鼓楼"
+    if campus == "all":
+        return error_response("bundle 不支持 all 校区", 400, code="invalid_campus")
+    if campus not in GUIDE_CAMPUS_COORDS:
+        campus = "鼓楼"
+
+    raw = clean_string(request.args.get("categories"), "categories", max_length=200) or ""
+    if raw.strip():
+        categories = [c.strip() for c in raw.split(",") if c.strip()]
+    else:
+        categories = list(GUIDE_CATEGORY_CONFIG.keys())
+
+    invalid = [c for c in categories if c not in GUIDE_CATEGORY_CONFIG]
+    if invalid:
+        return error_response(f"无效的分类: {', '.join(invalid)}", 400, code="invalid_category")
+
+    user_id = _optional_user_id()
+    boards = {}
+    for cat in categories:
+        boards[cat] = build_leaderboard(campus, cat, user_id=user_id)
+
+    return jsonify({"campus": campus, "boards": boards})
+
+
 @places_bp.route("/guide-category", methods=["GET"])
 @limiter.limit("60 per minute")
 def guide_category():

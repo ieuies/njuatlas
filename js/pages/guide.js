@@ -20,8 +20,8 @@ import {
 } from '../api.js';
 import {
     hydrateAllLeaderboardsFromStorage,
-    scheduleGuidePrefetch,
-    prefetchGuideEntryLeaderboards,
+    scheduleGuideBackgroundPrefetch,
+    prefetchGuideLeaderboard,
     isGuidePrefetchComplete,
 } from '../guide-prefetch.js';
 import {
@@ -175,7 +175,7 @@ function _scheduleGuidePageExtras() {
             const key = _cacheKey(currentGuideCampus, currentGuideCat);
             if (_leaderboardCache[key]) renderLeaderboard(_leaderboardCache[key], key);
         }
-        scheduleGuidePrefetch();
+        scheduleGuideBackgroundPrefetch();
     };
 
     if (typeof requestIdleCallback === 'function') {
@@ -466,7 +466,7 @@ async function loadLeaderboard({ force = false, shuffle = false } = {}) {
     if (!cached) {
         _showGuideLoading(container);
         try {
-            await prefetchGuideEntryLeaderboards();
+            await prefetchGuideLeaderboard(campus, cat);
             const warmed = _getCachedLeaderboard(key);
             if (warmed) {
                 renderLeaderboard(warmed, key);
@@ -1213,7 +1213,7 @@ export async function openGuideWithContext(campus, category) {
 
 export function refreshGuideView() {
     if (!isGuidePrefetchComplete()) {
-        scheduleGuidePrefetch();
+        scheduleGuideBackgroundPrefetch();
     }
     if (_guideViewMode === 'search') {
         runGuideSearch(_guideSearchPage, { keyword: _guideSearchQuery });
@@ -1227,7 +1227,7 @@ export function onGuidePageHidden() {
 }
 
 export function prefetchGuideData() {
-    return scheduleGuidePrefetch();
+    return scheduleGuideBackgroundPrefetch();
 }
 
 export function initGuidePage() {

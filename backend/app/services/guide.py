@@ -104,7 +104,7 @@ _RESTAURANT_NAME_MARKERS = (
 _GUIDE_CAMPUS_BRANCH_SUFFIX_RE = re.compile(
     r"\([^)]*(南京大学|南大)[^)]*店\)"
 )
-_LB_RESPONSE_CACHE_TTL_SEC = 10
+_LB_RESPONSE_CACHE_TTL_SEC = 120
 _lb_response_cache = {}
 
 

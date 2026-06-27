@@ -99,8 +99,32 @@ def ensure_post_social_schema():
     db.session.commit()
 
 
+def ensure_places_guide_schema():
+    """为旧版 SQLite places 表补齐 guide 排行榜字段（与 migration j2k7m5n8p016 对齐）。"""
+    inspector = inspect(db.engine)
+    if "places" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("places")}
+
+    if "campus" not in existing_columns:
+        db.session.execute(text("ALTER TABLE places ADD COLUMN campus VARCHAR(20)"))
+
+    if "guide_category" not in existing_columns:
+        db.session.execute(text("ALTER TABLE places ADD COLUMN guide_category VARCHAR(30)"))
+
+    db.session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_places_campus_guide_category "
+            "ON places (campus, guide_category)"
+        )
+    )
+    db.session.commit()
+
+
 def initialize_database():
     """创建缺失的数据表，并执行当前 MVP 阶段的轻量兼容迁移。"""
     db.create_all()
     ensure_user_auth_schema()
     ensure_post_social_schema()
+    ensure_places_guide_schema()

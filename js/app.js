@@ -12,9 +12,8 @@ import {
     GUIDE_ENTRY_CAMPUS,
     GUIDE_ENTRY_CATEGORY,
     paintGuideGridFromCache,
-    readWarmLeaderboard,
 } from './guide-warm-cache.js';
-import { scheduleGuidePrefetch, prefetchGuideEntryLeaderboards } from './guide-prefetch.js';
+import { scheduleGuideBackgroundPrefetch, prefetchGuideEntryOnly } from './guide-prefetch.js';
 import { showHomePage, initAuthConfig, applyAuthConfigToRegisterForm } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
@@ -110,11 +109,11 @@ function prefetchPageModule(pageId) {
 
 function prefetchPartnerOnIntent() {
     prefetchAmapScript();
-    _loadPartner().then((mod) => mod.prefetchPartnerList?.()).catch(() => {});
+    _loadPartner().catch(() => {});
 }
 
 function prefetchGuideOnIntent() {
-    scheduleGuidePrefetch();
+    prefetchGuideEntryOnly();
 }
 
 function prefetchMessagesOnIntent() {
@@ -167,24 +166,6 @@ function prefetchCommonAssets() {
     bindPartnerPrefetchIntent();
     bindGuidePrefetchIntent();
     bindMessagesPrefetchIntent();
-    scheduleGuidePrefetch();
-    const mobile = isMobileViewport();
-    const delay = mobile ? 1200 : 500;
-    setTimeout(() => prefetchAmapScript(), delay);
-    if (isLoggedIn()) {
-        scheduleMessagesPrefetch();
-    }
-    if (mobile) {
-        const idlePrefetch = () => {
-            scheduleGuidePrefetch();
-            if (isLoggedIn()) scheduleMessagesPrefetch();
-        };
-        if (typeof requestIdleCallback === 'function') {
-            requestIdleCallback(idlePrefetch, { timeout: 1500 });
-        } else {
-            setTimeout(idlePrefetch, 800);
-        }
-    }
 }
 
 async function switchPage(pageId) {
@@ -271,11 +252,7 @@ async function switchPage(pageId) {
     }
 
     if (pageId === 'guide') {
-        const entryKey = entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY);
-        scheduleGuidePrefetch();
-        if (!readWarmLeaderboard(entryKey)) {
-            prefetchGuideEntryLeaderboards();
-        }
+        prefetchGuideEntryOnly();
         const grid = document.getElementById('guideGrid');
         if (grid && !grid.dataset.guideKey) {
             paintGuideGridFromCache(grid, entryCacheKey(GUIDE_ENTRY_CAMPUS, GUIDE_ENTRY_CATEGORY));
@@ -904,8 +881,8 @@ async function init() {
         syncUserMediaFromServer().then(() => updateNavBar()).catch(() => {});
     }
 
-    // 初始化各模块
-    await initAuthConfig();
+    // 初始化各模块（auth-config 不阻塞首屏）
+    initAuthConfig().catch(() => {});
     showHomePage();          // 绑定登录/注册/找回密码等按钮事件
     initNavigation();
     initThemeToggle();
@@ -1051,7 +1028,6 @@ window.addEventListener('njuatlas:auth-change', () => {
     if (isLoggedIn()) {
         refreshUnreadBadge(null, { force: true });
         scheduleMessagesPrefetch();
-        scheduleGuidePrefetch();
     } else {
         clearMessagesPrefetchCache();
         clearNavUnreadBadges();

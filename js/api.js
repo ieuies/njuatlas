@@ -177,6 +177,17 @@ export async function getGuideLeaderboard(campus, category, { shuffle = false } 
     }
     return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
 }
+
+/** 同校区多分类榜单一次返回（P0 预取 bundle，减少往返） */
+export async function getGuideLeaderboardBundle(campus, categories) {
+    const list = Array.isArray(categories) ? categories : [categories];
+    const cats = list.filter(Boolean).join(',');
+    const url = `/places/guide-leaderboard-bundle?campus=${encodeURIComponent(campus)}&categories=${encodeURIComponent(cats)}`;
+    if (authToken) {
+        return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
+    }
+    return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+}
 const GUIDE_EXCLUDED_NAME_KEYWORDS = ['南京大学', '南大', '酒店', '政府部门', '商学院'];
 const GUIDE_MAX_DISTANCE_M = 8000;
 /** 后端 /places/search 的 page_size 上限 */
@@ -794,7 +805,7 @@ export async function chatRecommendStream(message, sessionId = null, city = '南
 export async function createPost({ type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact } = {}) {
     return request('/posts', 'POST', { type, title, content, tags, place_id, event_time, event_end_time, urgency, location, location_name, slots, budget, contact });
 }
-export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q, urgency_scope } = {}) {
+export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, user_id, page, page_size, q, urgency_scope, silent = false } = {}) {
     const params = new URLSearchParams();
     if (type) params.set('type', type);
     if (tags) params.set('tags', Array.isArray(tags) ? tags.join(',') : tags);
@@ -810,7 +821,7 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (urgency_scope) params.set('urgency_scope', urgency_scope);
     const qs = params.toString();
     // 已登录时附带 JWT，后端才会返回 is_liked / participation_status 等个人状态
-    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken);
+    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken, DEFAULT_TIMEOUT_MS, silent);
 }
 export async function getPost(postId, { prefetch = false, silent = false } = {}) {
     const qs = prefetch ? '?prefetch=1' : '';
