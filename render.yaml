@@ -38,6 +38,10 @@ services:
         sync: false
       - key: BAILIAN_API_KEY
         sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: "deepseek-chat"
       - key: DATABASE_URL
         sync: false
       - key: JWT_EXPIRATION_SECONDS

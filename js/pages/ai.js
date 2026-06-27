@@ -2,6 +2,19 @@ import { chatRecommendStream, getConversationList, getConversationMessages, dele
 import { showToast, formatDateShort, formatRelativeTime } from '../utils.js';
 import { isLoggedIn } from '../auth.js';
 
+let openGuideWithContext = null;
+
+async function _loadGuideNavigator() {
+    if (openGuideWithContext) return openGuideWithContext;
+    try {
+        const mod = await import('./guide.js');
+        openGuideWithContext = mod.openGuideWithContext;
+        return openGuideWithContext;
+    } catch {
+        return null;
+    }
+}
+
 let currentSessionId = null;
 let _conversationListLoaded = false;
 let _batchModeEnabled = false;
@@ -111,14 +124,25 @@ function shuffle(arr) {
     return arr;
 }
 
+const CATEGORY_CARD_META = {
+    '美食': { label: '推荐餐厅', icon: 'fa-utensils', showCost: true },
+    '咖啡饮品': { label: '推荐饮品店', icon: 'fa-mug-hot', showCost: true },
+    '休闲娱乐': { label: '推荐去处', icon: 'fa-film', showCost: false },
+    '运动健身': { label: '推荐场馆', icon: 'fa-dumbbell', showCost: false },
+    '购物商圈': { label: '推荐商圈', icon: 'fa-bag-shopping', showCost: false },
+    '景点公园': { label: '推荐景点', icon: 'fa-tree', showCost: false },
+};
+
 const questionTemplates = [
     { base: '推荐一家{type}餐厅', slot: ['川菜','湘菜','粤菜','江浙菜','东北菜','日料','韩餐','火锅','烧烤','麻辣烫'] },
     { base: '南大附近有什么好吃的{type}', slot: ['早餐店','面馆','饺子馆','奶茶店','咖啡厅','甜品店','小吃摊','夜宵摊','快餐','自助餐'] },
     { base: '我想去{type}，有推荐吗', slot: ['聚餐','约会','一个人吃饭','请客','吃夜宵','吃早餐'] },
     { base: '有没有{type}的餐厅', slot: ['安静','性价比高','上菜快','适合自习','有包厢','环境好','便宜又好吃','评分高'] },
     { base: '南大{type}附近有什么吃的', slot: ['仙林校区','鼓楼校区','南门','北门','汉口路','珠江路'] },
-    { base: '南大周边有什么值得去的{type}', slot: ['咖啡馆','奶茶店','火锅店','日料店','烧烤摊','小吃街','面包房'] },
-    { base: '{type}去哪吃比较好', slot: ['和室友聚餐','和对象约会','一个人吃午饭','周末改善伙食','生日请客','考试后放松'] },
+    { base: '仙林有什么{type}', slot: ['景点','公园','博物馆','打卡地'] },
+    { base: '鼓楼附近有什么{type}', slot: ['电影院','KTV','健身房','商场'] },
+    { base: '{type}去哪比较好', slot: ['和室友聚餐','和对象约会','一个人吃午饭','周末改善伙食','生日请客','考试后放松'] },
+    { base: '德基有什么{type}', slot: ['吃的','好玩的','逛的'] },
 ];
 
 function generateRandomQuestions(count) {
@@ -153,34 +177,78 @@ function renderQuickQuestions() {
 
 function renderCandidateCards(candidates, messagesDiv, anchorEl = null) {
     if (!candidates || !candidates.length || !messagesDiv) return null;
+    const category = candidates[0]?.guide_category || '美食';
+    const meta = CATEGORY_CARD_META[category] || CATEGORY_CARD_META['美食'];
+    const campus = candidates[0]?.campus || '鼓楼';
+    const showCost = meta.showCost;
+    const costHeader = showCost ? '<span>人均</span>' : '';
+
     const candDiv = document.createElement('div');
     candDiv.className = 'chat-message chat-bot ai-candidate-cards';
-    let html = `<div class="ai-candidates">
-        <div class="ai-candidates-label"><i class="fas fa-utensils"></i> 推荐餐厅</div>
-        <div class="ai-candidate-head" aria-hidden="true">
-            <span>店名</span><span>距离</span><span>评分</span><span>人均</span><span>类型</span>
+    let html = `<div class="ai-candidates" data-guide-category="${escapeHtml(category)}" data-guide-campus="${escapeHtml(campus)}">
+        <div class="ai-candidates-header">
+            <div class="ai-candidates-label"><i class="fas ${meta.icon}"></i> ${escapeHtml(meta.label)}</div>
+            <button type="button" class="ai-candidates-guide-link" data-campus="${escapeHtml(campus)}" data-category="${escapeHtml(category)}">在吃喝玩乐查看</button>
+        </div>
+        <div class="ai-candidate-head${showCost ? '' : ' ai-candidate-head--no-cost'}" aria-hidden="true">
+            <span>名称</span><span>距离</span><span>评分</span>${costHeader}<span>类型</span>
         </div>`;
     candidates.forEach(c => {
         const distStr = c.distance_text || '';
-        const typeStr = formatPoiTypeLabel(c.type || '');
+        const typeStr = formatPoiTypeLabel(c.type || c.guide_category || '');
         const ratingStr = c.rating && c.rating !== '暂无评分' ? c.rating : '';
-        const costStr = c.cost && c.cost !== '暂无价格' ? c.cost : '';
-        html += `<div class="ai-candidate-item">
+        const costStr = showCost && c.cost && c.cost !== '暂无价格' ? c.cost : '';
+        const costCell = showCost
+            ? `<span class="ai-candidate-cost">${costStr ? escapeHtml(costStr) : '—'}</span>`
+            : '';
+        html += `<div class="ai-candidate-item${showCost ? '' : ' ai-candidate-item--no-cost'}">
                     <span class="ai-candidate-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
                     <span class="ai-candidate-dist">${distStr ? escapeHtml(distStr) : '—'}</span>
                     <span class="ai-candidate-rating">${ratingStr ? escapeHtml(ratingStr) : '—'}</span>
-                    <span class="ai-candidate-cost">${costStr ? escapeHtml(costStr) : '—'}</span>
+                    ${costCell}
                     <span class="ai-candidate-type">${typeStr ? escapeHtml(typeStr) : '—'}</span>
                  </div>`;
     });
     html += '</div>';
     candDiv.innerHTML = html;
+
+    candDiv.querySelector('.ai-candidates-guide-link')?.addEventListener('click', async () => {
+        const nav = await _loadGuideNavigator();
+        if (nav) {
+            await nav(campus, category);
+        } else if (typeof window.switchPage === 'function') {
+            window.switchPage('guide');
+        }
+    });
+
     if (anchorEl && anchorEl.parentNode === messagesDiv) {
         anchorEl.insertAdjacentElement('afterend', candDiv);
     } else {
         messagesDiv.appendChild(candDiv);
     }
     return candDiv;
+}
+
+function renderClarificationChips(chips, messagesDiv, anchorEl = null) {
+    if (!chips?.length || !messagesDiv) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-message chat-bot ai-clarification-chips';
+    wrap.innerHTML = `<div class="ai-chip-row">${chips.map((chip) =>
+        `<button type="button" class="ai-clarify-chip">${escapeHtml(chip)}</button>`
+    ).join('')}</div>`;
+    wrap.querySelectorAll('.ai-clarify-chip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById('chatInput');
+            if (input) input.value = btn.textContent.trim();
+            sendMessage();
+        });
+    });
+    if (anchorEl && anchorEl.parentNode === messagesDiv) {
+        anchorEl.insertAdjacentElement('afterend', wrap);
+    } else {
+        messagesDiv.appendChild(wrap);
+    }
+    return wrap;
 }
 
 function setSendLock(locked) {
@@ -571,7 +639,9 @@ async function sendMessage() {
     botMsg.className = 'chat-message chat-bot';
     let streamStarted = false;
     let streamCandidates = [];
+    let streamClarificationChips = [];
     let candidateCardsEl = null;
+    let clarificationChipsEl = null;
     let sidebarRefreshNeeded = false;
     let sidebarListRefreshNeeded = false;
 
@@ -590,11 +660,18 @@ async function sendMessage() {
         candidateCardsEl = renderCandidateCards(streamCandidates, messagesDiv, botMsg);
     };
 
+    const ensureClarificationChips = () => {
+        if (!streamClarificationChips.length) return;
+        if (clarificationChipsEl?.isConnected) return;
+        clarificationChipsEl = renderClarificationChips(streamClarificationChips, messagesDiv, botMsg);
+    };
+
     try {
         await chatRecommendStream(msg, currentSessionId, '南京', userLocation, {
             onMeta: (payload) => {
                 // 必须先同步写入 candidates，避免 onDone 早于 await 侧栏刷新
                 streamCandidates = payload.candidates || [];
+                streamClarificationChips = payload.clarification_chips || [];
                 if (payload.session_id) {
                     const newSession = currentSessionId !== payload.session_id;
                     currentSessionId = payload.session_id;
@@ -613,6 +690,7 @@ async function sendMessage() {
                 const finalReply = stripMarkdown(payload.reply || botMsg.textContent || '');
                 botMsg.textContent = finalReply;
                 ensureCandidateCards();
+                ensureClarificationChips();
                 if (currentSessionId && streamCandidates.length) {
                     recordTurnCandidates(currentSessionId, streamCandidates);
                 }
@@ -640,6 +718,9 @@ async function sendMessage() {
         }
         if (candidateCardsEl?.parentNode) {
             candidateCardsEl.remove();
+        }
+        if (clarificationChipsEl?.parentNode) {
+            clarificationChipsEl.remove();
         }
         if (e.message === 'UNAUTHORIZED') {
             showToast('登录已过期，请重新登录');

@@ -99,9 +99,11 @@ cp .env.example .env
 
 ```env
 GAODE_API_KEY=your-gaode-api-key
-BAILIAN_API_KEY=your-bailian-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-chat
+BAILIAN_API_KEY=
 ZHIPU_API_KEY=
-LLM_PROVIDER=bailian
+LLM_PROVIDER=auto
 SECRET_KEY=replace-with-a-random-secret-at-least-32-chars
 FLASK_APP=app:create_app
 ```
@@ -169,9 +171,11 @@ flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PORT
 | `DATABASE_URL` | 生产必需 | 空 | PostgreSQL 连接串；为空时本地使用 SQLite |
 | `FLASK_APP` | 迁移必需 | `app:create_app` | Flask CLI 入口 |
 | `GAODE_API_KEY` | 是 | 无 | 高德地图 Web API Key |
-| `ZHIPU_API_KEY` | 二选一 | 空 | 智谱 AI Key |
-| `BAILIAN_API_KEY` | 二选一 | 空 | 阿里云百炼 Key |
-| `LLM_PROVIDER` | 否 | `auto` | LLM 提供方：`auto`/`bailian`/`zhipu`（`auto` 默认优先百炼） |
+| `DEEPSEEK_API_KEY` | 三选一 | 空 | DeepSeek API Key（推荐） |
+| `DEEPSEEK_MODEL` | 否 | `deepseek-chat` | DeepSeek 模型名 |
+| `ZHIPU_API_KEY` | 三选一 | 空 | 智谱 AI Key |
+| `BAILIAN_API_KEY` | 三选一 | 空 | 阿里云百炼 Key |
+| `LLM_PROVIDER` | 否 | `auto` | LLM 提供方：`auto`/`deepseek`/`bailian`/`zhipu`（`auto` 优先 DeepSeek） |
 | `AMAP_CACHE_TTL_SECONDS` | 否 | `300` | 高德搜索缓存 TTL；设为 `0` 可关闭 |
 | `AMAP_CACHE_MAX_ITEMS` | 否 | `256` | 高德搜索缓存最大条目数 |
 | `AMAP_REQUEST_TIMEOUT_SECONDS` | 否 | `8` | 高德请求超时 |
@@ -728,7 +732,7 @@ startCommand: flask db upgrade && gunicorn "app:create_app()" --bind 0.0.0.0:$PO
 - `SECRET_KEY`
 - `DATABASE_URL`
 - `GAODE_API_KEY`
-- `ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`
+- `DEEPSEEK_API_KEY`（推荐）或 `ZHIPU_API_KEY` 或 `BAILIAN_API_KEY`
 - `FRONTEND_URL`
 - Resend 相关变量，如果需要真实邮件发送
 

@@ -30,11 +30,15 @@ def _patch_dining_search(monkeypatch):
         return {"items": _fake_dining_items(), "error": False}
 
     monkeypatch.setattr(
-        "app.services.ai_recommend.search_ai_dining_places",
+        "app.services.ai_recommend.search_ai_guide_places",
         _search,
     )
     monkeypatch.setattr(
-        "app.services.ai_recommend.fetch_ai_dining_seed",
+        "app.services.ai_recommend.fetch_ai_guide_seed",
+        lambda campus, category: [],
+    )
+    monkeypatch.setattr(
+        "app.services.ai_recommend.fetch_db_leaderboard_candidates",
         lambda campus, category: [],
     )
     monkeypatch.setattr(

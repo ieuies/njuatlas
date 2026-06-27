@@ -16,20 +16,48 @@ from app.validators import clean_string, get_json_body, positive_int, validate_s
 
 llm_bp = Blueprint("llm", __name__, url_prefix="/api/llm")
 
-_XIAONAN_SYSTEM = (
+_XIAONAN_BASE = (
     "你是「南大图谱」校园群里的机器人，同学们叫你小南。\n"
     "说话像朋友一样——亲切、口语化，偶尔俏皮不油腻。\n\n"
-    "1. 只推荐南京市内餐饮/饮品，只熟南京这一片。\n"
-    "2. 推荐时只能使用系统提供的候选列表；候选来自吃喝玩乐页面，"
-    "仅含高德固定餐饮分类 POI（美食/咖啡饮品），信息只有店名、地址、评分、人均。\n"
-    "3. 禁止编造评论、菜单、排队；没有评分/人均就省略，不提「暂无评分」。\n"
-    "4. 禁止说「帮你查到了和某某相关的店」「我用某某关键词检索了」等套话；"
-    "禁止把用户原句拆成词复述（如「我想 一个人 饭」）。\n"
-    "5. 安静/环境/便宜/评分高等主观条件：按候选里的距离、人均、评分推荐，"
+)
+
+_CATEGORY_PROMPT_RULES = {
+    "美食": (
+        "1. 可推荐南京市内餐饮，只熟南京这一片。\n"
+        "2. 候选来自吃喝玩乐页面，仅含高德固定餐饮 POI；信息有店名、地址、评分、人均。\n"
+    ),
+    "咖啡饮品": (
+        "1. 可推荐咖啡、奶茶、甜品等饮品店，只熟南京这一片。\n"
+        "2. 候选来自吃喝玩乐页面；信息有店名、地址、评分、人均。\n"
+    ),
+    "休闲娱乐": (
+        "1. 可推荐电影、KTV、桌游、酒吧等休闲娱乐场所。\n"
+        "2. 候选来自吃喝玩乐页面；信息有店名、地址、评分，一般无人均。\n"
+    ),
+    "运动健身": (
+        "1. 可推荐健身房、球馆、游泳馆等运动场所。\n"
+        "2. 候选来自吃喝玩乐页面；信息有店名、地址、评分，一般无人均。\n"
+    ),
+    "购物商圈": (
+        "1. 可推荐商场、超市、商圈等购物相关 POI。\n"
+        "2. 候选来自吃喝玩乐页面；信息有店名、地址、评分。\n"
+    ),
+    "景点公园": (
+        "1. 可推荐景点、公园、博物馆等打卡地。\n"
+        "2. 候选来自吃喝玩乐页面；信息有店名、地址、评分，无人均。\n"
+    ),
+}
+
+_XIAONAN_COMMON_RULES = (
+    "3. 推荐时只能使用系统提供的候选列表；禁止编造评论、菜单、排队。\n"
+    "4. 没有评分/人均就省略，不提「暂无评分」。\n"
+    "5. 禁止说「帮你查到了和某某相关的店」「我用某某关键词检索了」等套话；"
+    "禁止把用户原句拆成词复述。\n"
+    "6. 安静/环境/便宜/评分高等主观条件：按候选里的距离、人均（如有）、评分推荐，"
     "并说明数据里没有氛围标签时无法保证安静。\n"
-    "6. 用户问「附近有什么吃的」等宽泛问题时：先追问想吃什么类型，本轮禁止推荐店铺。\n"
-    "7. 用户提到「附近/周边」时，推荐时优先选距离更近的候选。\n"
-    "8. 推荐1-2家为主；闲聊正常回应，非美食话题轻松带过。\n"
+    "7. 用户问宽泛问题时：先追问具体类型，本轮禁止推荐具体 POI。\n"
+    "8. 用户提到「附近/周边」时，推荐时优先选距离更近的候选。\n"
+    "9. 推荐1-2家为主；纯闲聊正常回应。\n"
     "输出纯文本，不用 Markdown。\n"
 )
 
@@ -110,14 +138,21 @@ def _emit_chat_recommend_response(
     user_message=None,
     sanitize_candidates=None,
     sanitize_needs_clarification=False,
+    category=None,
+    clarification_chips=None,
 ):
     public_candidates = candidates or []
+    meta_extra = {
+        "category": category,
+        "clarification_chips": clarification_chips or [],
+    }
 
     if not stream_mode:
         return jsonify({
             "session_id": session_id,
             "reply": reply,
             "candidates": public_candidates,
+            **meta_extra,
         })
 
     @stream_with_context
@@ -125,6 +160,7 @@ def _emit_chat_recommend_response(
         yield _sse_event("meta", {
             "session_id": session_id,
             "candidates": public_candidates,
+            **meta_extra,
         })
 
         if llm_messages is not None:
@@ -185,9 +221,23 @@ def _emit_chat_recommend_response(
     )
 
 
-def _build_system_prompt(preference_text=""):
+def _build_system_prompt(preference_text="", category=None, mode=None, mall_name=None):
     extra = f"{preference_text}\n" if preference_text else ""
-    return _XIAONAN_SYSTEM + extra
+    if not category:
+        return (
+            _XIAONAN_BASE
+            + "1. 你是校园生活助手，可聊学习、社交、南京生活；涉及吃喝玩乐时可引导用户说具体想吃什么或玩什么。\n"
+            + _XIAONAN_COMMON_RULES
+            + extra
+        )
+    rules = _CATEGORY_PROMPT_RULES.get(category, _CATEGORY_PROMPT_RULES["美食"])
+    mall_note = ""
+    if mode == "mall_anchor" and mall_name:
+        mall_note = (
+            f"【商场模式】候选以「{mall_name}」为中心周边检索，"
+            "无法保证均在商场室内或具体楼层；回复中勿承诺楼层/铺位。\n"
+        )
+    return _XIAONAN_BASE + rules + mall_note + _XIAONAN_COMMON_RULES + extra
 
 
 @llm_bp.route("/chat_recommend", methods=["POST"])
@@ -217,11 +267,19 @@ def chat_recommend():
     candidates_text = ""
     if ctx.get("needs_clarification"):
         candidates_text = ctx["clarification_text"]
-    elif ctx["is_food_request"]:
+    elif ctx.get("is_guide_request"):
         candidates_api = ctx["candidates_api"]
         candidates_text = ctx["candidates_text"]
 
-    messages = [{"role": "system", "content": _build_system_prompt(preference_text)}]
+    messages = [{
+        "role": "system",
+        "content": _build_system_prompt(
+            preference_text,
+            category=ctx.get("category"),
+            mode=ctx.get("mode"),
+            mall_name=ctx.get("mall_name"),
+        ),
+    }]
     messages.extend(history)
     user_content = user_message
     if candidates_text:
@@ -239,6 +297,8 @@ def chat_recommend():
                 user_message=user_message,
                 sanitize_candidates=candidates_api,
                 sanitize_needs_clarification=ctx.get("needs_clarification"),
+                category=ctx.get("category"),
+                clarification_chips=ctx.get("clarification_chips"),
             )
         reply = chat_with_llm(messages, temperature=0.75, max_tokens=650)
         reply = sanitize_llm_reply(
@@ -260,6 +320,8 @@ def chat_recommend():
             "session_id": session_id,
             "reply": reply,
             "candidates": candidates_api,
+            "category": ctx.get("category"),
+            "clarification_chips": ctx.get("clarification_chips") or [],
         })
     except Exception as exc:
         db.session.rollback()

@@ -78,9 +78,11 @@ class Config:
     """
 
     GAODE_API_KEY = _get_env("GAODE_API_KEY")
+    DEEPSEEK_API_KEY = _get_env("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_MODEL = _get_env("DEEPSEEK_MODEL", "deepseek-chat")
     ZHIPU_API_KEY = _get_env("ZHIPU_API_KEY", "")
     BAILIAN_API_KEY = _get_env("BAILIAN_API_KEY", "")
-    # auto: 自动选择（默认优先百炼）；bailian: 强制百炼；zhipu: 强制智谱
+    # auto: 自动选择（默认优先 DeepSeek）；deepseek / bailian / zhipu: 强制指定
     LLM_PROVIDER = _get_env("LLM_PROVIDER", "auto").lower()
     SECRET_KEY = _get_env("SECRET_KEY")
     JWT_EXPIRATION_SECONDS = _get_int_env("JWT_EXPIRATION_SECONDS", 60 * 60 * 24 * 7)
@@ -128,7 +130,7 @@ def validate_config(app):
     1. SECRET_KEY 必须配置，JWT 签名依赖它；
     2. SECRET_KEY 不能继续使用文档里的占位值；
     3. GAODE_API_KEY 必须配置，否则地图搜索功能不可用；
-    4. 智谱和百炼至少配置一个，否则 AI 推荐功能不可用。
+    4. DeepSeek / 智谱 / 百炼至少配置一个，否则 AI 推荐功能不可用。
     """
     secret_key = app.config.get("SECRET_KEY")
     if not secret_key or secret_key in {"dev-only-change-me", "请替换为随机长密钥"}:
@@ -141,14 +143,19 @@ def validate_config(app):
         raise ConfigError("缺少 GAODE_API_KEY，请在 .env 或 Render 环境变量中配置高德地图 API Key。")
 
     llm_provider = app.config.get("LLM_PROVIDER", "auto")
-    if llm_provider not in {"auto", "bailian", "zhipu"}:
-        raise ConfigError("LLM_PROVIDER 仅支持 auto / bailian / zhipu。")
+    if llm_provider not in {"auto", "deepseek", "bailian", "zhipu"}:
+        raise ConfigError("LLM_PROVIDER 仅支持 auto / deepseek / bailian / zhipu。")
 
+    has_deepseek = bool(app.config.get("DEEPSEEK_API_KEY"))
     has_zhipu = bool(app.config.get("ZHIPU_API_KEY"))
     has_bailian = bool(app.config.get("BAILIAN_API_KEY"))
+    if llm_provider == "deepseek" and not has_deepseek:
+        raise ConfigError("LLM_PROVIDER=deepseek 时必须配置 DEEPSEEK_API_KEY。")
     if llm_provider == "bailian" and not has_bailian:
         raise ConfigError("LLM_PROVIDER=bailian 时必须配置 BAILIAN_API_KEY。")
     if llm_provider == "zhipu" and not has_zhipu:
         raise ConfigError("LLM_PROVIDER=zhipu 时必须配置 ZHIPU_API_KEY。")
-    if llm_provider == "auto" and not has_zhipu and not has_bailian:
-        raise ConfigError("缺少大模型 API Key，请至少配置 ZHIPU_API_KEY 或 BAILIAN_API_KEY。")
+    if llm_provider == "auto" and not has_deepseek and not has_zhipu and not has_bailian:
+        raise ConfigError(
+            "缺少大模型 API Key，请至少配置 DEEPSEEK_API_KEY、ZHIPU_API_KEY 或 BAILIAN_API_KEY。"
+        )

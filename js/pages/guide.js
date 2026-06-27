@@ -1187,6 +1187,30 @@ export async function loadGuideData() {
     _scheduleGuidePageExtras();
 }
 
+export async function openGuideWithContext(campus, category) {
+    const validCampus = ALL_CAMPUSES.includes(campus) ? campus : DEFAULT_CAMPUS;
+    if (category) currentGuideCat = category;
+    currentGuideCampus = validCampus;
+    _guideViewMode = 'leaderboard';
+    _guideSearchQuery = '';
+
+    if (typeof window.switchPage === 'function') {
+        await window.switchPage('guide');
+    }
+
+    _syncCampusFilterUi();
+    document.querySelectorAll('#guideFilter .guide-chip').forEach((chip) => {
+        chip.classList.toggle('active', chip.getAttribute('data-guide-cat') === currentGuideCat);
+    });
+
+    const grid = document.getElementById('guideGrid');
+    const key = _cacheKey(currentGuideCampus, currentGuideCat);
+    if (grid && !_showLeaderboardFromCache(key)) {
+        _showGuideLoading(grid);
+    }
+    await loadLeaderboard();
+}
+
 export function refreshGuideView() {
     if (!isGuidePrefetchComplete()) {
         scheduleGuidePrefetch();

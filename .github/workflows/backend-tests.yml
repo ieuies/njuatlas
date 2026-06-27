@@ -34,8 +34,9 @@ jobs:
           PYTHONPATH: .
           SECRET_KEY: test-secret-key-at-least-32-characters-long
           GAODE_API_KEY: test-gaode-api-key
+          DEEPSEEK_API_KEY: test-deepseek-api-key
           BAILIAN_API_KEY: test-bailian-api-key
-          LLM_PROVIDER: bailian
+          LLM_PROVIDER: auto
           REGISTER_EMAIL_RESTRICTION_ENABLED: "false"
           RATELIMIT_STORAGE_URI: memory://
         run: pytest -q --cov=app --cov-report=term-missing

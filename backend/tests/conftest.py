@@ -8,8 +8,9 @@ import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-at-least-32-characters-long")
 os.environ.setdefault("GAODE_API_KEY", "test-gaode-api-key")
+os.environ.setdefault("DEEPSEEK_API_KEY", "test-deepseek-api-key")
 os.environ.setdefault("BAILIAN_API_KEY", "test-bailian-api-key")
-os.environ.setdefault("LLM_PROVIDER", "bailian")
+os.environ.setdefault("LLM_PROVIDER", "auto")
 os.environ.setdefault("REGISTER_EMAIL_RESTRICTION_ENABLED", "false")
 os.environ.setdefault("RATELIMIT_STORAGE_URI", "memory://")
 os.environ.pop("RESEND_API_KEY", None)

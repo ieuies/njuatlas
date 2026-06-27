@@ -42,8 +42,10 @@ GUIDE_CATEGORY_CONFIG = {
 }
 
 
-# AI 小南只允许检索「吃喝」相关固定分类（与 guide 页 types 完全一致）
-AI_DINING_CATEGORIES = ("美食", "咖啡饮品")
+# AI 小南允许检索的全部分类（与 guide 页 GUIDE_CATEGORY_CONFIG 一致）
+AI_GUIDE_CATEGORIES = tuple(GUIDE_CATEGORY_CONFIG.keys())
+# 兼容旧名
+AI_DINING_CATEGORIES = AI_GUIDE_CATEGORIES
 
 
 def guide_search_city(campus):
@@ -638,23 +640,106 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
     }
 
 
-def search_ai_dining_places(campus, category, keyword="", user_id=None, page=1):
+def search_ai_guide_places(campus, category, keyword="", user_id=None, page=1):
     """
-    AI 小南候选检索：唯一入口，与 guide-search 相同。
-    仅允许 AI_DINING_CATEGORIES；高德 types 由 GUIDE_CATEGORY_CONFIG 固定，禁止无分类检索。
+    AI 小南候选检索：与 guide-search 相同。
+    仅允许 GUIDE_CATEGORY_CONFIG 中的分类；高德 types 固定。
     """
-    if category not in AI_DINING_CATEGORIES:
+    if category not in GUIDE_CATEGORY_CONFIG:
         category = "美食"
     return search_guide_places(
         campus, category, keyword=(keyword or "").strip(), page=page, user_id=user_id,
     )
 
 
-def fetch_ai_dining_seed(campus, category):
+def search_ai_dining_places(campus, category, keyword="", user_id=None, page=1):
+    """兼容旧调用方。"""
+    return search_ai_guide_places(campus, category, keyword=keyword, user_id=user_id, page=page)
+
+
+def search_guide_places_near(
+    location,
+    category,
+    keyword="",
+    campus="鼓楼",
+    user_id=None,
+    page=1,
+    page_size=None,
+    radius=600,
+):
+    """以给定坐标为锚点周边检索（商场分支等）。"""
+    if category not in GUIDE_CATEGORY_CONFIG:
+        category = "美食"
+    if not location or "," not in str(location):
+        return {"items": [], "page": page, "has_more": False, "total": 0, "error": True}
+
+    cfg = GUIDE_CATEGORY_CONFIG[category]
+    page_size = page_size or GUIDE_PAGE_SIZE
+    effective_campus = campus if campus in GUIDE_CAMPUS_COORDS else "鼓楼"
+    city = guide_search_city(effective_campus)
+    keyword = (keyword or "").strip()
+
+    result = search_places(
+        keyword or cfg.get("keyword", ""),
+        city=city,
+        location=location,
+        page=page,
+        page_size=page_size,
+        radius=radius,
+        types=cfg["types"],
+        sortrule="distance",
+    )
+    if result.get("status") != "1":
+        return {"items": [], "page": page, "has_more": False, "total": 0, "error": True}
+
+    items = []
+    food_categories = {"美食", "咖啡饮品"}
+    for poi in result.get("pois") or []:
+        if category in food_categories and not is_food_amap_poi(poi):
+            continue
+        item = _poi_to_item(poi, category, effective_campus)
+        if is_excluded_guide_poi_name(item["name"]):
+            continue
+        dist = item.get("distance_m")
+        if dist is not None and dist > max(radius, GUIDE_MAX_DISTANCE_M):
+            continue
+        items.append(item)
+
+    items = enrich_guide_items(
+        dedupe_guide_items(items),
+        user_id=user_id,
+        campus=effective_campus,
+        category=category,
+    )
+    try:
+        total = int(result.get("count") or 0)
+    except (TypeError, ValueError):
+        total = len(items)
+    has_more = page * page_size < total
+
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "has_more": has_more,
+        "campus": effective_campus,
+        "category": category,
+        "keyword": keyword,
+        "anchor_location": location,
+    }
+
+
+def fetch_ai_guide_seed(campus, category):
     """AI 候选不足时，拉取与 guide 排行榜相同的高德种子池。"""
-    if category not in AI_DINING_CATEGORIES:
+    if category not in GUIDE_CATEGORY_CONFIG:
         category = "美食"
     return fetch_guide_category(campus, category)
+
+
+def fetch_ai_dining_seed(campus, category):
+    """兼容旧调用方。"""
+    return fetch_ai_guide_seed(campus, category)
 
 
 def invalidate_leaderboard_cache():
