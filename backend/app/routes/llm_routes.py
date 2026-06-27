@@ -140,11 +140,15 @@ def _emit_chat_recommend_response(
     sanitize_needs_clarification=False,
     category=None,
     clarification_chips=None,
+    mode=None,
+    mall_name=None,
 ):
     public_candidates = candidates or []
     meta_extra = {
         "category": category,
         "clarification_chips": clarification_chips or [],
+        "mode": mode,
+        "mall_name": mall_name,
     }
 
     if not stream_mode:
@@ -234,8 +238,9 @@ def _build_system_prompt(preference_text="", category=None, mode=None, mall_name
     mall_note = ""
     if mode == "mall_anchor" and mall_name:
         mall_note = (
-            f"【商场模式】候选以「{mall_name}」为中心周边检索，"
-            "无法保证均在商场室内或具体楼层；回复中勿承诺楼层/铺位。\n"
+            f"【商场模式】用户指定在「{mall_name}」内找店。"
+            f"候选以该商场为中心周边检索，无法保证均在室内或具体楼层。"
+            "禁止推荐候选列表以外的店，禁止推荐商场外、新街口等其他商圈的门店。\n"
         )
     return _XIAONAN_BASE + rules + mall_note + _XIAONAN_COMMON_RULES + extra
 
@@ -299,6 +304,8 @@ def chat_recommend():
                 sanitize_needs_clarification=ctx.get("needs_clarification"),
                 category=ctx.get("category"),
                 clarification_chips=ctx.get("clarification_chips"),
+                mode=ctx.get("mode"),
+                mall_name=ctx.get("mall_name"),
             )
         reply = chat_with_llm(messages, temperature=0.75, max_tokens=650)
         reply = sanitize_llm_reply(
@@ -322,6 +329,8 @@ def chat_recommend():
             "candidates": candidates_api,
             "category": ctx.get("category"),
             "clarification_chips": ctx.get("clarification_chips") or [],
+            "mode": ctx.get("mode"),
+            "mall_name": ctx.get("mall_name"),
         })
     except Exception as exc:
         db.session.rollback()

@@ -175,21 +175,29 @@ function renderQuickQuestions() {
     });
 }
 
-function renderCandidateCards(candidates, messagesDiv, anchorEl = null) {
+function renderCandidateCards(candidates, messagesDiv, anchorEl = null, options = {}) {
     if (!candidates || !candidates.length || !messagesDiv) return null;
     const category = candidates[0]?.guide_category || '美食';
     const meta = CATEGORY_CARD_META[category] || CATEGORY_CARD_META['美食'];
     const campus = candidates[0]?.campus || '鼓楼';
     const showCost = meta.showCost;
     const costHeader = showCost ? '<span>人均</span>' : '';
+    const isMallAnchor = options.mode === 'mall_anchor' && options.mall_name;
+    const headerLabel = isMallAnchor
+        ? `${escapeHtml(options.mall_name)} · 周边店铺`
+        : escapeHtml(meta.label);
+    const disclaimerHtml = isMallAnchor
+        ? '<p class="ai-candidates-disclaimer">以下店铺以商场为中心周边检索，无法保证均在商场室内或具体楼层。</p>'
+        : '';
 
     const candDiv = document.createElement('div');
     candDiv.className = 'chat-message chat-bot ai-candidate-cards';
     let html = `<div class="ai-candidates" data-guide-category="${escapeHtml(category)}" data-guide-campus="${escapeHtml(campus)}">
         <div class="ai-candidates-header">
-            <div class="ai-candidates-label"><i class="fas ${meta.icon}"></i> ${escapeHtml(meta.label)}</div>
+            <div class="ai-candidates-label"><i class="fas ${meta.icon}"></i> ${headerLabel}</div>
             <button type="button" class="ai-candidates-guide-link" data-campus="${escapeHtml(campus)}" data-category="${escapeHtml(category)}">在吃喝玩乐查看</button>
         </div>
+        ${disclaimerHtml}
         <div class="ai-candidate-head${showCost ? '' : ' ai-candidate-head--no-cost'}" aria-hidden="true">
             <span>名称</span><span>距离</span><span>评分</span>${costHeader}<span>类型</span>
         </div>`;
@@ -640,6 +648,8 @@ async function sendMessage() {
     let streamStarted = false;
     let streamCandidates = [];
     let streamClarificationChips = [];
+    let streamMode = null;
+    let streamMallName = null;
     let candidateCardsEl = null;
     let clarificationChipsEl = null;
     let sidebarRefreshNeeded = false;
@@ -657,7 +667,10 @@ async function sendMessage() {
     const ensureCandidateCards = () => {
         if (!streamCandidates.length) return;
         if (candidateCardsEl?.isConnected) return;
-        candidateCardsEl = renderCandidateCards(streamCandidates, messagesDiv, botMsg);
+        candidateCardsEl = renderCandidateCards(streamCandidates, messagesDiv, botMsg, {
+            mode: streamMode,
+            mall_name: streamMallName,
+        });
     };
 
     const ensureClarificationChips = () => {
@@ -672,6 +685,8 @@ async function sendMessage() {
                 // 必须先同步写入 candidates，避免 onDone 早于 await 侧栏刷新
                 streamCandidates = payload.candidates || [];
                 streamClarificationChips = payload.clarification_chips || [];
+                streamMode = payload.mode || null;
+                streamMallName = payload.mall_name || null;
                 if (payload.session_id) {
                     const newSession = currentSessionId !== payload.session_id;
                     currentSessionId = payload.session_id;

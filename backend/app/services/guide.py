@@ -112,11 +112,14 @@ def _normalize_poi_name(name):
     return (name or "").strip().replace("（", "(").replace("）", ")")
 
 
-def is_excluded_guide_poi_name(name):
+def is_excluded_guide_poi_name(name, skip_keywords=None):
     normalized = _normalize_poi_name(name)
     if not normalized:
         return False
+    skip = frozenset(skip_keywords or ())
     for keyword in GUIDE_EXCLUDED_NAME_KEYWORDS:
+        if keyword in skip:
+            continue
         if keyword not in normalized:
             continue
         if keyword in ("南京大学", "南大") and _GUIDE_CAMPUS_BRANCH_SUFFIX_RE.search(normalized):
@@ -665,7 +668,10 @@ def search_guide_places_near(
     user_id=None,
     page=1,
     page_size=None,
-    radius=600,
+    radius=800,
+    exclude_anchor_poi_id=None,
+    exclude_anchor_name=None,
+    mall_shop_mode=False,
 ):
     """以给定坐标为锚点周边检索（商场分支等）。"""
     if category not in GUIDE_CATEGORY_CONFIG:
@@ -678,6 +684,9 @@ def search_guide_places_near(
     effective_campus = campus if campus in GUIDE_CAMPUS_COORDS else "鼓楼"
     city = guide_search_city(effective_campus)
     keyword = (keyword or "").strip()
+    skip_keywords = ("购物中心",) if mall_shop_mode else None
+    exclude_poi_id = (exclude_anchor_poi_id or "").strip()
+    exclude_name = _normalize_poi_name(exclude_anchor_name)
 
     result = search_places(
         keyword or cfg.get("keyword", ""),
@@ -698,7 +707,13 @@ def search_guide_places_near(
         if category in food_categories and not is_food_amap_poi(poi):
             continue
         item = _poi_to_item(poi, category, effective_campus)
-        if is_excluded_guide_poi_name(item["name"]):
+        poi_id = (item.get("poi_id") or "").strip()
+        if exclude_poi_id and poi_id == exclude_poi_id:
+            continue
+        item_name = _normalize_poi_name(item.get("name"))
+        if exclude_name and item_name == exclude_name:
+            continue
+        if is_excluded_guide_poi_name(item["name"], skip_keywords=skip_keywords):
             continue
         dist = item.get("distance_m")
         if dist is not None and dist > max(radius, GUIDE_MAX_DISTANCE_M):

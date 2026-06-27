@@ -486,6 +486,12 @@
 .ai-candidates-guide-link:hover {
     text-decoration: underline;
 }
+.ai-candidates-disclaimer {
+    margin: 0 0 8px;
+    font-size: 0.68rem;
+    line-height: 1.45;
+    color: var(--text-tertiary);
+}
 .ai-candidate-head,
 .ai-candidate-item {
     display: grid;

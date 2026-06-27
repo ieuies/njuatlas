@@ -22,9 +22,70 @@ from app.services.guide import (
     enrich_guide_items,
     fetch_ai_guide_seed,
     fetch_db_leaderboard_candidates,
+    guide_search_city,
     merge_leaderboard_candidates,
     search_ai_guide_places,
     search_guide_places_near,
+)
+
+# 高德 POI：购物中心
+_AMAP_MALL_TYPE_CODE = "060100"
+
+# 高德限流/失败时的常见南京商场锚点（keyword 子串匹配）
+_KNOWN_MALL_ANCHORS = (
+    (("德基", "德基广场"), {
+        "name": "德基广场",
+        "location": "118.783168,32.041544",
+        "poi_id": "fallback-deji",
+        "type": "060100",
+    }),
+    (("金鹰", "金鹰国际"), {
+        "name": "金鹰国际购物中心(新街口店)",
+        "location": "118.783892,32.041012",
+        "poi_id": "fallback-jinying",
+        "type": "060100",
+    }),
+    (("艾尚天地",), {
+        "name": "艾尚天地",
+        "location": "118.782456,32.042891",
+        "poi_id": "fallback-aishang",
+        "type": "060100",
+    }),
+    (("吾悦广场",), {
+        "name": "南京建邺吾悦广场",
+        "location": "118.731892,32.003456",
+        "poi_id": "fallback-wuyue",
+        "type": "060100",
+    }),
+    (("建邺万达", "万达广场"), {
+        "name": "万达广场(南京建邺店)",
+        "location": "118.731234,32.004567",
+        "poi_id": "fallback-wanda",
+        "type": "060100",
+    }),
+    (("万象天地",), {
+        "name": "南京万象天地",
+        "location": "118.778901,32.045678",
+        "poi_id": "fallback-mixc",
+        "type": "060100",
+    }),
+)
+
+# 从用户句中提取待高德验证的地点片段（非商场词表）
+_LOCATION_EXTRACT_PATTERNS = (
+    re.compile(r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)里"),
+    re.compile(r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)内"),
+    re.compile(r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)里面"),
+    re.compile(r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)附近"),
+    re.compile(r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)周边"),
+    re.compile(r"在([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)"),
+    re.compile(
+        r"^([\u4e00-\u9fffA-Za-z0-9·]{2,16}?)(?:有什么|有啥)(?:吃|玩|逛|买|喝)"
+    ),
+    re.compile(
+        r"([\u4e00-\u9fff]{2,12}(?:广场|百货|购物中心|商城|万达|天街|吾悦|"
+        r"万象天地|大悦城|印象城|来福士|奥莱|奥特莱斯))"
+    ),
 )
 
 _CAMPUS_IN_MESSAGE = [
@@ -44,31 +105,7 @@ _CAMPUS_IN_MESSAGE = [
     ("苏州", "苏州"),
 ]
 
-_MALL_AROUND_RADIUS_M = 600
-
-# 南京常见商场/购物中心（长名优先匹配）
-_MALL_NAME_ALIASES = [
-    ("艾尚天地", "艾尚天地"),
-    ("金鹰国际", "金鹰"),
-    ("金鹰世界", "金鹰世界"),
-    ("虹悦城", "虹悦城"),
-    ("万象天地", "万象天地"),
-    ("河西万达", "万达"),
-    ("万达广场", "万达"),
-    ("德基广场", "德基"),
-    ("德基", "德基"),
-    ("新街口德基", "德基"),
-    ("大洋百货", "大洋"),
-    ("水游城", "水游城"),
-    ("金茂汇", "金茂汇"),
-    ("仙林金鹰", "金鹰"),
-    ("东城汇", "东城汇"),
-    ("九霄梦天地", "九霄"),
-    ("砂之船", "砂之船"),
-    ("江北虹悦城", "虹悦城"),
-    ("华采天地", "华采"),
-    ("龙湖天街", "天街"),
-]
+_MALL_AROUND_RADIUS_M = 800
 
 _SCENIC_MARKERS = (
     "景点", "公园", "博物馆", "纪念馆", "动物园", "爬山", "徒步", "玄武湖",
@@ -163,6 +200,24 @@ _SEARCH_CACHE = {}
 _SEARCH_CACHE_TTL = 45
 
 
+def _location_stopwords():
+    stop = {
+        "附近", "周边", "周围", "里面", "有什么", "有啥", "推荐", "请问", "帮忙",
+        "今天", "明天", "晚上", "中午", "我想", "想要", "可以", "能不能",
+    }
+    for alias, campus in _CAMPUS_IN_MESSAGE:
+        stop.add(alias)
+        if campus in GUIDE_CAMPUS_COORDS:
+            stop.add(campus)
+    for marker, _ in _CUISINE_KEYWORDS:
+        stop.add(marker)
+    for markers in (_FOOD_INTENT, _FUN_MARKERS, _SPORT_MARKERS, _SCENIC_MARKERS):
+        for m in markers:
+            if len(m) >= 2:
+                stop.add(m)
+    return stop
+
+
 def is_food_intent(message: str) -> bool:
     """兼容旧测试：美食/咖啡饮品意图。"""
     cat = classify_guide_intent(message)
@@ -193,45 +248,227 @@ def classify_guide_intent(message: str):
     return None
 
 
-def detect_mall_keyword(message: str):
-    """从消息中提取商场检索词，未命中返回 None。"""
+def extract_location_queries(message: str):
+    """从消息提取地点检索词（规则抽取，非商场词表）；须再高德验证为商场 POI。"""
     text = (message or "").strip()
     if not text:
+        return []
+    stop = _location_stopwords()
+    queries = []
+    seen = set()
+
+    def _add(raw):
+        q = (raw or "").strip()
+        if len(q) < 2 or q in stop:
+            return
+        if q in seen:
+            return
+        seen.add(q)
+        queries.append(q)
+
+    for pat in _LOCATION_EXTRACT_PATTERNS:
+        for match in pat.finditer(text):
+            _add(match.group(1))
+
+    return queries
+
+
+def detect_mall_keyword(message: str):
+    """兼容旧接口：返回首个地点检索词，是否商场由 resolve_mall_anchor 判定。"""
+    queries = extract_location_queries(message)
+    return queries[0] if queries else None
+
+
+def _parse_amap_type_codes(type_str):
+    codes = []
+    raw = str(type_str or "").strip()
+    for part in raw.split(";"):
+        part = part.strip()
+        if re.fullmatch(r"\d{6}", part):
+            codes.append(part)
+        elif re.fullmatch(r"\d{3,6}", part):
+            codes.append(part.zfill(6))
+    return codes
+
+
+def is_mall_amap_poi(poi) -> bool:
+    """高德 POI 是否为购物中心（060100）。"""
+    if not isinstance(poi, dict):
+        return False
+    codes = _parse_amap_type_codes(poi.get("type"))
+    if any(c == _AMAP_MALL_TYPE_CODE or c.startswith(_AMAP_MALL_TYPE_CODE) for c in codes):
+        return True
+    type_str = str(poi.get("type") or "")
+    return _AMAP_MALL_TYPE_CODE in type_str
+
+
+def _score_mall_poi(poi, query):
+    """商场锚点 POI 打分：须已通过 is_mall_amap_poi；名称与 query 越近越好。"""
+    if not is_mall_amap_poi(poi):
+        return -1.0
+    name = (poi.get("name") or "").strip()
+    if not name:
+        return -1.0
+    score = 5.0
+    q = (query or "").strip()
+    if q and q in name:
+        score += 3.0
+    if q and (name.startswith(q) or (len(q) >= 2 and q[:2] in name)):
+        score += 1.0
+    if any(m in name for m in ("写字楼", "公寓", "酒店", "停车场")):
+        score -= 2.0
+    try:
+        dist = float(poi.get("distance") or 0)
+        if dist >= 0:
+            score += max(0.0, 1.0 - dist / 5000.0)
+    except (TypeError, ValueError):
+        pass
+    return score
+
+
+def _collect_mall_poi_candidates(query, city="南京"):
+    """inputtips / place/text 拉取 POI，仅保留购物中心(060100)。"""
+    candidates = []
+    seen = set()
+
+    def _add(poi):
+        if not is_mall_amap_poi(poi):
+            return
+        loc = str(poi.get("location") or "").strip()
+        name = (poi.get("name") or "").strip()
+        if not loc or "," not in loc or not name:
+            return
+        poi_id = str(poi.get("id") or "").strip()
+        key = poi_id or name
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append({
+            "name": name,
+            "location": loc,
+            "poi_id": poi_id,
+            "type": poi.get("type") or "",
+            "distance": poi.get("distance"),
+        })
+
+    try:
+        tips_data = inputtips(query, city=city)
+        for tip in tips_data.get("tips") or []:
+            _add(tip)
+    except Exception:
+        pass
+
+    try:
+        result = search_places(query, city=city, types=_AMAP_MALL_TYPE_CODE, page_size=15)
+        if str(result.get("status")) == "1":
+            for poi in result.get("pois") or []:
+                _add(poi)
+    except Exception:
+        pass
+
+    return candidates
+
+
+def _fallback_mall_anchor(query: str):
+    """高德不可用时的内置商场锚点。"""
+    q = (query or "").strip()
+    if len(q) < 2:
         return None
-    for alias, keyword in sorted(_MALL_NAME_ALIASES, key=lambda x: len(x[0]), reverse=True):
-        if alias in text:
-            return keyword
+    for keywords, anchor in _KNOWN_MALL_ANCHORS:
+        for kw in keywords:
+            if kw in q or q in kw:
+                return {
+                    "name": anchor["name"],
+                    "location": anchor["location"],
+                    "keyword": q,
+                    "poi_id": anchor.get("poi_id") or "",
+                }
     return None
 
 
 def resolve_mall_anchor(message: str, city="南京"):
-    """解析商场 POI 坐标；失败返回 None。"""
-    keyword = detect_mall_keyword(message)
-    if not keyword:
+    """抽取地点 → 高德检索 → 分类码为购物中心(060100) 才作为商场锚点。"""
+    queries = extract_location_queries(message)
+    if not queries:
         return None
 
-    try:
-        tips_data = inputtips(keyword, city=city)
-        for tip in tips_data.get("tips") or []:
-            loc = str(tip.get("location") or "").strip()
-            name = (tip.get("name") or "").strip()
-            if loc and "," in loc and name:
-                return {"name": name, "location": loc, "keyword": keyword}
-    except Exception:
-        pass
+    best = None
+    best_score = -1.0
+    best_query = ""
 
-    try:
-        result = search_places(keyword, city=city, types="060100", page_size=8)
-        if str(result.get("status")) == "1":
-            for poi in result.get("pois") or []:
-                loc = str(poi.get("location") or "").strip()
-                name = (poi.get("name") or "").strip()
-                if loc and "," in loc and name:
-                    return {"name": name, "location": loc, "keyword": keyword}
-    except Exception:
-        pass
+    for query in queries:
+        for poi in _collect_mall_poi_candidates(query, city=city):
+            score = _score_mall_poi(
+                {"name": poi["name"], "type": poi.get("type"), "distance": poi.get("distance")},
+                query,
+            )
+            if score > best_score:
+                best_score = score
+                best = poi
+                best_query = query
 
+    if best and best_score >= 0:
+        return {
+            "name": best["name"],
+            "location": best["location"],
+            "keyword": best_query,
+            "poi_id": best.get("poi_id") or "",
+        }
+
+    for query in queries:
+        fallback = _fallback_mall_anchor(query)
+        if fallback:
+            return fallback
     return None
+
+
+def _resolve_mall_shop_category(message: str, category: str) -> str:
+    """商场场景下解析 eat/fun/shop 子意图。"""
+    text = (message or "").strip()
+    if any(m in text for m in _DRINK_CATEGORY_MARKERS):
+        return "咖啡饮品"
+    if any(t in text for t in ("吃", "餐", "喝", "美食", "饭店", "饭", "饿")):
+        return "美食"
+    if any(t in text for t in _FUN_MARKERS):
+        return "休闲娱乐"
+    if any(t in text for t in _SPORT_MARKERS):
+        return "运动健身"
+    if any(t in text for t in _SCENIC_MARKERS):
+        return "景点公园"
+    if any(t in text for t in _SHOP_MARKERS):
+        return "购物商圈"
+    if category in ("美食", "咖啡饮品", "休闲娱乐", "运动健身", "购物商圈", "景点公园"):
+        return category
+    return "美食"
+
+
+def _effective_mall_search_message(message: str, history=None) -> str:
+    """澄清追问轮（如只回复「火锅」）时，合并上一轮用户消息中的地点。"""
+    text = (message or "").strip()
+    if extract_location_queries(text):
+        return text
+    if not history or not _was_awaiting_clarification(history):
+        return text
+    if len(text) > 8 and not _has_cuisine_or_brand(text):
+        return text
+    for msg in reversed(history):
+        if msg.get("role") != "user":
+            continue
+        prev = (msg.get("content") or "").strip()
+        if extract_location_queries(prev):
+            return f"{prev} {text}".strip()
+        break
+    return text
+
+
+def _resolve_mall_branch(message: str, category: str, history=None, city="南京"):
+    """解析商场分支：返回 {anchor, category} 或 None。"""
+    search_msg = _effective_mall_search_message(message, history=history)
+    anchor = resolve_mall_anchor(search_msg, city=city)
+    if not anchor:
+        return None
+    mall_category = _resolve_mall_shop_category(search_msg, category)
+    return {"anchor": anchor, "category": mall_category, "search_message": search_msg}
 
 
 def _has_cuisine_or_brand(message: str) -> bool:
@@ -276,6 +513,8 @@ def needs_guide_clarification(message: str, category: str, history=None) -> bool
     if category in ("美食", "咖啡饮品"):
         if not is_food_intent(text):
             return False
+        if resolve_mall_anchor(text):
+            return False
         if _has_cuisine_or_brand(text):
             return False
         if any(h in text for h in _AMBIANCE_HINT + _BUDGET_HINT + _RATING_HINT):
@@ -292,7 +531,7 @@ def needs_guide_clarification(message: str, category: str, history=None) -> bool
 
     if category == "休闲娱乐" and _BROAD_FUN_QUERY.search(text):
         return True
-    if category == "购物商圈" and re.search(r"有什么|有啥|哪些|推荐", text) and not detect_mall_keyword(text):
+    if category == "购物商圈" and re.search(r"有什么|有啥|哪些|推荐", text) and not extract_location_queries(text):
         return True
 
     return False
@@ -470,19 +709,26 @@ def _candidates_for_api(candidates):
 
 def _llm_context_text(candidates, campus, category, hints=(), mode="campus", mall_name=None):
     if not candidates:
-        scope = f"{mall_name}周边" if mode == "mall_anchor" and mall_name else f"{campus}校区"
-        return (
-            f"（{scope}「{category}」下未检索到 POI；"
+        scope = f"{mall_name}内/周边" if mode == "mall_anchor" and mall_name else f"{campus}校区"
+        extra = ""
+        if mode == "mall_anchor" and mall_name:
+            extra = "请勿推荐该商场以外的门店；"
+        body = (
+            f"（{scope}「{category}」下未检索到 POI；{extra}"
             "候选来自吃喝玩乐同源高德 POI，请勿编造名称。）"
         )
-    scope = f"{mall_name}周边" if mode == "mall_anchor" and mall_name else f"{campus}校区"
+        if hints:
+            return "\n".join(hints) + "\n" + body
+        return body
+    scope = f"{mall_name}内/周边" if mode == "mall_anchor" and mall_name else f"{campus}校区"
     lines = [
         f"候选列表（{scope} · guide分类「{category}」· 高德固定 types）：\n"
     ]
     if mode == "mall_anchor" and mall_name:
         lines.append(
             f"【提示】以下候选以「{mall_name}」为中心周边检索，"
-            "无法保证均在商场室内或具体楼层。\n"
+            "无法保证均在商场室内或具体楼层；"
+            "禁止推荐列表以外的店，尤其禁止推荐商场外/新街口等其他商圈的门店。\n"
         )
     for h in hints:
         lines.append(h + "\n")
@@ -563,55 +809,50 @@ def _cache_set(key, val):
     _SEARCH_CACHE[key] = (_time.time(), val)
 
 
-def _fetch_guide_items(
+def _item_matches_keyword(item, keyword: str) -> bool:
+    """品类/关键词检索时，名称或类型须含关键词（如「川菜」）。"""
+    kw = (keyword or "").strip()
+    if not kw:
+        return True
+    name = item.get("name") or ""
+    typ = str(item.get("type") or "")
+    return kw in name or kw in typ
+
+
+def _fetch_campus_branch(
     *,
-    mode,
     campus,
     category,
     keyword,
     user_id,
-    mall_location=None,
 ):
-    cache_key = (mode, campus, category, keyword, user_id, mall_location)
+    cache_key = ("campus", campus, category, keyword, user_id)
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    def _pull_campus(kw):
-        payload = search_ai_guide_places(campus, category, keyword=kw, user_id=user_id)
-        if payload.get("error"):
-            return []
-        return payload.get("items") or []
-
-    def _pull_mall(kw):
-        payload = search_guide_places_near(
-            mall_location,
-            category,
-            keyword=kw,
-            campus=campus,
-            user_id=user_id,
-            radius=_MALL_AROUND_RADIUS_M,
-        )
-        if payload.get("error"):
-            return []
-        return payload.get("items") or []
-
-    pull = _pull_mall if mode == "mall_anchor" and mall_location else _pull_campus
+    kw = (keyword or "").strip()
+    has_keyword = bool(kw)
 
     amap_items = []
-    if keyword:
-        amap_items.extend(pull(keyword))
-    if not amap_items:
-        amap_items.extend(pull(""))
+    payload = search_ai_guide_places(campus, category, keyword=kw, user_id=user_id)
+    if not payload.get("error"):
+        amap_items.extend(payload.get("items") or [])
+
+    if not amap_items and not has_keyword:
+        payload = search_ai_guide_places(campus, category, keyword="", user_id=user_id)
+        if not payload.get("error"):
+            amap_items.extend(payload.get("items") or [])
 
     seed_items = []
-    if mode != "mall_anchor" and len(amap_items) < 5:
+    if not has_keyword and len(amap_items) < 5:
         seed_items = fetch_ai_guide_seed(campus, category)
 
     remote_items = dedupe_guide_items(amap_items + seed_items)
-    db_items = []
-    if mode != "mall_anchor":
-        db_items = fetch_db_leaderboard_candidates(campus, category)
+    db_items = fetch_db_leaderboard_candidates(campus, category)
+    if has_keyword:
+        remote_items = [i for i in remote_items if _item_matches_keyword(i, kw)]
+        db_items = [i for i in db_items if _item_matches_keyword(i, kw)]
 
     if remote_items:
         remote_items = enrich_guide_items(
@@ -629,10 +870,102 @@ def _fetch_guide_items(
         )
 
     items = merge_leaderboard_candidates(remote_items, db_items)
-
     if items:
         _cache_set(cache_key, items)
     return items
+
+
+def _fetch_mall_branch(
+    *,
+    anchor,
+    campus,
+    category,
+    keyword,
+    user_id,
+):
+    mall_location = anchor.get("location")
+    mall_name = anchor.get("name")
+    mall_poi_id = anchor.get("poi_id") or ""
+    cache_key = ("mall", mall_location, mall_poi_id, campus, category, keyword, user_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    kw = (keyword or "").strip()
+    has_keyword = bool(kw)
+
+    amap_items = []
+    payload = search_guide_places_near(
+        mall_location,
+        category,
+        keyword=kw,
+        campus=campus,
+        user_id=user_id,
+        radius=_MALL_AROUND_RADIUS_M,
+        exclude_anchor_poi_id=mall_poi_id,
+        exclude_anchor_name=mall_name,
+        mall_shop_mode=True,
+    )
+    if not payload.get("error"):
+        amap_items.extend(payload.get("items") or [])
+
+    if not amap_items and not has_keyword:
+        payload = search_guide_places_near(
+            mall_location,
+            category,
+            keyword="",
+            campus=campus,
+            user_id=user_id,
+            radius=_MALL_AROUND_RADIUS_M,
+            exclude_anchor_poi_id=mall_poi_id,
+            exclude_anchor_name=mall_name,
+            mall_shop_mode=True,
+        )
+        if not payload.get("error"):
+            amap_items.extend(payload.get("items") or [])
+
+    if has_keyword:
+        amap_items = [i for i in amap_items if _item_matches_keyword(i, kw)]
+
+    remote_items = dedupe_guide_items(amap_items)
+    if remote_items:
+        remote_items = enrich_guide_items(
+            remote_items,
+            user_id=user_id,
+            campus=campus,
+            category=category,
+        )
+
+    items = remote_items
+    if items:
+        _cache_set(cache_key, items)
+    return items
+
+
+def _fetch_guide_items(
+    *,
+    mode,
+    campus,
+    category,
+    keyword,
+    user_id,
+    mall_anchor=None,
+):
+    """兼容旧调用：按 mode 分发 campus / mall 分支。"""
+    if mode == "mall_anchor" and mall_anchor:
+        return _fetch_mall_branch(
+            anchor=mall_anchor,
+            campus=campus,
+            category=category,
+            keyword=keyword,
+            user_id=user_id,
+        )
+    return _fetch_campus_branch(
+        campus=campus,
+        category=category,
+        keyword=keyword,
+        user_id=user_id,
+    )
 
 
 def _empty_context(message, user_id=None):
@@ -656,29 +989,27 @@ def _empty_context(message, user_id=None):
 def prepare_chat_recommend_context(message, user_id=None, gps_location=None, history=None):
     """
     为 chat_recommend 准备候选与 LLM 上下文。
-    检索链：商场锚点 around 或 search_ai_guide_places → 不足则 fetch_ai_guide_seed。
+    检索链：intent → mall_branch 或 campus_branch；商场无结果时 fallback 校区。
     """
     category = classify_guide_intent(message)
     if not category:
         return _empty_context(message, user_id=user_id)
 
     campus = resolve_campus(message, user_id=user_id)
-    mall_anchor = resolve_mall_anchor(message)
-    mode = "mall_anchor" if mall_anchor else "campus"
+    city = guide_search_city(campus)
+    mall_branch = _resolve_mall_branch(message, category, history=history, city=city)
+    mode = "mall_anchor" if mall_branch else "campus"
+    mall_anchor = mall_branch.get("anchor") if mall_branch else None
     mall_name = mall_anchor.get("name") if mall_anchor else None
-    mall_location = mall_anchor.get("location") if mall_anchor else None
 
-    # 商场场景且未明确其他分类时，默认按餐饮检索
-    if mode == "mall_anchor" and category == "购物商圈":
-        if any(t in message for t in ("吃", "餐", "喝", "美食", "饭店")):
-            category = "美食"
-        elif any(t in message for t in _FUN_MARKERS):
-            category = "休闲娱乐"
-        else:
-            category = "美食"
+    if mall_branch:
+        category = mall_branch["category"]
 
-    if needs_guide_clarification(message, category, history=history):
+    if not mall_branch and needs_guide_clarification(message, category, history=history):
         chips = clarification_chips_for(category)
+        clar_text = _clarification_context_text(message, campus, category)
+        if mall_name:
+            clar_text += f" 用户已指定商场「{mall_name}」，追问时说明会在该商场内/周边检索。"
         return {
             "is_guide_request": True,
             "is_food_request": category in ("美食", "咖啡饮品"),
@@ -686,7 +1017,7 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
             "candidates": [],
             "candidates_api": [],
             "candidates_text": "",
-            "clarification_text": _clarification_context_text(message, campus, category),
+            "clarification_text": clar_text,
             "clarification_chips": chips,
             "campus": campus,
             "category": category,
@@ -697,25 +1028,34 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
     keyword = resolve_guide_keyword(message, category)
     gps_lng, gps_lat = _parse_loc(gps_location) if gps_location else (None, None)
 
-    if mode == "mall_anchor" and not mall_location:
-        mode = "campus"
-        mall_name = None
-
-    items = _fetch_guide_items(
-        mode=mode,
-        campus=campus,
-        category=category,
-        keyword=keyword,
-        user_id=user_id,
-        mall_location=mall_location,
-    )
+    hints = []
+    items = []
+    if mall_branch:
+        items = _fetch_mall_branch(
+            anchor=mall_anchor,
+            campus=campus,
+            category=category,
+            keyword=keyword,
+            user_id=user_id,
+        )
+        if not items:
+            hints.append(
+                f"【提示】「{mall_name}」内/周边未检索到「{keyword or category}」相关店铺。"
+                "请勿推荐商场外或其他商圈的门店；如实说明暂无合适候选即可。"
+            )
+    else:
+        items = _fetch_campus_branch(
+            campus=campus,
+            category=category,
+            keyword=keyword,
+            user_id=user_id,
+        )
 
     ranked = _rank_items(message, items, category=category)
     candidates = _guide_items_to_candidates(
         ranked[:8], gps_lng, gps_lat, category=category, campus=campus,
     )[:5]
 
-    hints = []
     if any(h in message for h in _AMBIANCE_HINT):
         hints.append(
             "【提示】用户问氛围（安静等），数据无此标签；说明只能按距离/评分推荐。"
