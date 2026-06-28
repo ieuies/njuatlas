@@ -48,7 +48,7 @@ _CATEGORY_PROMPT_RULES = {
     ),
 }
 
-_XIAONAN_COMMON_RULES = (
+_XIAOJINGLING_COMMON_RULES = (
     "3. 推荐时只能使用系统提供的候选列表；禁止编造评论、菜单、排队。\n"
     "4. 没有评分/人均就省略，不提「暂无评分」。\n"
     "5. 禁止说「帮你查到了和某某相关的店」「我用某某关键词检索了」等套话；"
@@ -255,7 +255,7 @@ def _build_system_prompt(
         )
         if is_partner_request:
             base_rules += partner_rules
-        return _XIAOJINGLING_BASE + base_rules + _XIAONAN_COMMON_RULES + extra
+        return _XIAOJINGLING_BASE + base_rules + _XIAOJINGLING_COMMON_RULES + extra
     rules = _CATEGORY_PROMPT_RULES.get(category, _CATEGORY_PROMPT_RULES["美食"])
     mall_note = ""
     if mode == "mall_anchor" and mall_name:
@@ -265,7 +265,7 @@ def _build_system_prompt(
             "禁止推荐候选列表以外的店，禁止推荐商场外、新街口等其他商圈的门店。\n"
         )
     partner_extra = partner_rules if is_partner_request else ""
-    return _XIAOJINGLING_BASE + rules + mall_note + _XIAONAN_COMMON_RULES + partner_extra + extra
+    return _XIAOJINGLING_BASE + rules + mall_note + _XIAOJINGLING_COMMON_RULES + partner_extra + extra
 
 
 @llm_bp.route("/chat_recommend", methods=["POST"])

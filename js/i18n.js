@@ -8,6 +8,7 @@ const MESSAGES = {
         'nav.home': '首页',
         'nav.partner': '找搭子',
         'nav.ai': '小鲸灵',
+        'nav.aiShort': '小鲸灵',
         'nav.guide': '吃喝玩乐',
         'nav.profile': '个人',
         'nav.messages': '消息',
@@ -45,6 +46,8 @@ const MESSAGES = {
         'ai.welcomeTitle': '你好，我是小鲸灵',
         'ai.welcomeDesc': '可以问我吃喝玩乐、找搭子组局等问题~',
         'ai.welcomeHint': '试试点击下方推荐问题，或直接输入',
+        'ai.thinking': '小鲸灵正在思考',
+        'ai.loginRequired': '请先登录使用小鲸灵',
         'ai.inputPlaceholder': '输入你的问题，如「仙林有什么饭搭子」',
         'ai.send': '发送',
         'partner.searchPlaceholder': '搜索标题、地点或标签',
@@ -214,7 +217,8 @@ const MESSAGES = {
     en: {
         'nav.home': 'Home',
         'nav.partner': 'Find Buddies',
-        'nav.ai': 'AI Assistant',
+        'nav.ai': 'Xiaojingling',
+        'nav.aiShort': 'Spirit',
         'nav.guide': 'Explore',
         'nav.profile': 'Profile',
         'nav.messages': 'Messages',
@@ -252,6 +256,8 @@ const MESSAGES = {
         'ai.welcomeTitle': 'Hi, I\'m Xiaojingling',
         'ai.welcomeDesc': 'Ask me about food, fun, or partner events~',
         'ai.welcomeHint': 'Try a suggestion below, or type your question',
+        'ai.thinking': 'Xiaojingling is thinking…',
+        'ai.loginRequired': 'Please log in to chat with Xiaojingling',
         'ai.inputPlaceholder': 'Ask anything, e.g. good food near NJU',
         'ai.send': 'Send',
         'partner.searchPlaceholder': 'Search title, place, or tags',
@@ -513,7 +519,7 @@ export function applyDocumentI18n(root = document) {
         if (!page || !span) return;
         if (page === 'guide') span.textContent = t('nav.guideShort');
         else if (page === 'profile') span.textContent = t('nav.profileShort');
-        else if (page === 'ai') span.textContent = 'AI';
+        else if (page === 'ai') span.textContent = t('nav.aiShort');
         else span.textContent = t(`nav.${page}`);
     });
 

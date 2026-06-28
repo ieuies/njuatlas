@@ -1,6 +1,7 @@
 import { chatRecommendStream, getConversationList, getConversationMessages, deleteConversation, batchDeleteConversations } from '../api.js';
 import { showToast, formatDateShort, formatRelativeTime, avatarHtmlForUser } from '../utils.js';
 import { isLoggedIn, getUser } from '../auth.js';
+import { t } from '../i18n.js';
 
 const AI_HEAD_AVATAR = 'image/aihelper-head.png?v=4';
 const CHAT_AVATAR_SIZE = 36;
@@ -371,7 +372,7 @@ function showThinking() {
     const div = document.createElement('div');
     div.className = 'chat-message chat-thinking';
     div.id = 'aiThinkingMsg';
-    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon icon-spinner" aria-hidden="true"></span><span class="thinking-text">小鲸灵正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
+    div.innerHTML = `<div class="thinking-container"><span class="thinking-icon icon-spinner" aria-hidden="true"></span><span class="thinking-text">${t('ai.thinking')}</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>`;
     body.appendChild(div);
     messagesDiv.appendChild(row);
     scrollToBottom();
@@ -662,7 +663,7 @@ async function sendMessage() {
     const msg = input.value.trim();
     if (!msg) return;
     if (!isLoggedIn()) {
-        showToast('请先登录使用小鲸灵');
+        showToast(t('ai.loginRequired'));
         document.getElementById('authModal').style.display = 'flex';
         return;
     }

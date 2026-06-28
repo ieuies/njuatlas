@@ -42,7 +42,7 @@ GUIDE_CATEGORY_CONFIG = {
 }
 
 
-# AI 小南允许检索的全部分类（与 guide 页 GUIDE_CATEGORY_CONFIG 一致）
+# AI 小鲸灵允许检索的全部分类（与 guide 页 GUIDE_CATEGORY_CONFIG 一致）
 AI_GUIDE_CATEGORIES = tuple(GUIDE_CATEGORY_CONFIG.keys())
 # 兼容旧名
 AI_DINING_CATEGORIES = AI_GUIDE_CATEGORIES
@@ -645,7 +645,7 @@ def search_guide_places(campus, category, keyword="", page=1, page_size=None, us
 
 def search_ai_guide_places(campus, category, keyword="", user_id=None, page=1):
     """
-    AI 小南候选检索：与 guide-search 相同。
+    AI 小鲸灵候选检索：与 guide-search 相同。
     仅允许 GUIDE_CATEGORY_CONFIG 中的分类；高德 types 固定。
     """
     if category not in GUIDE_CATEGORY_CONFIG:
