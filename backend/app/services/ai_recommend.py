@@ -1,5 +1,5 @@
 """
-AI 小南推荐：候选检索与吃喝玩乐 guide 页完全同源。
+AI 小鲸灵推荐：候选检索与吃喝玩乐 guide 页完全同源。
 
 规则：
 - 调用 guide.search_ai_guide_places / fetch_ai_guide_seed / search_guide_places_near
@@ -973,6 +973,7 @@ def _empty_context(message, user_id=None):
     return {
         "is_guide_request": False,
         "is_food_request": False,
+        "is_partner_request": False,
         "needs_clarification": False,
         "candidates": [],
         "candidates_api": [],
@@ -983,17 +984,155 @@ def _empty_context(message, user_id=None):
         "category": None,
         "mode": "chat",
         "mall_name": None,
+        "posts_api": [],
     }
+
+
+_PARTNER_TYPES = (
+    "饭搭子", "运动搭子", "学习搭子", "游戏搭子", "电影搭子",
+    "旅游搭子", "音乐搭子", "摄影搭子", "其他",
+)
+_PARTNER_MARKERS = (
+    "组局", "搭子", "找搭子", "征友", "缺人", "一起", "来人", "组队",
+    "有什么活动", "有没有活动", "谁想", "有没有人", "报名",
+)
+
+
+def detect_partner_intent(message):
+    msg = (message or "").strip()
+    if not msg:
+        return None
+    matched_type = next((t for t in _PARTNER_TYPES if t in msg), None)
+    has_marker = any(marker in msg for marker in _PARTNER_MARKERS)
+    if not has_marker and not matched_type:
+        return None
+    return {
+        "type_tag": matched_type,
+        "keyword": _extract_partner_keyword(msg, matched_type),
+    }
+
+
+def _extract_partner_keyword(message, type_tag=None):
+    kw = message
+    for token in _PARTNER_TYPES:
+        kw = kw.replace(token, " ")
+    for token in _PARTNER_MARKERS:
+        kw = kw.replace(token, " ")
+    for token in ("仙林", "鼓楼", "浦口", "苏州", "南大", "附近", "有没有", "什么", "哪些", "查询", "看看", "帮我"):
+        kw = kw.replace(token, " ")
+    kw = re.sub(r"\s+", " ", kw).strip(" ，。！？?")
+    if len(kw) < 2:
+        return None
+    return kw[:30]
+
+
+def _format_partner_event_time(post):
+    event_time = post.get("event_time")
+    if event_time:
+        return str(event_time).replace("T", " ")[:16]
+    urgency = post.get("urgency")
+    if urgency == "long_term":
+        return "长期征友"
+    if urgency == "now":
+        return "立即/进行中"
+    return "时间未定"
+
+
+def _partner_posts_to_llm_text(posts):
+    if not posts:
+        return (
+            "【本地组局帖子（找搭子模块）】\n"
+            "当前没有检索到匹配的组局。请如实告知用户，并建议去「找搭子」页发布或调整关键词/类型。"
+        )
+    lines = ["【本地组局帖子（找搭子模块）】以下是系统检索结果，请只引用这些条目："]
+    for index, post in enumerate(posts, 1):
+        tags = "、".join(post.get("tags") or []) or "未分类"
+        location = post.get("location_name") or "地点未定"
+        participant_count = post.get("participant_count") or 1
+        max_participants = post.get("max_participants") or 2
+        budget = post.get("budget") or "未填"
+        username = post.get("username") or "匿名"
+        lines.append(
+            f"{index}. [帖子#{post.get('id')}] 《{post.get('title')}》"
+            f" | 标签：{tags}"
+            f" | 时间：{_format_partner_event_time(post)}"
+            f" | 地点：{location}"
+            f" | 人数：{participant_count}/{max_participants}"
+            f" | 预算：{budget}"
+            f" | 发起人：{username}"
+        )
+    lines.append("请根据列表回答；引导用户去「找搭子」页查看详情或报名。禁止编造列表外的活动。")
+    return "\n".join(lines)
+
+
+def _build_partner_context(message, user_id=None):
+    intent = detect_partner_intent(message)
+    if not intent:
+        return None
+
+    from app.services.note import NoteSystem
+
+    ns = NoteSystem(user_id=user_id)
+    tags = [intent["type_tag"]] if intent.get("type_tag") else None
+    keyword = intent.get("keyword")
+    result = ns.search(
+        tags=tags,
+        keyword=keyword,
+        sort="hot",
+        page=1,
+        page_size=8,
+    )
+    posts = result.get("items") or []
+    campus = resolve_campus(message, user_id=user_id)
+    posts_text = _partner_posts_to_llm_text(posts)
+    return {
+        "is_guide_request": False,
+        "is_food_request": False,
+        "is_partner_request": True,
+        "needs_clarification": False,
+        "candidates": [],
+        "candidates_api": [],
+        "candidates_text": posts_text,
+        "posts_api": [
+            {"id": post["id"], "title": post["title"], "tags": post.get("tags") or []}
+            for post in posts
+        ],
+        "clarification_text": "",
+        "clarification_chips": [],
+        "campus": campus,
+        "category": None,
+        "mode": "partner",
+        "mall_name": None,
+    }
+
+
+def _merge_partner_context(ctx, partner_ctx):
+    if not partner_ctx:
+        return ctx
+    ctx["is_partner_request"] = True
+    ctx["posts_api"] = partner_ctx.get("posts_api") or []
+    partner_text = partner_ctx.get("candidates_text") or ""
+    if ctx.get("candidates_text"):
+        ctx["candidates_text"] = f"{partner_text}\n\n{ctx['candidates_text']}"
+    else:
+        ctx["candidates_text"] = partner_text
+    if ctx.get("mode") not in ("mall_anchor", "partner"):
+        ctx["mode"] = f"partner+{ctx.get('mode') or 'guide'}"
+    return ctx
 
 
 def prepare_chat_recommend_context(message, user_id=None, gps_location=None, history=None):
     """
     为 chat_recommend 准备候选与 LLM 上下文。
     检索链：intent → mall_branch 或 campus_branch；商场无结果时 fallback 校区。
+    组局意图时附加找搭子模块本地帖子。
     """
+    partner_ctx = _build_partner_context(message, user_id=user_id)
     category = classify_guide_intent(message)
-    if not category:
+    if not category and not partner_ctx:
         return _empty_context(message, user_id=user_id)
+    if not category and partner_ctx:
+        return partner_ctx
 
     campus = resolve_campus(message, user_id=user_id)
     city = guide_search_city(campus)
@@ -1010,9 +1149,10 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
         clar_text = _clarification_context_text(message, campus, category)
         if mall_name:
             clar_text += f" 用户已指定商场「{mall_name}」，追问时说明会在该商场内/周边检索。"
-        return {
+        return _merge_partner_context({
             "is_guide_request": True,
             "is_food_request": category in ("美食", "咖啡饮品"),
+            "is_partner_request": False,
             "needs_clarification": True,
             "candidates": [],
             "candidates_api": [],
@@ -1023,7 +1163,8 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
             "category": category,
             "mode": mode,
             "mall_name": mall_name,
-        }
+            "posts_api": [],
+        }, partner_ctx)
 
     keyword = resolve_guide_keyword(message, category)
     gps_lng, gps_lat = _parse_loc(gps_location) if gps_location else (None, None)
@@ -1065,9 +1206,10 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
     if any(h in message for h in _RATING_HINT):
         hints.append("【提示】用户在意评分，优先推荐评分高的候选。")
 
-    return {
+    return _merge_partner_context({
         "is_guide_request": True,
         "is_food_request": category in ("美食", "咖啡饮品"),
+        "is_partner_request": False,
         "needs_clarification": False,
         "candidates": candidates,
         "candidates_api": _candidates_for_api(candidates),
@@ -1080,4 +1222,5 @@ def prepare_chat_recommend_context(message, user_id=None, gps_location=None, his
         "category": category,
         "mode": mode,
         "mall_name": mall_name,
-    }
+        "posts_api": [],
+    }, partner_ctx)

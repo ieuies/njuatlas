@@ -17,6 +17,7 @@ import { scheduleGuideBackgroundPrefetch, prefetchGuideEntryOnly } from './guide
 import { showHomePage, initAuthConfig, applyAuthConfigToRegisterForm } from './pages/home.js';
 import { prefetchAmapScript } from './config.js';
 import { initLocale, initLocaleToggle, t, getPageTitleKey } from './i18n.js';
+import { initCompanion } from './companion.js';
 
 const HOME_INTRO_FIRST_LAYER_MS = 950;
 /** 第三层 delay(240ms) + 动画(650ms) + 缓冲 */
@@ -896,6 +897,7 @@ async function init() {
     initMapExpand();
     initFullMapPage();
     initBottomBarAutoHide();
+    initCompanion();
 
     await switchPage('home');
     prefetchCommonAssets();

@@ -131,7 +131,7 @@
         animation: none !important;
     }
 
-    html .ai-welcome-avatar,
+    html .ai-welcome-avatar img,
     html .guide-prefetch-hint {
         animation: none !important;
     }

@@ -237,16 +237,16 @@ html .ai-conv-item.active::before {
     background: var(--gradient-primary);
     border-radius: 0 3px 3px 0;
 }
-/* 欢迎头像轻微呼吸光晕 */
-html .ai-welcome-avatar {
-    animation: enhPulse 3.2s ease-in-out infinite;
+/* 欢迎头像轻微呼吸光晕（仅作用在透明 PNG 人物上） */
+html .ai-welcome-avatar img {
+    animation: enhAvatarGlow 3.2s ease-in-out infinite;
 }
-@keyframes enhPulse {
-    0%, 100% { box-shadow: 0 12px 32px rgba(107, 33, 165, 0.18); }
-    50%      { box-shadow: 0 12px 40px rgba(107, 33, 165, 0.34); }
+@keyframes enhAvatarGlow {
+    0%, 100% { filter: drop-shadow(0 10px 22px rgba(107, 33, 165, 0.18)); }
+    50%      { filter: drop-shadow(0 12px 30px rgba(107, 33, 165, 0.34)); }
 }
 @media (prefers-reduced-motion: reduce) {
-    html .ai-welcome-avatar { animation: none; }
+    html .ai-welcome-avatar img { animation: none; }
 }
 
 /* ========== 8. 加载 / 空状态 shimmer ========== */

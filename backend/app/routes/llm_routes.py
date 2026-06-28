@@ -16,8 +16,8 @@ from app.validators import clean_string, get_json_body, positive_int, validate_s
 
 llm_bp = Blueprint("llm", __name__, url_prefix="/api/llm")
 
-_XIAONAN_BASE = (
-    "你是「南大图谱」校园群里的机器人，同学们叫你小南。\n"
+_XIAOJINGLING_BASE = (
+    "你是「南大图谱」校园助手，名叫小鲸灵；自称「小鲸灵」，不要用其他名字。\n"
     "说话像朋友一样——亲切、口语化，偶尔俏皮不油腻。\n\n"
 )
 
@@ -225,15 +225,37 @@ def _emit_chat_recommend_response(
     )
 
 
-def _build_system_prompt(preference_text="", category=None, mode=None, mall_name=None):
+def _build_system_prompt(
+    preference_text="",
+    category=None,
+    mode=None,
+    mall_name=None,
+    is_partner_request=False,
+):
     extra = f"{preference_text}\n" if preference_text else ""
-    if not category:
+    partner_rules = (
+        "10. 组局查询：系统会附上「找搭子」模块的本地帖子列表；只能引用列表中的组局，"
+        "说明标题、类型、时间地点、人数与预算即可，禁止编造活动。"
+        "引导用户去「找搭子」页查看详情或报名。\n"
+    )
+    if is_partner_request and not category:
         return (
-            _XIAONAN_BASE
-            + "1. 你是校园生活助手，可聊学习、社交、南京生活；涉及吃喝玩乐时可引导用户说具体想吃什么或玩什么。\n"
-            + _XIAONAN_COMMON_RULES
+            _XIAOJINGLING_BASE
+            + "1. 你帮同学查「找搭子」里的组局，也可聊学习、社交与南京生活。\n"
+            + "2. 组局信息仅来自系统提供的帖子列表；列表为空时如实说明，建议去「找搭子」发布或换关键词。\n"
+            + "3. 涉及吃喝玩乐时，引导用户说具体想吃什么或玩什么。\n"
+            + partner_rules
+            + "输出纯文本，不用 Markdown。\n"
             + extra
         )
+    if not category:
+        base_rules = (
+            "1. 你是校园生活助手小鲸灵，可聊学习、社交、南京生活；"
+            "涉及吃喝玩乐时可引导用户说具体想吃什么或玩什么。\n"
+        )
+        if is_partner_request:
+            base_rules += partner_rules
+        return _XIAOJINGLING_BASE + base_rules + _XIAONAN_COMMON_RULES + extra
     rules = _CATEGORY_PROMPT_RULES.get(category, _CATEGORY_PROMPT_RULES["美食"])
     mall_note = ""
     if mode == "mall_anchor" and mall_name:
@@ -242,7 +264,8 @@ def _build_system_prompt(preference_text="", category=None, mode=None, mall_name
             f"候选以该商场为中心周边检索，无法保证均在室内或具体楼层。"
             "禁止推荐候选列表以外的店，禁止推荐商场外、新街口等其他商圈的门店。\n"
         )
-    return _XIAONAN_BASE + rules + mall_note + _XIAONAN_COMMON_RULES + extra
+    partner_extra = partner_rules if is_partner_request else ""
+    return _XIAOJINGLING_BASE + rules + mall_note + _XIAONAN_COMMON_RULES + partner_extra + extra
 
 
 @llm_bp.route("/chat_recommend", methods=["POST"])
@@ -283,6 +306,7 @@ def chat_recommend():
             category=ctx.get("category"),
             mode=ctx.get("mode"),
             mall_name=ctx.get("mall_name"),
+            is_partner_request=bool(ctx.get("is_partner_request")),
         ),
     }]
     messages.extend(history)

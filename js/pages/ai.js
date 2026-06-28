@@ -1,6 +1,60 @@
 import { chatRecommendStream, getConversationList, getConversationMessages, deleteConversation, batchDeleteConversations } from '../api.js';
-import { showToast, formatDateShort, formatRelativeTime } from '../utils.js';
-import { isLoggedIn } from '../auth.js';
+import { showToast, formatDateShort, formatRelativeTime, avatarHtmlForUser } from '../utils.js';
+import { isLoggedIn, getUser } from '../auth.js';
+
+const AI_HEAD_AVATAR = 'image/aihelper-head.png?v=4';
+const CHAT_AVATAR_SIZE = 36;
+
+function createChatRow(role) {
+    const row = document.createElement('div');
+    row.className = `ai-chat-row ai-chat-row--${role === 'user' ? 'user' : 'bot'}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'ai-chat-row__avatar';
+    if (role === 'user') {
+        avatar.innerHTML = avatarHtmlForUser(getUser(), CHAT_AVATAR_SIZE);
+    } else {
+        avatar.innerHTML = `<img class="ai-bot-avatar" src="${AI_HEAD_AVATAR}" alt="小鲸灵" width="${CHAT_AVATAR_SIZE}" height="${CHAT_AVATAR_SIZE}" loading="lazy" decoding="async">`;
+    }
+
+    const body = document.createElement('div');
+    body.className = 'ai-chat-row__body';
+
+    if (role === 'user') {
+        row.appendChild(body);
+        row.appendChild(avatar);
+    } else {
+        row.appendChild(avatar);
+        row.appendChild(body);
+    }
+    return { row, body };
+}
+
+function appendChatBubble(messagesDiv, role, text) {
+    const { row, body } = createChatRow(role);
+    const bubble = document.createElement('div');
+    bubble.className = `chat-message chat-${role === 'user' ? 'user' : 'bot'}`;
+    if (text != null && text !== '') bubble.textContent = text;
+    body.appendChild(bubble);
+    messagesDiv.appendChild(row);
+    return { row, body, bubble };
+}
+
+function appendToChatRowBody(anchorEl, messagesDiv, el) {
+    const body = anchorEl?.closest('.ai-chat-row__body');
+    if (body) {
+        body.appendChild(el);
+        if (el.classList.contains('ai-candidate-cards')) {
+            body.closest('.ai-chat-row')?.classList.add('ai-chat-row--wide');
+        }
+        return;
+    }
+    if (anchorEl && anchorEl.parentNode === messagesDiv) {
+        anchorEl.insertAdjacentElement('afterend', el);
+    } else {
+        messagesDiv.appendChild(el);
+    }
+}
 
 let openGuideWithContext = null;
 
@@ -141,6 +195,7 @@ const questionTemplates = [
     { base: '南大{type}附近有什么吃的', slot: ['仙林校区','鼓楼校区','南门','北门','汉口路','珠江路'] },
     { base: '仙林有什么{type}', slot: ['景点','公园','博物馆','打卡地'] },
     { base: '鼓楼附近有什么{type}', slot: ['电影院','KTV','健身房','商场'] },
+    { base: '有没有{type}的组局', slot: ['饭搭子','运动搭子','学习搭子','游戏搭子','电影搭子'] },
     { base: '{type}去哪比较好', slot: ['和室友聚餐','和对象约会','一个人吃午饭','周末改善伙食','生日请客','考试后放松'] },
     { base: '德基有什么{type}', slot: ['吃的','好玩的','逛的'] },
 ];
@@ -191,7 +246,7 @@ function renderCandidateCards(candidates, messagesDiv, anchorEl = null, options 
         : '';
 
     const candDiv = document.createElement('div');
-    candDiv.className = 'chat-message chat-bot ai-candidate-cards';
+    candDiv.className = 'ai-candidate-cards';
     let html = `<div class="ai-candidates" data-guide-category="${escapeHtml(category)}" data-guide-campus="${escapeHtml(campus)}">
         <div class="ai-candidates-header">
             <div class="ai-candidates-label"><i class="fas ${meta.icon}"></i> ${headerLabel}</div>
@@ -229,18 +284,14 @@ function renderCandidateCards(candidates, messagesDiv, anchorEl = null, options 
         }
     });
 
-    if (anchorEl && anchorEl.parentNode === messagesDiv) {
-        anchorEl.insertAdjacentElement('afterend', candDiv);
-    } else {
-        messagesDiv.appendChild(candDiv);
-    }
+    appendToChatRowBody(anchorEl, messagesDiv, candDiv);
     return candDiv;
 }
 
 function renderClarificationChips(chips, messagesDiv, anchorEl = null) {
     if (!chips?.length || !messagesDiv) return null;
     const wrap = document.createElement('div');
-    wrap.className = 'chat-message chat-bot ai-clarification-chips';
+    wrap.className = 'ai-clarification-chips';
     wrap.innerHTML = `<div class="ai-chip-row">${chips.map((chip) =>
         `<button type="button" class="ai-clarify-chip">${escapeHtml(chip)}</button>`
     ).join('')}</div>`;
@@ -251,11 +302,7 @@ function renderClarificationChips(chips, messagesDiv, anchorEl = null) {
             sendMessage();
         });
     });
-    if (anchorEl && anchorEl.parentNode === messagesDiv) {
-        anchorEl.insertAdjacentElement('afterend', wrap);
-    } else {
-        messagesDiv.appendChild(wrap);
-    }
+    appendToChatRowBody(anchorEl, messagesDiv, wrap);
     return wrap;
 }
 
@@ -301,14 +348,13 @@ function renderMessages(messages, sessionId = currentSessionId) {
     const cachedTurns = sessionTurnCandidates.get(sessionId) || [];
     let assistantTurn = 0;
     messages.forEach(msg => {
-        const div = document.createElement('div');
-        div.className = `chat-message ${msg.role === 'user' ? 'chat-user' : 'chat-bot'}`;
-        div.textContent = msg.role === 'assistant' ? stripMarkdown(msg.content) : msg.content;
-        messagesDiv.appendChild(div);
+        const role = msg.role === 'user' ? 'user' : 'bot';
+        const text = msg.role === 'assistant' ? stripMarkdown(msg.content) : msg.content;
+        const { bubble } = appendChatBubble(messagesDiv, role, text);
         if (msg.role === 'assistant') {
             const turnCandidates = cachedTurns[assistantTurn];
             if (turnCandidates?.length) {
-                renderCandidateCards(turnCandidates, messagesDiv, div);
+                renderCandidateCards(turnCandidates, messagesDiv, bubble);
             }
             assistantTurn += 1;
         }
@@ -320,18 +366,24 @@ function showThinking() {
     const messagesDiv = document.getElementById('chatMessages');
     if (!messagesDiv) return null;
     hideWelcome();
+    removeThinking();
+    const { row, body } = createChatRow('bot');
     const div = document.createElement('div');
     div.className = 'chat-message chat-thinking';
     div.id = 'aiThinkingMsg';
-    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon icon-spinner" aria-hidden="true"></span><span class="thinking-text">小南正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
-    messagesDiv.appendChild(div);
+    div.innerHTML = '<div class="thinking-container"><span class="thinking-icon icon-spinner" aria-hidden="true"></span><span class="thinking-text">小鲸灵正在思考</span><span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
+    body.appendChild(div);
+    messagesDiv.appendChild(row);
     scrollToBottom();
     return div;
 }
 
 function removeThinking() {
     const el = document.getElementById('aiThinkingMsg');
-    if (el) el.remove();
+    if (!el) return;
+    const row = el.closest('.ai-chat-row');
+    if (row) row.remove();
+    else el.remove();
 }
 
 function scrollToBottom() {
@@ -610,7 +662,7 @@ async function sendMessage() {
     const msg = input.value.trim();
     if (!msg) return;
     if (!isLoggedIn()) {
-        showToast('请先登录使用AI助手');
+        showToast('请先登录使用小鲸灵');
         document.getElementById('authModal').style.display = 'flex';
         return;
     }
@@ -622,10 +674,7 @@ async function sendMessage() {
     input.value = '';
     hideWelcome();
 
-    const userMsg = document.createElement('div');
-    userMsg.className = 'chat-message chat-user';
-    userMsg.textContent = msg;
-    messagesDiv.appendChild(userMsg);
+    appendChatBubble(messagesDiv, 'user', msg);
     scrollToBottom();
     showThinking();
 
@@ -643,8 +692,8 @@ async function sendMessage() {
         // 定位失败时，距离退化为按检索锚点计算
     }
 
-    const botMsg = document.createElement('div');
-    botMsg.className = 'chat-message chat-bot';
+    let botRow = null;
+    let botMsg = null;
     let streamStarted = false;
     let streamCandidates = [];
     let streamClarificationChips = [];
@@ -656,12 +705,15 @@ async function sendMessage() {
     let sidebarListRefreshNeeded = false;
 
     const ensureBotBubble = () => {
-        if (!streamStarted) {
-            removeThinking();
-            botMsg.textContent = '';
-            messagesDiv.appendChild(botMsg);
-            streamStarted = true;
-        }
+        if (streamStarted) return;
+        removeThinking();
+        const created = createChatRow('bot');
+        botRow = created.row;
+        botMsg = document.createElement('div');
+        botMsg.className = 'chat-message chat-bot';
+        created.body.appendChild(botMsg);
+        messagesDiv.appendChild(botRow);
+        streamStarted = true;
     };
 
     const ensureCandidateCards = () => {
@@ -728,8 +780,8 @@ async function sendMessage() {
         renderQuickQuestions();
     } catch (e) {
         removeThinking();
-        if (streamStarted && botMsg.parentNode) {
-            botMsg.remove();
+        if (streamStarted && botRow?.parentNode) {
+            botRow.remove();
         }
         if (candidateCardsEl?.parentNode) {
             candidateCardsEl.remove();
@@ -742,10 +794,7 @@ async function sendMessage() {
             document.getElementById('authModal').style.display = 'flex';
             return;
         }
-        const errDiv = document.createElement('div');
-        errDiv.className = 'chat-message chat-bot';
-        errDiv.textContent = '抱歉，AI 回复失败，请稍后重试';
-        messagesDiv.appendChild(errDiv);
+        appendChatBubble(messagesDiv, 'bot', '抱歉，AI 回复失败，请稍后重试');
         scrollToBottom();
     } finally {
         isSending = false;

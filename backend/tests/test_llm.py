@@ -6,7 +6,7 @@ def test_chat_recommend_requires_auth(client):
 def test_chat_recommend_with_mocked_llm(client, auth_a, monkeypatch):
     monkeypatch.setattr(
         "app.routes.llm_routes.chat_with_llm",
-        lambda messages, **kwargs: "你好，我是小南！",
+        lambda messages, **kwargs: "你好，我是小鲸灵！",
     )
 
     response = client.post(

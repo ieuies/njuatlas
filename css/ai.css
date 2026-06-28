@@ -316,6 +316,71 @@
     .ai-chat-messages { padding: 8px 2px 6px; gap: 8px; }
 }
 
+/* ========== 消息行（头像 + 气泡） ========== */
+.ai-chat-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: min(88%, 640px);
+}
+.ai-chat-row--user {
+    align-self: flex-end;
+}
+.ai-chat-row--bot {
+    align-self: flex-start;
+}
+.ai-chat-row--wide {
+    max-width: min(96%, 720px);
+}
+.ai-chat-row__avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    line-height: 0;
+}
+.ai-chat-row__avatar .user-avatar-slot,
+.ai-chat-row__avatar .user-avatar-initial {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 0.85rem !important;
+}
+.ai-bot-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+    filter: drop-shadow(0 2px 6px rgba(74, 29, 110, 0.15));
+}
+.ai-chat-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+}
+.ai-chat-row--user .ai-chat-row__body {
+    align-items: flex-end;
+}
+.ai-chat-row--bot .ai-chat-row__body {
+    align-items: flex-start;
+}
+@media (max-width: 768px) {
+    .ai-chat-row { gap: 6px; max-width: min(92%, 640px); }
+    .ai-chat-row--wide { max-width: min(98%, 720px); }
+    .ai-chat-row__avatar,
+    .ai-bot-avatar {
+        width: 32px;
+        height: 32px;
+    }
+    .ai-chat-row__avatar .user-avatar-slot,
+    .ai-chat-row__avatar .user-avatar-initial {
+        width: 32px !important;
+        height: 32px !important;
+    }
+}
+
 /* ========== 欢迎界面 ========== */
 .ai-welcome {
     display: flex;
@@ -328,16 +393,24 @@
     min-height: 180px;
 }
 .ai-welcome-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: var(--gradient-primary);
+    width: 108px;
+    height: 118px;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
-    font-size: 2.2rem;
     margin-bottom: 16px;
-    box-shadow: 0 12px 32px rgba(107,33,165,0.18);
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+}
+.ai-welcome-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: bottom center;
+    filter: drop-shadow(0 10px 22px rgba(74, 29, 110, 0.22));
 }
 .ai-welcome h3 {
     font-size: 1.1rem;
@@ -357,14 +430,14 @@
 }
 @media (max-width: 768px) {
     .ai-welcome { padding: 30px 12px 16px; min-height: 120px; }
-    .ai-welcome-avatar { width: 60px; height: 60px; font-size: 1.8rem; margin-bottom: 12px; }
+    .ai-welcome-avatar { width: 92px; height: 100px; margin-bottom: 12px; }
     .ai-welcome h3 { font-size: 1rem; }
     .ai-welcome p { font-size: 0.82rem; }
 }
 
 /* ========== 消息气泡 ========== */
 .ai-chat-messages .chat-message {
-    max-width: 85%;
+    max-width: 100%;
     padding: 12px 16px;
     border-radius: 18px;
     font-size: 0.9rem;
@@ -378,14 +451,11 @@
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .chat-message.chat-user {
-    align-self: flex-end;
     background: var(--gradient-primary);
     color: #fff;
     border-bottom-right-radius: 6px;
-    margin-left: auto;
 }
 .chat-message.chat-bot {
-    align-self: flex-start;
     background: var(--atlas-card);
     border: 1px solid var(--atlas-line);
     color: var(--atlas-ink);
@@ -394,7 +464,6 @@
 }
 @media (max-width: 768px) {
     .ai-chat-messages .chat-message {
-        max-width: 90%;
         font-size: 0.85rem;
         padding: 10px 14px;
     }
@@ -402,7 +471,6 @@
 
 /* ========== 思考中动画 ========== */
 .chat-message.chat-thinking {
-    align-self: flex-start;
     background: var(--atlas-card);
     border: 1px solid var(--atlas-line);
     color: var(--text-tertiary);
