@@ -6,9 +6,8 @@ const BOT_BASE = 'image/bot';
 const IMAGE_IDLE = `${BOT_BASE}/${encodeURIComponent('蓝鲸.png')}`;
 const IMAGE_SHY = `${BOT_BASE}/${encodeURIComponent('害羞.png')}`;
 const IMAGE_WAVE = `${BOT_BASE}/${encodeURIComponent('打招呼.png')}`;
-const COMPANION_VERSION = '6';
+const COMPANION_VERSION = '8';
 const POS_STORAGE_KEY = 'njuatlas-companion-pos';
-const SESSION_STORAGE_KEY = 'njuatlas-companion-session-id';
 const DRAG_THRESHOLD = 10;
 const AUTO_SHOW_MS = 3000;
 const AUTO_GAP_MS = 2000;
@@ -67,21 +66,17 @@ function stripMarkdown(text) {
         .trim();
 }
 
-function loadSessionId() {
-    try {
-        sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
-    } catch {
-        sessionId = null;
-    }
-}
-
 function saveSessionId(id) {
     sessionId = id || null;
+}
+
+/** 关闭聊天框后结束本轮，下次打开重新开对话 */
+function resetCompanionSession() {
+    sessionId = null;
     try {
-        if (sessionId) localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
-        else localStorage.removeItem(SESSION_STORAGE_KEY);
+        localStorage.removeItem('njuatlas-companion-session-id');
     } catch {
-        // ignore quota errors
+        // ignore
     }
 }
 
@@ -247,15 +242,26 @@ function runAutoCycleStep() {
     }, AUTO_SHOW_MS);
 }
 
+function resetCompanionChatUi() {
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.disabled = false;
+    }
+    if (sendBtn) sendBtn.disabled = false;
+    if (bubbleTextEl) bubbleTextEl.textContent = '';
+    bubbleEl?.classList.remove('is-user');
+    bubbleTextEl?.parentElement?.classList.remove('is-thinking');
+    hideBubble();
+}
+
 function closeCompanionSession({ resumeAuto = true } = {}) {
     stopAutoCycle();
     stopWaveCycle();
+    resetCompanionSession();
+    resetCompanionChatUi();
     isOpen = false;
     rootEl?.classList.remove('is-open');
     applyCompanionPose();
-    hideBubble();
-    bubbleEl?.classList.remove('is-user');
-    bubbleTextEl?.parentElement?.classList.remove('is-thinking');
     if (resumeAuto) {
         scheduleAutoCycle(AUTO_RESUME_MS);
         scheduleWaveCycle(AUTO_RESUME_MS);
@@ -283,6 +289,8 @@ function setOpen(nextOpen) {
 
     stopAutoCycle();
     stopWaveCycle();
+    hideAutoBubble();
+    resetCompanionChatUi();
     isOpen = true;
     rootEl?.classList.add('is-open');
     applyCompanionPose();
@@ -570,7 +578,7 @@ export function initCompanion() {
     if (existing?.dataset.companionVersion === COMPANION_VERSION) return;
     existing?.remove();
 
-    loadSessionId();
+    resetCompanionSession();
     buildCompanionDom();
     bindEvents();
     restorePosition();

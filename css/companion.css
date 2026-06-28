@@ -41,17 +41,17 @@
 }
 
 .site-companion-bubble {
+    display: none;
     width: max-content;
     max-width: min(280px, 80vw);
     opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
     transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .site-companion-bubble.is-visible {
+    display: block;
     opacity: 1;
-    visibility: visible;
     pointer-events: auto;
     transform: translateY(0);
 }
