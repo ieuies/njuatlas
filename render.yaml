@@ -5,7 +5,7 @@ services:
     buildCommand: echo "No build step for static frontend"
     staticPublishPath: .
     routes:
-      # 同域反代（须在 Render Dashboard → Redirects/Rewrites 中确认已生效后再改 config 用 /api）
+      # 可选：同域 /api 反代（前端默认已直连 api.njuatlas.cn，此项仅作备用）
       - type: rewrite
         source: /api/*
         destination: https://api.njuatlas.cn/api/*

@@ -1,5 +1,5 @@
 const LOCAL_API_BASE = 'http://localhost:5000/api';
-/** 生产 API；同域 /api 需在 Render 前端配置 Rewrite 后再改为 origin + '/api' */
+/** 生产 API（api 子域；后端 CORS 已放行 Authorization） */
 const PRODUCTION_API_BASE = 'https://api.njuatlas.cn/api';
 
 const runtimeConfig = window.NJUATLAS_CONFIG || {};
@@ -7,20 +7,14 @@ const hostname = window.location.hostname;
 const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
 
 // API 选择（优先级：API_BASE > 本地后端开关 > 默认）
-// - 生产 / 同域：PRODUCTION_API_BASE 或 index.html 里 API_BASE: '/api'
+// - 生产：直连 api.njuatlas.cn（前端站点 /api 反代未配置时同域会 404）
 // - 本地静态预览：默认直连生产 API，无需起 Flask
 // - 本地后端联调：在 index.html 设 NJUATLAS_CONFIG.USE_LOCAL_API = true
 const useLocalApi = isLocal && runtimeConfig.USE_LOCAL_API === true;
-const isNjuAtlasProductionHost = typeof window !== 'undefined'
-    && /\.njuatlas\.cn$/i.test(hostname);
 
 function resolveApiBase() {
     if (runtimeConfig.API_BASE) return runtimeConfig.API_BASE;
     if (useLocalApi) return LOCAL_API_BASE;
-    // 生产站点默认同域 /api（依赖 Render Rewrite）；若 404 可在 index.html 设 API_BASE 回退
-    if (isNjuAtlasProductionHost) {
-        return `${window.location.origin}/api`;
-    }
     return PRODUCTION_API_BASE;
 }
 
