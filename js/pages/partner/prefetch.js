@@ -5,7 +5,7 @@
  * Stage 2：帖子详情预取 → openPostDetail 优先读 partnerPostDetailCache
  */
 import { getUser } from '../../auth.js';
-import { getPost, listPosts } from '../../api.js';
+import { getPost, listPosts, isApiServerPaused } from '../../api.js';
 import {
     LIST_CACHE_TTL_MS,
     mapPost,
@@ -191,7 +191,7 @@ export async function prefetchPartnerPostDetails({ postIds, urgencyScope } = {})
 
 function _isRateLimitError(err) {
     const msg = String(err?.message || '');
-    return msg.includes('过于频繁') || msg.includes('429');
+    return msg.includes('过于频繁') || msg.includes('429') || msg.includes('内部错误') || msg.includes('500');
 }
 
 function _isAbortPrefetchError(err) {
@@ -262,6 +262,9 @@ async function _fetchOneCategoryPage(category, urgencyScope) {
 }
 
 async function _runListPrefetchPipeline({ urgencyScope } = {}) {
+    if (isApiServerPaused()) {
+        return { stage: 1, skipped: true, reason: 'server_error' };
+    }
     if (_isPartnerPrefetchPaused()) {
         return { stage: 1, skipped: true, reason: 'rate_limited' };
     }
@@ -315,6 +318,7 @@ export function prefetchPartnerList() {
 
 /** 首屏加载后空闲触发，不阻塞 UI */
 export function schedulePartnerPrefetch(options = {}) {
+    if (isApiServerPaused()) return;
     const run = () => {
         prefetchAllPartnerCategories(options).catch(() => {});
     };

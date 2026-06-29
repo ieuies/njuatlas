@@ -4,7 +4,7 @@
  * Stage 2：all × 6 分类
  * Stage 3：仙林 / 浦口 / 苏州 × 6（空闲后台）
  */
-import { getGuideLeaderboard, getGuideLeaderboardBundle } from './api.js';
+import { getGuideLeaderboard, getGuideLeaderboardBundle, isApiServerPaused } from './api.js';
 import {
     ALL_GUIDE_CATEGORIES,
     GUIDE_ENTRY_CAMPUS,
@@ -68,7 +68,7 @@ export function listGuideAllCampusTasks() {
 }
 
 export function isGuidePrefetchPaused() {
-    return Date.now() < _prefetchPausedUntil;
+    return Date.now() < _prefetchPausedUntil || isApiServerPaused();
 }
 
 function _pausePrefetchOnRateLimit() {
@@ -77,7 +77,7 @@ function _pausePrefetchOnRateLimit() {
 
 function _isRateLimitError(err) {
     const msg = String(err?.message || '');
-    return msg.includes('过于频繁') || msg.includes('429');
+    return msg.includes('过于频繁') || msg.includes('429') || msg.includes('内部错误') || msg.includes('500');
 }
 
 async function _fetchOnePrefetchTask(task, { force = false } = {}) {

@@ -5,6 +5,21 @@ import { showToast } from './utils.js';
 let authToken = localStorage.getItem('access_token') || null;
 const DEFAULT_TIMEOUT_MS = 12000;
 const LOGIN_TIMEOUT_MS = 10000;
+const SERVER_ERROR_PAUSE_MS = 60_000;
+let _serverErrorPausedUntil = 0;
+
+/** 后端 5xx 后短暂停火，避免预取管道把宕机服务打得更惨 */
+export function isApiServerPaused() {
+    return Date.now() < _serverErrorPausedUntil;
+}
+
+function _pauseApiOnServerError(status) {
+    if (status < 500) return;
+    _serverErrorPausedUntil = Date.now() + SERVER_ERROR_PAUSE_MS;
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('njuatlas:api-server-paused', { detail: { status } }));
+    }
+}
 
 function _emitAuthChange() {
     if (typeof window !== 'undefined') {
@@ -54,9 +69,11 @@ async function request(endpoint, method = 'GET', body = null, needAuth = true, t
         } catch (jsonErr) {
             const text = await res.text();
             console.error('API非JSON响应:', res.status, text);
+            if (res.status >= 500) _pauseApiOnServerError(res.status);
             throw new Error(`服务器返回异常 (${res.status})`);
         }
         if (!res.ok) {
+            if (res.status >= 500) _pauseApiOnServerError(res.status);
             if (res.status === 401 && needAuth) {
                 _clearAuthSession();
                 throw new Error('UNAUTHORIZED');
@@ -95,9 +112,11 @@ async function requestOptionalAuth(endpoint, method = 'GET', body = null, timeou
         try {
             data = await res.json();
         } catch {
+            if (res.status >= 500) _pauseApiOnServerError(res.status);
             throw new Error(`服务器返回异常 (${res.status})`);
         }
         if (!res.ok) {
+            if (res.status >= 500) _pauseApiOnServerError(res.status);
             if (res.status === 401 && authToken) {
                 _clearAuthSession();
                 throw new Error('UNAUTHORIZED');

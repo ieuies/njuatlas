@@ -67,6 +67,8 @@ def create_app():
         "expose_headers": ["Content-Type"],
     }})
 
+    from app.rate_limit import limiter
+
     @app.route("/")
     def index():
         return jsonify({
@@ -77,6 +79,7 @@ def create_app():
 
     @app.route("/health")
     @app.route("/api/health")
+    @limiter.exempt
     def health():
         from app.realtime import hub as realtime_hub
         payload = {
