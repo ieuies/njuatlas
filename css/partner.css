@@ -691,16 +691,46 @@
 .detail-publisher-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 8px 4px 4px;
+    gap: 10px;
+    padding: 4px 10px 4px 4px;
     border: 0;
     border-radius: 999px;
     background: var(--bg-tertiary);
     cursor: pointer;
     font-weight: 700;
     color: var(--atlas-ink);
+    max-width: 100%;
 }
 .detail-publisher-btn:hover { background: rgba(107, 33, 165, 0.08); }
+.detail-publisher-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    text-align: left;
+}
+.detail-publisher-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--atlas-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.detail-publisher-time {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+.detail-publisher-fallback {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
 .partner-card-head {
     display: flex;
     align-items: flex-start;

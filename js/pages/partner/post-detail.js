@@ -4,7 +4,7 @@ import {
     getPost, deletePost, togglePostLike, togglePostFavorite, addPostComment, deletePostComment, participateEvent,
 } from '../../api.js';
 import { partnerStore } from './shared.js';
-import { formatPostTime, isCurrentUserOwner, safeHtmlWithBreaks } from './shared.js';
+import { formatPostTime, isCurrentUserOwner, safeHtmlWithBreaks, typeIcon, typeLabel } from './shared.js';
 import { applyParticipationResult, silentRefreshCurrentPage, removePostFromList, syncPostInListFromApi } from './list.js';
 import { isPostParticipationFull } from './shared.js';
 import { refreshPreviewMarkers } from './map.js';
@@ -21,65 +21,76 @@ import {
 // ============================================================
 let currentDetailPost = null;
 
+const CATEGORY_TAG_CLASS = {
+    '饭搭子': 'tag-fandazi',
+    '运动搭子': 'tag-yundong',
+    '学习搭子': 'tag-xuexi',
+    '游戏搭子': 'tag-youxi',
+    '电影搭子': 'tag-dianying',
+};
+
+function _categoryTagClass(tag) {
+    return CATEGORY_TAG_CLASS[tag] || '';
+}
+
+function _postCategory(post) {
+    return (post?.tags && post.tags[0]) || '其他';
+}
+
+function _slotsText(post) {
+    const slots = post.max_participants || 2;
+    const count = post.participant_count || 0;
+    const remaining = Math.max(0, slots - count);
+    if (remaining > 0) return `${count}/${slots} 人 · 还差 ${remaining} 人`;
+    return `${count}/${slots} 人 · 已满员`;
+}
+
+function _renderDetailCover(post) {
+    const hero = document.getElementById('detailHero');
+    const coverEl = document.getElementById('detailCover');
+    const coverImg = document.getElementById('detailCoverImg');
+    const placeholder = document.getElementById('detailCoverPlaceholder');
+    const coverIcon = document.getElementById('detailCoverIcon');
+    if (!hero || !coverEl || !coverImg || !placeholder || !coverIcon) return;
+
+    const category = _postCategory(post);
+    hero.dataset.category = category;
+    const coverUrl = (post.cover_image || post.coverImage || '').trim();
+
+    if (coverUrl) {
+        coverEl.hidden = false;
+        placeholder.hidden = true;
+        coverImg.src = coverUrl;
+        coverImg.alt = post.title || '';
+        hero.classList.add('has-cover');
+        hero.classList.remove('has-placeholder');
+    } else {
+        coverEl.hidden = true;
+        placeholder.hidden = false;
+        coverIcon.className = `fas ${typeIcon(category)}`;
+        hero.classList.remove('has-cover');
+        hero.classList.add('has-placeholder');
+    }
+}
+
 export function initPostDetailModal() {
     const modal = document.getElementById('postDetailModal');
     if (!modal || modal.dataset.ready === '1') return;
     modal.dataset.ready = '1';
 
     const closeBtn = document.getElementById('closePostDetailBtn');
-    const likeBtn = document.getElementById('detailLikeBtn');
-    const statsRow = modal.querySelector('.post-detail-stats');
-    const likeMiniBtn = modal.querySelector('.post-detail-stats > span:nth-child(2)');
-    const participantStat = modal.querySelector('.post-detail-stats > span:nth-child(4)');
+    const stickyLikeBtn = document.getElementById('detailStickyLikeBtn');
+    const stickyFavoriteBtn = document.getElementById('detailStickyFavoriteBtn');
     const participateBtn = document.getElementById('detailParticipateBtn');
     const commentInput = document.getElementById('detailCommentInput');
     const commentSubmitBtn = document.getElementById('detailCommentSubmitBtn');
     const ownerActions = document.getElementById('detailOwnerActions');
-    const legacyEditBtn = document.getElementById('detailEditBtn');
-    let editMiniBtn = document.getElementById('detailEditMiniBtn');
-    let favoriteMiniBtn = document.getElementById('detailFavoriteMiniBtn');
+    const editStickyBtn = document.getElementById('detailEditStickyBtn');
 
-    if (likeMiniBtn) {
-        likeMiniBtn.classList.add('detail-like-mini-btn');
-        likeMiniBtn.setAttribute('role', 'button');
-        likeMiniBtn.setAttribute('tabindex', '0');
-        likeMiniBtn.setAttribute('aria-label', '点赞');
-        likeMiniBtn.setAttribute('title', '点赞');
-    }
-    if (participantStat) participantStat.classList.add('detail-participant-stat');
-    if (!favoriteMiniBtn && statsRow && participantStat) {
-        favoriteMiniBtn = document.createElement('button');
-        favoriteMiniBtn.id = 'detailFavoriteMiniBtn';
-        favoriteMiniBtn.type = 'button';
-        favoriteMiniBtn.className = 'detail-favorite-mini-btn';
-        favoriteMiniBtn.innerHTML = `
-            <i class="fa-regular fa-star" aria-hidden="true"></i>
-            <span>收藏</span>
-            <span id="detailFavoriteCount">0</span>
-        `;
-        statsRow.insertBefore(favoriteMiniBtn, participantStat);
-    }
-    if (legacyEditBtn) legacyEditBtn.style.display = 'none';
-    if (!editMiniBtn && participantStat) {
-        editMiniBtn = document.createElement('button');
-        editMiniBtn.id = 'detailEditMiniBtn';
-        editMiniBtn.type = 'button';
-        editMiniBtn.className = 'detail-edit-mini-btn';
-        editMiniBtn.title = '编辑帖子';
-        editMiniBtn.setAttribute('aria-label', '编辑帖子');
-        editMiniBtn.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i>';
-        participantStat.appendChild(editMiniBtn);
-    }
-    if (editMiniBtn) {
-        editMiniBtn.style.display = 'none';
-        editMiniBtn.addEventListener('click', () => {
-            if (!currentDetailPost || !currentDetailPost.is_owner) return;
-            openEditPostModal(currentDetailPost);
-        });
-    }
-    if (ownerActions && legacyEditBtn && legacyEditBtn.parentElement === ownerActions) {
-        legacyEditBtn.remove();
-    }
+    editStickyBtn?.addEventListener('click', () => {
+        if (!currentDetailPost || !currentDetailPost.is_owner) return;
+        openEditPostModal(currentDetailPost);
+    });
 
     closeBtn?.addEventListener('click', () => {
         modal.style.display = 'none';
@@ -119,13 +130,7 @@ export function initPostDetailModal() {
             showToast('操作失败: ' + err.message);
         }
     };
-    likeBtn?.addEventListener('click', handleLikeToggle);
-    likeMiniBtn?.addEventListener('click', handleLikeToggle);
-    likeMiniBtn?.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        handleLikeToggle();
-    });
+    stickyLikeBtn?.addEventListener('click', handleLikeToggle);
 
     const handleFavoriteToggle = async () => {
         if (!currentDetailPost) return;
@@ -154,7 +159,7 @@ export function initPostDetailModal() {
             showToast('收藏失败: ' + err.message);
         }
     };
-    favoriteMiniBtn?.addEventListener('click', handleFavoriteToggle);
+    stickyFavoriteBtn?.addEventListener('click', handleFavoriteToggle);
 
     participateBtn?.addEventListener('click', async () => {
         if (!currentDetailPost) return;
@@ -167,6 +172,7 @@ export function initPostDetailModal() {
         currentDetailPost.is_full = isPostParticipationFull(currentDetailPost);
         _updateDetailStats();
         _applyDetailParticipateButton(currentDetailPost);
+        _renderDetailContact(currentDetailPost);
         const user = getUser();
         if (user && user.username) {
             _optimisticUpdateParticipants(newStatus, user);
@@ -181,6 +187,7 @@ export function initPostDetailModal() {
             applyParticipationResult(currentDetailPost.id, result);
             _updateDetailStats();
             _applyDetailParticipateButton(currentDetailPost);
+            _renderDetailContact(currentDetailPost);
             _refreshDetailParticipants(currentDetailPost.id);
             silentRefreshCurrentPage();
             invalidatePartnerPostDetailCache([currentDetailPost.id]);
@@ -189,6 +196,7 @@ export function initPostDetailModal() {
             currentDetailPost.participant_count = prevCount;
             _updateDetailStats();
             _applyDetailParticipateButton(currentDetailPost);
+            _renderDetailContact(currentDetailPost);
             _revertOptimisticParticipants(prevStatus, user);
             showToast('操作失败: ' + err.message);
         }
@@ -264,6 +272,7 @@ function _mapCachedToDetailFormat(cached) {
         is_favorited: cached.isFavorited,
         participation_status: cached.participationStatus,
         is_full: cached.isFull,
+        cover_image: cached.coverImage || '',
         _fromCache: true,
     };
 }
@@ -339,110 +348,143 @@ function _resetDetailUI() {
     document.getElementById('detailTitle').textContent = '加载中...';
     document.getElementById('detailBody').textContent = '';
     document.getElementById('detailTags').innerHTML = '';
-    document.getElementById('detailPublisher').textContent = '';
+    document.getElementById('detailPublisher').innerHTML = '';
+    document.getElementById('detailTypeBadge').innerHTML = '';
+    const hero = document.getElementById('detailHero');
+    if (hero) {
+        hero.dataset.category = '其他';
+        hero.classList.remove('has-cover', 'has-placeholder');
+    }
+    const coverEl = document.getElementById('detailCover');
+    const placeholder = document.getElementById('detailCoverPlaceholder');
+    if (coverEl) coverEl.hidden = true;
+    if (placeholder) placeholder.hidden = false;
+    ['detailTimeRow', 'detailLocationRow', 'detailBudgetRow', 'detailContactRow'].forEach((id) => {
+        const row = document.getElementById(id);
+        if (row) row.hidden = true;
+    });
     document.getElementById('detailTime').textContent = '';
-    document.getElementById('detailTime').style.display = 'none';
     document.getElementById('detailLocation').textContent = '';
-    document.getElementById('detailLocation').style.display = 'none';
     document.getElementById('detailBudget').textContent = '';
-    document.getElementById('detailBudget').style.display = 'none';
     document.getElementById('detailContact').textContent = '';
-    document.getElementById('detailContact').style.display = 'none';
-    const metaTimeRow = document.getElementById('detailMetaTimeRow');
-    if (metaTimeRow) metaTimeRow.style.display = 'none';
-    const metaExtraRow = document.getElementById('detailMetaExtraRow');
-    if (metaExtraRow) metaExtraRow.style.display = 'none';
+    document.getElementById('detailSlotsText').textContent = '0/2 人';
     document.getElementById('detailComments').innerHTML = '';
     document.getElementById('detailParticipants').innerHTML = '';
     document.getElementById('detailParticipantsSection').style.display = 'none';
-    var pb = document.getElementById('detailParticipateBtn');
+    const pb = document.getElementById('detailParticipateBtn');
     pb.style.display = 'none';
     pb.textContent = '我要参加';
     pb.classList.remove('going');
     pb.disabled = false;
     _applyDetailLikeUi(false);
     _applyDetailFavoriteUi(false);
-    const editMiniBtn = document.getElementById('detailEditMiniBtn');
-    if (editMiniBtn) editMiniBtn.style.display = 'none';
-    var oa = document.getElementById('detailOwnerActions');
+    const editStickyBtn = document.getElementById('detailEditStickyBtn');
+    if (editStickyBtn) editStickyBtn.style.display = '';
+    const oa = document.getElementById('detailOwnerActions');
     if (oa) oa.style.display = 'none';
 }
 
+function _renderDetailContact(post) {
+    const contactRow = document.getElementById('detailContactRow');
+    const contactEl = document.getElementById('detailContact');
+    if (!contactRow || !contactEl) return;
+    if (!post.contact) {
+        contactRow.hidden = true;
+        contactEl.textContent = '';
+        return;
+    }
+    const canSeeContact = post.is_owner || post.participation_status === 'going';
+    contactRow.hidden = false;
+    if (canSeeContact) {
+        contactEl.innerHTML = escapeHtml(post.contact);
+        contactEl.classList.remove('contact-masked');
+    } else {
+        contactEl.innerHTML = '<span class="contact-masked">报名后可见</span>';
+    }
+}
+
 function _renderPostDetail(post) {
+    _renderDetailCover(post);
+
+    const typeBadge = document.getElementById('detailTypeBadge');
+    if (typeBadge) typeBadge.innerHTML = typeLabel({ ...post, category: _postCategory(post) });
+
     document.getElementById('detailTitle').textContent = post.title;
     document.getElementById('detailBody').innerHTML = safeHtmlWithBreaks(post.content || '');
 
-    const tags = post.tags || [];
-    document.getElementById('detailTags').innerHTML = tags.map(t => `<span class="post-detail-tag">${escapeHtml(t)}</span>`).join('');
+    const tags = (post.tags || []).filter((t) => !/^[\d¥￥]/.test(t) && !['AA', '免费', '自费'].includes(t));
+    document.getElementById('detailTags').innerHTML = tags.map((t) => {
+        const cls = _categoryTagClass(t);
+        return `<span class="post-detail-tag${cls ? ` ${cls}` : ''}">${escapeHtml(t)}</span>`;
+    }).join('');
 
     const pubEl = document.getElementById('detailPublisher');
+    const publishedAt = post.created_at ? formatDate(post.created_at) : '';
     if (pubEl && post.user_id) {
         pubEl.innerHTML = `<button type="button" class="detail-publisher-btn" data-user-id="${post.user_id}">
-            ${avatarHtmlForUser({ id: post.user_id, username: post.username, avatar_url: post.avatar_url }, 28)}
-            <span>${escapeHtml(post.username || '匿名')}</span>
+            ${avatarHtmlForUser({ id: post.user_id, username: post.username, avatar_url: post.avatar_url }, 40)}
+            <span class="detail-publisher-text">
+                <span class="detail-publisher-name">${escapeHtml(post.username || '匿名')}</span>
+                ${publishedAt ? `<span class="detail-publisher-time">发布于 ${escapeHtml(publishedAt)}</span>` : ''}
+            </span>
         </button>`;
         pubEl.querySelector('.detail-publisher-btn')?.addEventListener('click', () => {
             if (window.openUserProfile) window.openUserProfile(post.user_id);
         });
     } else if (pubEl) {
-        pubEl.innerHTML = `<i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}`;
+        pubEl.innerHTML = `<span class="detail-publisher-fallback"><i class="fas fa-user"></i> ${escapeHtml(post.username || '匿名')}</span>`;
     }
+
     const timeStr = formatPostTime(post.event_time, post.urgency, post.event_end_time);
+    const timeRow = document.getElementById('detailTimeRow');
     const timeEl = document.getElementById('detailTime');
-    if (timeStr) {
-        timeEl.innerHTML = `<span class="detail-meta-key">时间</span><i class="fas fa-clock"></i> ${escapeHtml(timeStr)}`;
-        timeEl.style.display = '';
-    } else {
-        timeEl.textContent = '';
-        timeEl.style.display = 'none';
+    if (timeStr && timeRow && timeEl) {
+        timeEl.textContent = timeStr;
+        timeRow.hidden = false;
+    } else if (timeRow) {
+        timeRow.hidden = true;
+        if (timeEl) timeEl.textContent = '';
     }
+
+    const locationRow = document.getElementById('detailLocationRow');
     const locationEl = document.getElementById('detailLocation');
-    if (post.location_name) {
-        locationEl.innerHTML = `<span class="detail-meta-key">地点</span><i class="fas fa-location-dot" aria-hidden="true"></i> ${escapeHtml(post.location_name)}`;
-        locationEl.style.display = '';
-    } else {
-        locationEl.textContent = '';
-        locationEl.style.display = 'none';
+    if (post.location_name && locationRow && locationEl) {
+        locationEl.textContent = post.location_name;
+        locationRow.hidden = false;
+    } else if (locationRow) {
+        locationRow.hidden = true;
+        if (locationEl) locationEl.textContent = '';
     }
-    if (post.budget) {
-        document.getElementById('detailBudget').innerHTML = `<span class="detail-meta-key">预算</span><i class="fas fa-money-bill-wave" aria-hidden="true"></i> ${escapeHtml(post.budget)}`;
-        document.getElementById('detailBudget').style.display = '';
-    } else {
-        document.getElementById('detailBudget').style.display = 'none';
+
+    const budgetRow = document.getElementById('detailBudgetRow');
+    const budgetEl = document.getElementById('detailBudget');
+    if (post.budget && budgetRow && budgetEl) {
+        budgetEl.textContent = post.budget;
+        budgetRow.hidden = false;
+    } else if (budgetRow) {
+        budgetRow.hidden = true;
+        if (budgetEl) budgetEl.textContent = '';
     }
-    if (post.contact) {
-        document.getElementById('detailContact').innerHTML = `<span class="detail-meta-key">联系方式</span><i class="fas fa-address-book" aria-hidden="true"></i> ${escapeHtml(post.contact)}`;
-        document.getElementById('detailContact').style.display = '';
-    } else {
-        document.getElementById('detailContact').style.display = 'none';
-    }
-    const metaExtraRow = document.getElementById('detailMetaExtraRow');
-    if (metaExtraRow) {
-        const showExtra = Boolean(post.budget || post.contact);
-        metaExtraRow.style.display = showExtra ? 'grid' : 'none';
-    }
-    const metaTimeRow = document.getElementById('detailMetaTimeRow');
-    if (metaTimeRow) {
-        const showTimeRow = Boolean(timeStr || post.location_name);
-        metaTimeRow.style.display = showTimeRow ? 'grid' : 'none';
-    }
+
+    const slotsEl = document.getElementById('detailSlotsText');
+    if (slotsEl) slotsEl.textContent = _slotsText(post);
+    _renderDetailContact(post);
 
     _updateDetailStats(post);
-    const slots = post.max_participants || 2;
-    document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
-
     _applyDetailLikeUi(Boolean(post.is_liked));
     _applyDetailFavoriteUi(Boolean(post.is_favorited));
 
     const ownerActions = document.getElementById('detailOwnerActions');
-    const editMiniBtn = document.getElementById('detailEditMiniBtn');
+    const participateBtn = document.getElementById('detailParticipateBtn');
+    const editStickyBtn = document.getElementById('detailEditStickyBtn');
     _applyDetailParticipateButton(post);
     if (post.is_owner) {
         if (ownerActions) ownerActions.style.display = 'flex';
-        if (editMiniBtn) editMiniBtn.style.display = 'inline-flex';
+        if (participateBtn) participateBtn.style.display = 'none';
+        if (editStickyBtn) editStickyBtn.style.display = '';
     } else {
         if (ownerActions) ownerActions.style.display = 'none';
-        if (editMiniBtn) editMiniBtn.style.display = 'none';
+        if (editStickyBtn) editStickyBtn.style.display = 'none';
     }
 
     _renderDetailParticipants(post.participants || []);
@@ -477,45 +519,37 @@ function _updateDetailStats(postOverride) {
     if (!post) return;
     document.getElementById('detailViewCount').textContent = post.view_count || 0;
     document.getElementById('detailLikeCount').textContent = post.like_count || 0;
-    const favoriteCount = post.favorite_count || 0;
     const favoriteCountEl = document.getElementById('detailFavoriteCount');
-    if (favoriteCountEl) favoriteCountEl.textContent = favoriteCount;
+    if (favoriteCountEl) favoriteCountEl.textContent = post.favorite_count || 0;
     document.getElementById('detailCommentCount').textContent = post.comment_count || 0;
-    const slots = post.max_participants || 2;
-    document.getElementById('detailParticipantCount').textContent = `${post.participant_count || 0}/${slots}人`;
+    const slotsEl = document.getElementById('detailSlotsText');
+    if (slotsEl) slotsEl.textContent = _slotsText(post);
 }
 
 function _applyDetailLikeUi(liked) {
-    const likeBtn = document.getElementById('detailLikeBtn');
-    if (likeBtn) {
-        likeBtn.classList.toggle('liked', liked);
-        likeBtn.innerHTML = `<i class="${liked ? 'fa-solid' : 'fa-regular'} fa-thumbs-up" aria-hidden="true"></i> ${liked ? '已点赞' : '点赞'}`;
-    }
-    const miniBtn = document.querySelector('#postDetailModal .post-detail-stats > span:nth-child(2)');
-    if (miniBtn) {
-        miniBtn.classList.toggle('liked', liked);
-        miniBtn.setAttribute('aria-label', liked ? '取消点赞' : '点赞');
-        miniBtn.setAttribute('title', liked ? '取消点赞' : '点赞');
-        const icon = miniBtn.querySelector('i');
+    const stickyBtn = document.getElementById('detailStickyLikeBtn');
+    if (stickyBtn) {
+        stickyBtn.classList.toggle('liked', liked);
+        stickyBtn.setAttribute('aria-label', liked ? '取消点赞' : '点赞');
+        stickyBtn.setAttribute('title', liked ? '取消点赞' : '点赞');
+        const icon = stickyBtn.querySelector('i');
         if (icon) {
-            icon.classList.remove('fas', 'far');
-            icon.classList.toggle('fa-solid', liked);
-            icon.classList.toggle('fa-regular', !liked);
+            icon.classList.remove('fas', 'far', 'fa-solid', 'fa-regular');
+            icon.classList.add(liked ? 'fa-solid' : 'fa-regular', 'fa-thumbs-up');
         }
     }
 }
 
 function _applyDetailFavoriteUi(favorited) {
-    const favoriteBtn = document.getElementById('detailFavoriteMiniBtn');
+    const favoriteBtn = document.getElementById('detailStickyFavoriteBtn');
     if (!favoriteBtn) return;
-    favoriteBtn.classList.toggle('liked', favorited);
+    favoriteBtn.classList.toggle('favorited', favorited);
     favoriteBtn.setAttribute('aria-label', favorited ? '取消收藏' : '收藏');
     favoriteBtn.setAttribute('title', favorited ? '取消收藏' : '收藏');
     const icon = favoriteBtn.querySelector('i');
     if (icon) {
-        icon.classList.remove('fas', 'far');
-        icon.classList.toggle('fa-solid', favorited);
-        icon.classList.toggle('fa-regular', !favorited);
+        icon.classList.remove('fas', 'far', 'fa-solid', 'fa-regular');
+        icon.classList.add(favorited ? 'fa-solid' : 'fa-regular', 'fa-star');
     }
 }
 
@@ -568,13 +602,22 @@ function _renderDetailParticipants(participants) {
         return;
     }
     section.style.display = 'block';
-    container.innerHTML = participants.map(p => `
-        <span class="participant-chip${p.is_organizer ? ' organizer' : ''}">
-            ${escapeHtml(p.username || '用户')}
-            ${p.is_organizer ? '<span class="participant-status organizer-badge" title="发起人"><i class="fas fa-star" aria-hidden="true"></i> 发起人</span>' : ''}
-            <span class="participant-status${p.status === 'interested' ? ' interested' : ''}">${p.status === 'going' ? '确定' : '感兴趣'}</span>
-        </span>
+    container.innerHTML = participants.map((p) => `
+        <button type="button"
+            class="participant-avatar-chip${p.is_organizer ? ' organizer' : ''}"
+            data-user-id="${p.user_id || ''}"
+            title="${escapeHtml(p.username || '用户')}${p.is_organizer ? '（发起人）' : ''}"
+            aria-label="查看 ${escapeHtml(p.username || '用户')} 的主页">
+            ${avatarHtmlForUser({ id: p.user_id, username: p.username, avatar_url: p.avatar_url }, 40)}
+            ${p.is_organizer ? '<span class="participant-organizer-dot" aria-hidden="true"></span>' : ''}
+        </button>
     `).join('');
+    container.querySelectorAll('.participant-avatar-chip[data-user-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const userId = parseInt(btn.getAttribute('data-user-id'), 10);
+            if (userId && window.openUserProfile) window.openUserProfile(userId);
+        });
+    });
 }
 
 function _optimisticUpdateParticipants(newStatus, user) {
@@ -583,21 +626,25 @@ function _optimisticUpdateParticipants(newStatus, user) {
     if (!section || !container) return;
     section.style.display = 'block';
     if (newStatus === 'going') {
-        const chip = document.createElement('span');
-        chip.className = 'participant-chip optimistic';
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'participant-avatar-chip optimistic';
         chip.dataset.optimisticUser = user.username;
-        chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
+        chip.title = user.username || '用户';
+        chip.innerHTML = avatarHtmlForUser({ id: user.id || user.user_id, username: user.username, avatar_url: user.avatar_url }, 40);
         container.appendChild(chip);
     } else {
-        const chips = container.querySelectorAll('.participant-chip');
+        const chips = container.querySelectorAll('.participant-avatar-chip');
         for (const c of chips) {
-            if (c.textContent.includes(user.username) && !c.classList.contains('organizer')) {
-                c.remove();
-                break;
+            if (c.dataset.optimisticUser === user.username || (c.title && c.title.includes(user.username))) {
+                if (!c.classList.contains('organizer')) {
+                    c.remove();
+                    break;
+                }
             }
         }
     }
-    if (!container.querySelector('.participant-chip')) {
+    if (!container.querySelector('.participant-avatar-chip')) {
         section.style.display = 'none';
     }
 }
@@ -609,9 +656,11 @@ function _revertOptimisticParticipants(prevStatus, user) {
         const chip = container.querySelector(`[data-optimistic-user="${user.username}"]`);
         if (chip) chip.remove();
     } else {
-        const chip = document.createElement('span');
-        chip.className = 'participant-chip';
-        chip.innerHTML = `${escapeHtml(user.username || '用户')}<span class="participant-status">确定</span>`;
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'participant-avatar-chip';
+        chip.title = user.username || '用户';
+        chip.innerHTML = avatarHtmlForUser({ id: user.id || user.user_id, username: user.username, avatar_url: user.avatar_url }, 40);
         container.appendChild(chip);
     }
 }
@@ -632,34 +681,44 @@ function _renderDetailComments(commentsData) {
         const isPostAuthorComment = postAuthorId != null && String(c.user_id) === String(postAuthorId);
         return `
         <div class="detail-comment" data-comment-id="${c.id}">
-            <div class="detail-comment-header">
-                <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${isPostAuthorComment ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
-                <span class="detail-comment-time">${formatDate(c.created_at)}</span>
+            <div class="detail-comment-avatar">
+                ${avatarHtmlForUser({ id: c.user_id, username: c.username, avatar_url: c.avatar_url }, 32)}
             </div>
-            <div class="detail-comment-body">${escapeHtml(c.content)}</div>
-            <div class="detail-comment-actions">
-                <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
-                ${canDeleteComment ? `<button class="detail-comment-delete-btn" data-comment-id="${c.id}" title="删除评论">删除</button>` : ''}
-            </div>
-            ${(c.replies && c.replies.length) ? `
-                <div class="detail-comment-replies">
-                    ${c.replies.map(r => {
-                        const canDeleteReply = isCurrentUserOwner(r);
-                        const isPostAuthorReply = postAuthorId != null && String(r.user_id) === String(postAuthorId);
-                        return `
-                        <div class="detail-comment" data-comment-id="${r.id}">
-                            <div class="detail-comment-header">
-                                <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${isPostAuthorReply ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
-                                <span class="detail-comment-time">${formatDate(r.created_at)}</span>
-                            </div>
-                            <div class="detail-comment-body">${escapeHtml(r.content)}</div>
-                            <div class="detail-comment-actions">
-                                ${canDeleteReply ? `<button class="detail-comment-delete-btn" data-comment-id="${r.id}" title="删除回复">删除</button>` : ''}
-                            </div>
-                        </div>
-                    `}).join('')}
+            <div class="detail-comment-main">
+                <div class="detail-comment-header">
+                    <span class="detail-comment-user">${escapeHtml(c.username || '用户')}${isPostAuthorComment ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                    <span class="detail-comment-time">${formatDate(c.created_at)}</span>
                 </div>
-            ` : ''}
+                <div class="detail-comment-body">${escapeHtml(c.content)}</div>
+                <div class="detail-comment-actions">
+                    <button class="detail-comment-reply-btn" data-comment-id="${c.id}">回复</button>
+                    ${canDeleteComment ? `<button class="detail-comment-delete-btn" data-comment-id="${c.id}" title="删除评论">删除</button>` : ''}
+                </div>
+                ${(c.replies && c.replies.length) ? `
+                    <div class="detail-comment-replies">
+                        ${c.replies.map(r => {
+                            const canDeleteReply = isCurrentUserOwner(r);
+                            const isPostAuthorReply = postAuthorId != null && String(r.user_id) === String(postAuthorId);
+                            return `
+                            <div class="detail-comment" data-comment-id="${r.id}">
+                                <div class="detail-comment-avatar">
+                                    ${avatarHtmlForUser({ id: r.user_id, username: r.username, avatar_url: r.avatar_url }, 28)}
+                                </div>
+                                <div class="detail-comment-main">
+                                    <div class="detail-comment-header">
+                                        <span class="detail-comment-user">${escapeHtml(r.username || '用户')}${isPostAuthorReply ? ' <span class="comment-owner-badge">作者</span>' : ''}</span>
+                                        <span class="detail-comment-time">${formatDate(r.created_at)}</span>
+                                    </div>
+                                    <div class="detail-comment-body">${escapeHtml(r.content)}</div>
+                                    <div class="detail-comment-actions">
+                                        ${canDeleteReply ? `<button class="detail-comment-delete-btn" data-comment-id="${r.id}" title="删除回复">删除</button>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+                ` : ''}
+            </div>
         </div>
     `}).join('');
 
