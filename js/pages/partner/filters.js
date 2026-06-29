@@ -99,7 +99,10 @@ export function setupCategoryScrollArrows() {
 
     const existingContainer = originalFilter.closest('.filter-slider-container');
     if (existingContainer) {
-        bindArrowEvents(existingContainer);
+        if (existingContainer.dataset.arrowsBound !== 'true') {
+            bindArrowEvents(existingContainer);
+            existingContainer.dataset.arrowsBound = 'true';
+        }
         requestAnimationFrame(() => window._refreshCategoryArrows?.());
         return;
     }
@@ -128,6 +131,7 @@ export function setupCategoryScrollArrows() {
     scrollWrapper.appendChild(originalFilter);
 
     bindArrowEvents(container);
+    container.dataset.arrowsBound = 'true';
     window.addEventListener('resize', () => window._refreshCategoryArrows?.());
 
     if (document.fonts && document.fonts.ready) {

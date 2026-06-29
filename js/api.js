@@ -1,4 +1,5 @@
 import { API_BASE, IS_CROSS_ORIGIN_API } from './config.js';
+import { dedupeInflight } from './request-dedupe.js';
 import { showToast } from './utils.js';
 
 let authToken = localStorage.getItem('access_token') || null;
@@ -171,11 +172,13 @@ export async function updateMyProfile({ username, bio, campus, tags, bubble_styl
 export async function getGuideLeaderboard(campus, category, { shuffle = false } = {}) {
     let url = `/places/guide-leaderboard?campus=${encodeURIComponent(campus)}&category=${encodeURIComponent(category)}`;
     if (shuffle) url += '&shuffle=1';
-    // 已登录时带 token，刷新后仍能拿到 liked 状态（后端 CORS 已允许 Authorization）
-    if (authToken) {
-        return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
-    }
-    return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+    const key = `GET ${url}|auth:${Boolean(authToken)}`;
+    return dedupeInflight(key, () => {
+        if (authToken) {
+            return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
+        }
+        return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+    });
 }
 
 /** 同校区多分类榜单一次返回（P0 预取 bundle，减少往返） */
@@ -183,10 +186,13 @@ export async function getGuideLeaderboardBundle(campus, categories) {
     const list = Array.isArray(categories) ? categories : [categories];
     const cats = list.filter(Boolean).join(',');
     const url = `/places/guide-leaderboard-bundle?campus=${encodeURIComponent(campus)}&categories=${encodeURIComponent(cats)}`;
-    if (authToken) {
-        return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
-    }
-    return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+    const key = `GET ${url}|auth:${Boolean(authToken)}`;
+    return dedupeInflight(key, () => {
+        if (authToken) {
+            return request(url, 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
+        }
+        return requestOptionalAuth(url, 'GET', null, DEFAULT_TIMEOUT_MS, true);
+    });
 }
 const GUIDE_EXCLUDED_NAME_KEYWORDS = ['南京大学', '南大', '酒店', '政府部门', '商学院'];
 const GUIDE_MAX_DISTANCE_M = 8000;
@@ -820,8 +826,9 @@ export async function listPosts({ type, tags, place_id, sort, lat, lng, radius, 
     if (q) params.set('q', q);
     if (urgency_scope) params.set('urgency_scope', urgency_scope);
     const qs = params.toString();
-    // 已登录时附带 JWT，后端才会返回 is_liked / participation_status 等个人状态
-    return request(`/posts${qs ? '?' + qs : ''}`, 'GET', null, !!authToken, DEFAULT_TIMEOUT_MS, silent);
+    const path = `/posts${qs ? '?' + qs : ''}`;
+    const key = `GET ${path}|auth:${Boolean(authToken)}`;
+    return dedupeInflight(key, () => request(path, 'GET', null, !!authToken, DEFAULT_TIMEOUT_MS, silent));
 }
 export async function getPost(postId, { prefetch = false, silent = false } = {}) {
     const qs = prefetch ? '?prefetch=1' : '';
@@ -896,7 +903,7 @@ export async function listFriends() {
     return request('/social/friends', 'GET');
 }
 export async function listFriendsBundle() {
-    return request('/social/friends/bundle', 'GET');
+    return dedupeInflight('GET /social/friends/bundle', () => request('/social/friends/bundle', 'GET'));
 }
 export async function listFriendRequests() {
     return request('/social/friends/requests', 'GET');
@@ -934,7 +941,8 @@ export async function getDmMessages(
     else if (before_id != null && before_id > 0) url += `&before_id=${before_id}`;
     else url += `&page=${page}`;
     if (after_id != null && after_id >= 0) url += `&after_id=${after_id}`;
-    return request(url, 'GET', null, true, timeoutMs, silent, signal);
+    const key = `GET ${url}`;
+    return dedupeInflight(key, () => request(url, 'GET', null, true, timeoutMs, silent, signal));
 }
 export async function sendDmMessage(peerId, content) {
     return request(`/social/messages/${peerId}`, 'POST', { content }, true, DEFAULT_TIMEOUT_MS, true);
@@ -943,7 +951,8 @@ export function markDmThreadRead(peerId) {
     return request(`/social/messages/${peerId}/read`, 'POST', null, true, DEFAULT_TIMEOUT_MS, true);
 }
 export async function getInboxBootstrap() {
-    return request('/social/inbox/bootstrap', 'GET', null, true, DEFAULT_TIMEOUT_MS, true);
+    return dedupeInflight('GET /social/inbox/bootstrap', () =>
+        request('/social/inbox/bootstrap', 'GET', null, true, DEFAULT_TIMEOUT_MS, true));
 }
 export async function listNotifications({ page = 1, page_size = 30 } = {}) {
     return request(`/social/notifications?page=${page}&page_size=${page_size}`, 'GET');

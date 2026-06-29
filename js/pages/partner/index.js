@@ -1,7 +1,7 @@
 import { prefetchAmapScript } from '../../config.js';
 import { partnerStore } from './shared.js';
 import { loadPostsByPage, handleParticipate, initPartnerPagination } from './list.js';
-import { schedulePartnerPrefetch, enqueuePartnerDetailPrefetch } from './prefetch.js';
+import { schedulePartnerPrefetch, enqueuePartnerDetailPrefetch, isPartnerListPrefetchComplete } from './prefetch.js';
 import {
     schedulePreviewMapAfterPosts, refreshPreviewMarkers, initFullMapMarkers,
     addMarkersToMap, getOrCreateSharedMap, scheduleMobileMapPrewarm,
@@ -39,7 +39,9 @@ export async function loadPartnerData() {
             }
         }
         enqueuePartnerDetailPrefetch(partnerStore.allPartnersData.map((p) => p.id));
-        schedulePartnerPrefetch();
+        if (!isPartnerListPrefetchComplete()) {
+            schedulePartnerPrefetch();
+        }
         return;
     }
 

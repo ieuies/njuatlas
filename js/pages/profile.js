@@ -12,6 +12,8 @@ let currentProfileTab = 'posts';
 let _profileBioCache = null;
 let _viewingUserId = null;
 let _viewingProfileCache = null;
+const PROFILE_REFRESH_TTL_MS = 15000;
+let _profileLastRefreshAt = 0;
 let _userCardModalInited = false;
 let _userCardOpenUserId = null;
 const VISITOR_HIDDEN_TABS = ['comments', 'favorites', 'activities'];
@@ -1504,8 +1506,12 @@ export async function viewUserProfile(userId) {
     await showUserCardModal(userId);
 }
 
-export async function refreshProfile() {
+export async function refreshProfile({ force = false } = {}) {
     if (!isLoggedIn()) return;
+    if (!force && _profileLastRefreshAt && (Date.now() - _profileLastRefreshAt) < PROFILE_REFRESH_TTL_MS) {
+        return;
+    }
+    _profileLastRefreshAt = Date.now();
     if (_viewingUserId && getUser() && String(getUser().id) === String(_viewingUserId)) {
         _viewingUserId = null;
         _viewingProfileCache = null;

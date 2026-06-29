@@ -357,8 +357,11 @@ async function renderChats({ force = false } = {}) {
 
     if (cached) {
         paintConvoList(cached);
-        const useBootstrap = !fresh;
-        fetchConversations({ silent: true, useBootstrap })
+        if (fresh) {
+            startRealtimeSync();
+            return;
+        }
+        fetchConversations({ silent: true, useBootstrap: true })
             .then((items) => { paintConvoList(items); updateTabBadges(); })
             .catch(() => {});
         startRealtimeSync();

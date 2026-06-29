@@ -70,7 +70,6 @@ if (typeof window !== 'undefined') {
         for (const key of Object.keys(_leaderboardCache)) {
             _leaderboardCache[key] = stripGuideUserState(_leaderboardCache[key]);
         }
-        if (isLoggedIn()) await refreshUserGuideLikes({ force: true }).catch(() => {});
         if (document.getElementById('guidePage')?.classList.contains('active-page')) {
             refreshGuideView();
         }
@@ -459,7 +458,9 @@ async function loadLeaderboard({ force = false, shuffle = false } = {}) {
     if (cached && !force) {
         const gridMatches = container?.dataset.guideKey === key;
         if (!gridMatches) renderLeaderboard(cached, key);
-        _fetchLeaderboardInBackground(key, campus, cat, false, seq);
+        if (!_isCacheFresh(key)) {
+            _fetchLeaderboardInBackground(key, campus, cat, false, seq);
+        }
         return;
     }
 

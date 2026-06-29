@@ -58,6 +58,7 @@ let _aiMod = null;
 let _messagesMod = null;
 let _partnerPageInited = false;
 let _guidePageInited = false;
+let _aiPageInited = false;
 let _profilePageInited = false;
 let _messagesPageInited = false;
 let _lastSwitchedPageId = null;
@@ -267,7 +268,10 @@ async function switchPage(pageId) {
         }
     } else if (pageId === 'ai') {
         const mod = await _loadAI();
-        mod.initAIPage();
+        if (!_aiPageInited) {
+            _aiPageInited = true;
+            mod.initAIPage();
+        }
     } else if (pageId === 'partner') {
         const mod = await _loadPartner();
         // 首次加载时初始化模态框等

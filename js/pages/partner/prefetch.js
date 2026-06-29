@@ -203,6 +203,15 @@ function _listPartnerPrefetchCategories() {
     return PARTNER_FILTER_CATEGORIES.map((item) => item.category);
 }
 
+/** 各分类第 1 页列表缓存均已新鲜时无需再跑 Stage1 pipeline */
+export function isPartnerListPrefetchComplete() {
+    if ((partnerStore.searchQuery || '').trim()) return true;
+    return _listPartnerPrefetchCategories().every((category) => {
+        const cached = readPartnerListCache(category, '', 1);
+        return cached?.posts && isPartnerListCacheFresh(cached);
+    });
+}
+
 function _enqueueDetailPrefetchFromListCache(urgencyScope) {
     const ids = collectCachedListPostIds({ urgencyScope });
     if (ids.length) enqueuePartnerDetailPrefetch(ids);
@@ -260,6 +269,10 @@ async function _runListPrefetchPipeline({ urgencyScope } = {}) {
     if ((partnerStore.searchQuery || '').trim()) {
         return { stage: 1, skipped: true, reason: 'search_active' };
     }
+    if (isPartnerListPrefetchComplete()) {
+        _enqueueDetailPrefetchFromListCache(scope);
+        return { stage: 1, skipped: true, reason: 'cache_complete' };
+    }
 
     // 首屏列表已在 loadPostsByPage 写入缓存，立即启动详情预取，不必等全部分类列表跑完
     _enqueueDetailPrefetchFromListCache(scope);
@@ -272,7 +285,7 @@ async function _runListPrefetchPipeline({ urgencyScope } = {}) {
         results.push(row);
         if (row?.abort) break;
         _enqueueDetailPrefetchFromListCache(scope);
-        if (PREFETCH_GAP_MS > 0) {
+        if (PREFETCH_GAP_MS > 0 && !row?.skipped) {
             await new Promise((r) => setTimeout(r, PREFETCH_GAP_MS));
         }
     }

@@ -140,6 +140,7 @@ export function clearMessagesPrefetchCache() {
     invalidateMessagesInteractCache();
     try { sessionStorage.removeItem(SESSION_THREADS_KEY); } catch { /* ignore */ }
     _prefetchPromise = null;
+    _listsInflight = null;
 }
 
 function _persistBootstrap(bootstrap) {
@@ -196,6 +197,8 @@ async function _prefetchDmThreads(peerIds, { force = false } = {}) {
     }
 }
 
+let _listsInflight = null;
+
 export async function prefetchMessagesLists({ force = false } = {}) {
     if (!getAuthToken()) return null;
 
@@ -212,18 +215,29 @@ export async function prefetchMessagesLists({ force = false } = {}) {
         };
     }
 
-    const [bootstrap, friendsBundle, notifications] = await Promise.all([
+    if (_listsInflight && !force) {
+        return _listsInflight;
+    }
+
+    _listsInflight = Promise.all([
         getInboxBootstrap(),
         listFriendsBundle(),
         listNotifications({ page: 1, page_size: 30 }),
-    ]);
-    _persistBootstrap(bootstrap);
-    _persistFriendsBundle(friendsBundle);
-    _persistNotifications(notifications);
-    if (typeof window.refreshUnreadBadge === 'function') {
-        window.refreshUnreadBadge(bootstrap?.unread, { force: true });
-    }
-    return bootstrap;
+    ])
+        .then(([bootstrap, friendsBundle, notifications]) => {
+            _persistBootstrap(bootstrap);
+            _persistFriendsBundle(friendsBundle);
+            _persistNotifications(notifications);
+            if (typeof window.refreshUnreadBadge === 'function') {
+                window.refreshUnreadBadge(bootstrap?.unread, { force: true });
+            }
+            return bootstrap;
+        })
+        .finally(() => {
+            _listsInflight = null;
+        });
+
+    return _listsInflight;
 }
 
 export async function prefetchMessagesSystem({ force = false, listsOnly = false } = {}) {
@@ -254,7 +268,7 @@ function _scheduleThreadPrefetch(conversations, options = {}) {
     }
 }
 
-/** 登录后预取：列表立即拉取，未读会话 tail 空闲时串行预取 */
+/** 登录后预取：列表立即拉取，未读会话 tail 空闲时串行预取（与 prefetchMessagesEntryData 共用列表单飞） */
 export function scheduleMessagesPrefetch(options = {}) {
     prefetchMessagesLists(options)
         .then((bootstrap) => {
