@@ -55,13 +55,20 @@ class RealtimeHub:
 
         import redis
 
-        client = redis.from_url(
-            self._redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT,
-        )
-        client.ping()
+        try:
+            client = redis.from_url(
+                self._redis_url,
+                decode_responses=True,
+                socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
+                socket_timeout=_REDIS_SOCKET_TIMEOUT,
+            )
+            client.ping()
+        except Exception as exc:
+            logger.warning("Redis 连接失败，SSE 回退进程内队列: %s", exc)
+            self._mode = "memory"
+            self._redis = None
+            self._redis_pid = None
+            return None
         self._redis = client
         self._redis_pid = pid
         return client
@@ -101,12 +108,20 @@ class RealtimeHub:
     def _stream_redis(self, user_id):
         import redis
 
-        client = redis.from_url(
-            self._redis_url,
-            decode_responses=True,
-            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
-            socket_timeout=_REDIS_SOCKET_TIMEOUT,
-        )
+        try:
+            client = redis.from_url(
+                self._redis_url,
+                decode_responses=True,
+                socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
+                socket_timeout=_REDIS_SOCKET_TIMEOUT,
+            )
+            client.ping()
+        except Exception as exc:
+            logger.warning("Redis SSE 订阅失败，回退进程内队列: %s", exc)
+            self._mode = "memory"
+            yield from self._stream_memory(user_id)
+            return
+
         pubsub = client.pubsub(ignore_subscribe_messages=True)
         channel = self._channel(user_id)
         pubsub.subscribe(channel)
