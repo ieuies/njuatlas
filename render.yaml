@@ -38,6 +38,12 @@ services:
         sync: false
       - key: BAILIAN_API_KEY
         sync: false
+      - key: COZE_API_TOKEN
+        sync: false
+      - key: COZE_BOT_ID
+        sync: false
+      - key: COZE_API_BASE
+        value: https://api.coze.cn
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_MODEL

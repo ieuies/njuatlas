@@ -82,7 +82,10 @@ class Config:
     DEEPSEEK_MODEL = _get_env("DEEPSEEK_MODEL", "deepseek-chat")
     ZHIPU_API_KEY = _get_env("ZHIPU_API_KEY", "")
     BAILIAN_API_KEY = _get_env("BAILIAN_API_KEY", "")
-    # auto: 自动选择（默认优先 DeepSeek）；deepseek / bailian / zhipu: 强制指定
+    COZE_API_TOKEN = _get_env("COZE_API_TOKEN", "")
+    COZE_BOT_ID = _get_env("COZE_BOT_ID", "")
+    COZE_API_BASE = _get_env("COZE_API_BASE", "https://api.coze.cn")
+    # auto: 自动选择（默认优先 Coze）；coze / deepseek / bailian / zhipu: 强制指定
     LLM_PROVIDER = _get_env("LLM_PROVIDER", "auto").lower()
     SECRET_KEY = _get_env("SECRET_KEY")
     JWT_EXPIRATION_SECONDS = _get_int_env("JWT_EXPIRATION_SECONDS", 60 * 60 * 24 * 7)
@@ -144,19 +147,22 @@ def validate_config(app):
         raise ConfigError("缺少 GAODE_API_KEY，请在 .env 或 Render 环境变量中配置高德地图 API Key。")
 
     llm_provider = app.config.get("LLM_PROVIDER", "auto")
-    if llm_provider not in {"auto", "deepseek", "bailian", "zhipu"}:
-        raise ConfigError("LLM_PROVIDER 仅支持 auto / deepseek / bailian / zhipu。")
+    if llm_provider not in {"auto", "coze", "deepseek", "bailian", "zhipu"}:
+        raise ConfigError("LLM_PROVIDER 仅支持 auto / coze / deepseek / bailian / zhipu。")
 
     has_deepseek = bool(app.config.get("DEEPSEEK_API_KEY"))
     has_zhipu = bool(app.config.get("ZHIPU_API_KEY"))
     has_bailian = bool(app.config.get("BAILIAN_API_KEY"))
+    has_coze = bool(app.config.get("COZE_API_TOKEN") and app.config.get("COZE_BOT_ID"))
+    if llm_provider == "coze" and not has_coze:
+        raise ConfigError("LLM_PROVIDER=coze 时必须配置 COZE_API_TOKEN 和 COZE_BOT_ID。")
     if llm_provider == "deepseek" and not has_deepseek:
         raise ConfigError("LLM_PROVIDER=deepseek 时必须配置 DEEPSEEK_API_KEY。")
     if llm_provider == "bailian" and not has_bailian:
         raise ConfigError("LLM_PROVIDER=bailian 时必须配置 BAILIAN_API_KEY。")
     if llm_provider == "zhipu" and not has_zhipu:
         raise ConfigError("LLM_PROVIDER=zhipu 时必须配置 ZHIPU_API_KEY。")
-    if llm_provider == "auto" and not has_deepseek and not has_zhipu and not has_bailian:
+    if llm_provider == "auto" and not has_coze and not has_deepseek and not has_zhipu and not has_bailian:
         raise ConfigError(
-            "缺少大模型 API Key，请至少配置 DEEPSEEK_API_KEY、ZHIPU_API_KEY 或 BAILIAN_API_KEY。"
+            "缺少大模型配置，请至少配置 COZE_API_TOKEN+COZE_BOT_ID，或其他模型 API Key。"
         )

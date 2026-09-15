@@ -2,6 +2,8 @@
 from openai import OpenAI
 from flask import current_app
 from app.logging_utils import log_event
+import json
+import requests
 
 # ==========================================
 # 1. 获取 API 配置（auto 优先 DeepSeek，其次百炼、智谱）
@@ -15,6 +17,15 @@ def _get_llm_client():
     deepseek_key = current_app.config['DEEPSEEK_API_KEY']
     deepseek_model = current_app.config.get('DEEPSEEK_MODEL') or 'deepseek-chat'
     llm_provider = (current_app.config.get('LLM_PROVIDER') or 'auto').lower()
+
+    if llm_provider == "coze":
+        if not current_app.config.get("COZE_API_TOKEN") or not current_app.config.get("COZE_BOT_ID"):
+            raise RuntimeError("LLM_PROVIDER=coze 但未配置 COZE_API_TOKEN 或 COZE_BOT_ID。")
+        log_event(current_app.logger, "llm_provider_selected", provider="coze", bot_id=current_app.config.get("COZE_BOT_ID"))
+        return "coze", None
+    if llm_provider == "auto" and current_app.config.get("COZE_API_TOKEN") and current_app.config.get("COZE_BOT_ID"):
+        log_event(current_app.logger, "llm_provider_selected", provider="coze", bot_id=current_app.config.get("COZE_BOT_ID"))
+        return "coze", None
 
     def _build_deepseek_client():
         log_event(
@@ -84,6 +95,8 @@ def chat_with_llm(messages, temperature=0.7, max_tokens=500):
         AI 回复的文本内容
     """
     client, model_name = _get_llm_client()
+    if client == "coze":
+        return "".join(_coze_chat(messages))
     
     try:
         response = client.chat.completions.create(
@@ -103,6 +116,9 @@ def chat_with_llm(messages, temperature=0.7, max_tokens=500):
 def stream_chat_with_llm(messages, temperature=0.7, max_tokens=500):
     """流式对话，逐块 yield 文本片段。"""
     client, model_name = _get_llm_client()
+    if client == "coze":
+        yield from _coze_chat(messages)
+        return
     try:
         stream = client.chat.completions.create(
             model=model_name,
@@ -120,3 +136,69 @@ def stream_chat_with_llm(messages, temperature=0.7, max_tokens=500):
         if delta:
             yield delta
     log_event(current_app.logger, "llm_stream_succeeded", model=model_name, max_tokens=max_tokens)
+
+
+def _coze_prompt(messages):
+    """将现有 role 消息压缩为 Coze 的文本消息，保留系统规则与历史上下文。"""
+    return "\n".join(f"[{m.get('role', 'user')}] {m.get('content', '')}" for m in messages)
+
+
+def _coze_chat(messages):
+    token = current_app.config.get("COZE_API_TOKEN")
+    bot_id = current_app.config.get("COZE_BOT_ID")
+    base = (current_app.config.get("COZE_API_BASE") or "https://api.coze.cn").rstrip("/")
+    response = requests.post(
+        f"{base}/v3/chat",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"bot_id": bot_id, "user_id": "njuatlas", "stream": True,
+              "auto_save_history": False,
+              "additional_messages": [{"role": "user", "content": _coze_prompt(messages), "content_type": "text"}]},
+        stream=True, timeout=(10, 90),
+    )
+    response.raise_for_status()
+    log_event(current_app.logger, "coze_request_succeeded", bot_id=bot_id)
+    # Coze 的 SSE 响应可能未声明 charset，明确按 UTF-8 解码中文内容。
+    response.encoding = "utf-8"
+    def parts():
+        event_name = ""
+        emitted_delta = False
+        completed_content = ""
+        for raw in response.iter_lines(decode_unicode=True):
+            if not raw:
+                continue
+            if raw.startswith("event:"):
+                event_name = raw[6:].strip()
+                continue
+            if not raw.startswith("data:"):
+                continue
+            try:
+                payload = json.loads(raw[5:].strip())
+            except (TypeError, ValueError):
+                continue
+            if isinstance(payload, str):
+                if event_name == "conversation.message.delta" and payload:
+                    emitted_delta = True
+                    yield payload
+                elif event_name == "conversation.message.completed" and payload:
+                    completed_content = payload
+                continue
+            event = payload.get("event", event_name)
+            if event in {"conversation.message.delta", "conversation.message.completed"}:
+                data = payload.get("data") or payload.get("message") or payload
+                raw_content = None
+                if isinstance(data, str):
+                    try:
+                        data = json.loads(data)
+                    except (TypeError, ValueError):
+                        raw_content = data
+                        data = payload
+                content = data.get("content", "") if isinstance(data, dict) else ""
+                content = raw_content if raw_content is not None else content
+                if event == "conversation.message.delta" and content:
+                    emitted_delta = True
+                    yield content
+                elif event == "conversation.message.completed" and content:
+                    completed_content = content
+        if not emitted_delta and completed_content:
+            yield completed_content
+    yield from parts()
